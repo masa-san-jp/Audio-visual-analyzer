@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Audio Visual Analyzer</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div id="app">
+    <div id="visualizer-area">
+      <canvas id="canvas"></canvas>
+    </div>
+
+    <div id="controls">
+      <div class="app-title">Audio Visual Analyzer</div>
+
+      <section class="control-group">
+        <h2>ファイル</h2>
+        <button id="btn-file">ファイルを選択</button>
+        <input type="file" id="file-input" accept="audio/*,video/*" hidden>
+        <div id="file-name">未選択</div>
+      </section>
+
+      <section class="control-group">
+        <h2>再生</h2>
+        <div class="btn-row">
+          <button id="btn-play" disabled>再生</button>
+          <button id="btn-pause" disabled>一時停止</button>
+          <button id="btn-stop" disabled>停止</button>
+        </div>
+      </section>
+
+      <section class="control-group">
+        <h2>表示比率</h2>
+        <div class="btn-row">
+          <button id="btn-16-9" class="active">16:9</button>
+          <button id="btn-1-1">1:1</button>
+        </div>
+      </section>
+
+      <section class="control-group">
+        <h2>色調整</h2>
+        <label>
+          色相&ensp;<span id="val-hue">200</span>
+          <input type="range" id="slider-hue" min="0" max="360" value="200">
+        </label>
+        <label>
+          色相幅&ensp;<span id="val-hue-range">60</span>
+          <input type="range" id="slider-hue-range" min="0" max="180" value="60">
+        </label>
+        <label>
+          輝度&ensp;<span id="val-brightness">80</span>%
+          <input type="range" id="slider-brightness" min="10" max="100" value="80">
+        </label>
+        <label>
+          彩度&ensp;<span id="val-saturation">100</span>%
+          <input type="range" id="slider-saturation" min="0" max="100" value="100">
+        </label>
+      </section>
+
+      <section class="control-group">
+        <h2>感度・形状</h2>
+        <label>
+          感度&ensp;<span id="val-sensitivity">1.0</span>
+          <input type="range" id="slider-sensitivity" min="0.1" max="3.0" step="0.1" value="1.0">
+        </label>
+        <label>
+          スムージング&ensp;<span id="val-smoothing">0.80</span>
+          <input type="range" id="slider-smoothing" min="0" max="0.95" step="0.05" value="0.80">
+        </label>
+        <label>
+          棒幅&ensp;<span id="val-bar-width">2</span>px
+          <input type="range" id="slider-bar-width" min="1" max="20" value="2">
+        </label>
+      </section>
+    </div>
+  </div>
+
+  <script src="js/settings.js"></script>
+  <script src="js/audio-engine.js"></script>
+  <script src="js/media-manager.js"></script>
+  <script src="js/renderers/bars.js"></script>
+  <script src="js/visualizer-core.js"></script>
+  <script src="js/ui-controller.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>
