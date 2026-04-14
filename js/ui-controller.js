@@ -10,7 +10,6 @@ class UIController {
     this._initPlayback();
     this._initAspectRatio();
     this._initAnalyzer();
-    this._initLayers();
     this._initColorControls();
     this._initShapeControls();
     window.addEventListener('resize', () => this.visualizer.resize());
@@ -88,13 +87,10 @@ class UIController {
     const expressionSelect = document.getElementById('expression-method');
     const barModeGroup = document.getElementById('bar-mode-group');
     const barModeSelect = document.getElementById('bar-display-mode');
-    const radialTiltGroup = document.getElementById('radial-tilt-group');
-    const radialTiltSelect = document.getElementById('radial-tilt');
 
     const updateVisibility = () => {
       const isRadial = analyzerTypeSelect.value === 'radial';
       barModeGroup.style.display = isRadial ? 'none' : '';
-      radialTiltGroup.style.display = isRadial ? '' : 'none';
     };
 
     analyzerTypeSelect.addEventListener('change', () => {
@@ -110,28 +106,55 @@ class UIController {
       this.visualizer.settings.barDisplayMode = barModeSelect.value;
     });
 
-    radialTiltSelect.addEventListener('change', () => {
-      this.visualizer.settings.radialTilt = parseInt(radialTiltSelect.value, 10);
-    });
-
     updateVisibility();
-  }
 
-  // ── レイヤー ──
-
-  _initLayers() {
-    const buttons = document.querySelectorAll('.layer-btn');
-    buttons.forEach(btn => {
+    // レイヤー数ボタン
+    const layerButtons = document.querySelectorAll('.layer-btn');
+    layerButtons.forEach(btn => {
       btn.addEventListener('click', () => {
         const count = parseInt(btn.id.replace('btn-layer-', ''), 10);
         this.visualizer.settings.layerCount = count;
-        buttons.forEach(b => b.classList.remove('active'));
+        layerButtons.forEach(b => b.classList.remove('active'));
         btn.classList.add('active');
         this._renderLayerSettings(count);
       });
     });
 
     this._renderLayerSettings(1);
+
+    document.getElementById('btn-analyzer-randomize').addEventListener('click', () => {
+      const types    = ['bar', 'radial'];
+      const methods  = ['bar', 'line', 'dot'];
+      const barModes = ['normal', 'mirror-vertical', 'mirror-horizontal'];
+      const rInt     = (min, max) => min + Math.floor(Math.random() * (max - min + 1));
+
+      const newType   = types[Math.floor(Math.random() * types.length)];
+      const newMethod = methods[Math.floor(Math.random() * methods.length)];
+      const newMode   = barModes[Math.floor(Math.random() * barModes.length)];
+      const newCount  = rInt(1, 4);
+
+      this.visualizer.settings.analyzerType    = newType;
+      this.visualizer.settings.expressionMethod = newMethod;
+      this.visualizer.settings.barDisplayMode   = newMode;
+      this.visualizer.settings.layerCount       = newCount;
+
+      analyzerTypeSelect.value = newType;
+      expressionSelect.value   = newMethod;
+      barModeSelect.value      = newMode;
+
+      // レイヤー個別設定をランダム化（感度はデフォルト1.0を維持）
+      for (let i = 0; i < 4; i++) {
+        this.visualizer.settings.layers[i].hueOffset  = rInt(-180, 180);
+        this.visualizer.settings.layers[i].sensitivity = 1.0;
+      }
+
+      // レイヤー数ボタンのアクティブ状態を更新
+      layerButtons.forEach(b => b.classList.remove('active'));
+      document.getElementById(`btn-layer-${newCount}`).classList.add('active');
+      this._renderLayerSettings(newCount);
+
+      updateVisibility();
+    });
   }
 
   _renderLayerSettings(count) {
@@ -225,6 +248,43 @@ class UIController {
     this._bindSlider('density',     'val-density',     v => { this.visualizer.settings.density     = v; });
     this._bindSlider('base-offset', 'val-base-offset', v => { this.visualizer.settings.baseOffset  = v; });
     this._bindSlider('afterimage',  'val-afterimage',  v => { this.visualizer.settings.afterimageIntensity = v; });
+
+    document.getElementById('btn-shape-randomize').addEventListener('click', () => {
+      const rFloat = (min, max, step) => {
+        const steps = Math.round((max - min) / step);
+        return Math.round((min + Math.floor(Math.random() * (steps + 1)) * step) * 100) / 100;
+      };
+      const rInt = (min, max) => min + Math.floor(Math.random() * (max - min + 1));
+
+      const sens       = rFloat(0.1, 3.0, 0.1);
+      const smoothing  = rFloat(0, 0.95, 0.05);
+      const barWidth   = rInt(1, 20);
+      const density    = rInt(30, 100);
+      const baseOffset = rInt(0, 99);
+      const afterimage = rInt(0, 10);
+
+      this.visualizer.settings.sensitivity         = sens;
+      this.visualizer.settings.smoothing           = smoothing;
+      this.visualizer.settings.barWidth            = barWidth;
+      this.visualizer.settings.density             = density;
+      this.visualizer.settings.baseOffset          = baseOffset;
+      this.visualizer.settings.afterimageIntensity = afterimage;
+      this.audioEngine.setSmoothing(smoothing);
+
+      this._setSlider('sensitivity', 'val-sensitivity', sens,       1);
+      this._setSlider('smoothing',   'val-smoothing',   smoothing,  2);
+      this._setSlider('bar-width',   'val-bar-width',   barWidth,   0);
+      this._setSlider('density',     'val-density',     density,    0);
+      this._setSlider('base-offset', 'val-base-offset', baseOffset, 0);
+      this._setSlider('afterimage',  'val-afterimage',  afterimage, 0);
+    });
+  }
+
+  _setSlider(sliderId, valId, value, decimals) {
+    const slider = document.getElementById('slider-' + sliderId);
+    const valEl  = document.getElementById(valId);
+    slider.value = value;
+    valEl.textContent = decimals > 0 ? value.toFixed(decimals) : String(value);
   }
 
   // ── ヘルパー ──

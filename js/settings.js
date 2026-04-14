@@ -15,7 +15,6 @@ const DEFAULT_SETTINGS = {
   analyzerType: 'bar',           // 'bar' | 'radial'
   expressionMethod: 'bar',       // 'bar' | 'line' | 'dot'
   barDisplayMode: 'normal',      // 'normal' | 'mirror-vertical' | 'mirror-horizontal'
-  radialTilt: 0,                 // 0 | 30 | 45 | 60
   density: 100,                  // 30~100
   baseOffset: 0,                 // 0~99
   // Phase 3: 色相拡張
