@@ -27,15 +27,16 @@ class UIController {
     const recControls = document.getElementById('rec-controls');
 
     btnPlay.addEventListener('click', () => {
-      // 録画中はモード切替前に録画を自動停止する
-      if (this.recorder.state === 'recording') {
-        this.recorder.stop();
-        this.mediaManager.pause();
-      }
+      // UI を先に更新してモード切替を確実に完了させる
       this.mode = 'play';
       btnPlay.classList.add('active');
       btnRec.classList.remove('active');
       recControls.style.display = 'none';
+      // 録画中だった場合は停止する
+      if (this.recorder && this.recorder.state === 'recording') {
+        this.recorder.stop();
+        this.mediaManager.pause();
+      }
     });
 
     btnRec.addEventListener('click', () => {
@@ -132,6 +133,7 @@ class UIController {
   }
 
   _updateRecButtons() {
+    if (!this.recorder) return;
     const state = this.recorder.state;
     const loaded = this.mediaManager.isLoaded;
     const btnStart = document.getElementById('btn-rec-start');
