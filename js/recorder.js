@@ -104,6 +104,7 @@ class Recorder {
     this.chunks = [];
     this.blob = null;
     this.mediaRecorder = null;
+    this._cleanupAudioDest();
     this._setState('idle');
   }
 
