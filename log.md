@@ -2,6 +2,39 @@
 
 ---
 
+## 2026-04-14 — Phase 2 実装
+
+### 作業内容
+- Phase 2「表現拡張」を実装・完了
+
+#### 変更・追加ファイル
+| ファイル | 変更内容 |
+|---|---|
+| `js/settings.js` | `rendererType` / `zeroDbMode` / `layerCount` / `layers[]` 設定追加、`createDefaultSettings()` 追加 |
+| `js/audio-engine.js` | `captureFrame()` / `getLayerData(layerIndex, layerCount)` を追加（帯域分割対応） |
+| `js/renderers/bars.js` | `zeroDbMode: center`（中央基準・上下対称）対応を追加 |
+| `js/renderers/lines.js` | 新規: 波形線型レンダラー（bottom / center 対応） |
+| `js/renderers/dots.js` | 新規: 点型レンダラー（bottom / center 対応） |
+| `js/renderers/radial.js` | 新規: 円形放射型レンダラー |
+| `js/renderers/mirror.js` | 新規: ミラー対称型レンダラー（bottom / center 対応） |
+| `js/visualizer-core.js` | レイヤーループ実装、レンダラー選択ロジック追加、settings 初期化を `createDefaultSettings()` に変更 |
+| `js/ui-controller.js` | レンダラータイプ・0dBモード選択、レイヤー数切替、レイヤー個別設定UIを追加 |
+| `index.html` | 表現タイプ・0dB基準・レイヤーセクションを追加、新レンダラー `<script>` タグを追加 |
+| `style.css` | select / layer-item / label-row スタイルを追加 |
+| `README.md` | Phase 2 実装内容・使いかたを更新 |
+
+#### Phase 2 実装済み機能
+- **アナライザータイプ**: 棒グラフ / 波形線 / 点 / 円形放射 / ミラー対称
+- **0dB基準位置**: 底辺基準 / 中央基準（上下対称）
+- **レイヤー1〜4**: 音域を均等分割し複数レイヤーを重ね描き
+- **レイヤー個別設定**: 色相オフセット・感度を各レイヤーで独立調整
+- `radial` 選択時は 0dBモード選択を無効化（常に中心基準）
+
+### 備考
+- 次フェーズ（Phase 3）では3スロット再生キュー・自動循環再生を予定
+
+---
+
 ## 2026-04-14
 
 ### 作業内容

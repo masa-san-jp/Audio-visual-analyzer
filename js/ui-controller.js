@@ -9,6 +9,8 @@ class UIController {
     this._initFile();
     this._initPlayback();
     this._initAspectRatio();
+    this._initRenderer();
+    this._initLayers();
     this._initSliders();
     window.addEventListener('resize', () => this.visualizer.resize());
   }
@@ -76,6 +78,88 @@ class UIController {
       btn169.classList.remove('active');
       btn11.classList.add('active');
     });
+  }
+
+  // ── 表現タイプ ──
+
+  _initRenderer() {
+    const rendererSelect = document.getElementById('renderer-type');
+    const zeroDbSelect   = document.getElementById('zero-db-mode');
+
+    rendererSelect.addEventListener('change', () => {
+      this.visualizer.settings.rendererType = rendererSelect.value;
+      // radial は zeroDbMode 非依存なので選択肢をグレーアウト
+      zeroDbSelect.disabled = (rendererSelect.value === 'radial');
+    });
+
+    zeroDbSelect.addEventListener('change', () => {
+      this.visualizer.settings.zeroDbMode = zeroDbSelect.value;
+    });
+  }
+
+  // ── レイヤー ──
+
+  _initLayers() {
+    const buttons = document.querySelectorAll('.layer-btn');
+    buttons.forEach(btn => {
+      btn.addEventListener('click', () => {
+        const count = parseInt(btn.id.replace('btn-layer-', ''), 10);
+        this.visualizer.settings.layerCount = count;
+        buttons.forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        this._renderLayerSettings(count);
+      });
+    });
+
+    // 初期状態（レイヤー1）を描画
+    this._renderLayerSettings(1);
+  }
+
+  _renderLayerSettings(count) {
+    const container = document.getElementById('layer-settings');
+    container.innerHTML = '';
+
+    if (count <= 1) return;
+
+    const bandLabels = ['低域', '低中域', '高中域', '高域'];
+
+    for (let i = 0; i < count; i++) {
+      const layer = this.visualizer.settings.layers[i];
+      const label = bandLabels[i] || `L${i + 1}`;
+
+      const section = document.createElement('div');
+      section.className = 'layer-item';
+      section.innerHTML = `
+        <div class="layer-title">Layer ${i + 1} <span class="layer-band">${label}</span></div>
+        <label>
+          色相オフセット&ensp;<span id="val-layer-hue-${i}">${layer.hueOffset}</span>
+          <input type="range" id="layer-hue-${i}" min="-180" max="180" value="${layer.hueOffset}">
+        </label>
+        <label>
+          感度&ensp;<span id="val-layer-sens-${i}">${layer.sensitivity.toFixed(1)}</span>
+          <input type="range" id="layer-sens-${i}" min="0.1" max="3.0" step="0.1" value="${layer.sensitivity}">
+        </label>
+      `;
+      container.appendChild(section);
+
+      document.getElementById(`layer-hue-${i}`).addEventListener('input', (e) => {
+        const v = parseInt(e.target.value, 10);
+        this.visualizer.settings.layers[i] = {
+          ...this.visualizer.settings.layers[i],
+          hueOffset: v,
+        };
+        document.getElementById(`val-layer-hue-${i}`).textContent = v;
+      });
+
+      document.getElementById(`layer-sens-${i}`).addEventListener('input', (e) => {
+        const v = parseFloat(e.target.value);
+        this.visualizer.settings.layers[i] = {
+          ...this.visualizer.settings.layers[i],
+          sensitivity: v,
+        };
+        document.getElementById(`val-layer-sens-${i}`).textContent = v.toFixed(1);
+      });
+    }
   }
 
   // ── スライダー ──

@@ -40,6 +40,41 @@
       </section>
 
       <section class="control-group">
+        <h2>表現タイプ</h2>
+        <label>
+          タイプ
+          <select id="renderer-type">
+            <option value="bars">棒グラフ</option>
+            <option value="lines">波形線</option>
+            <option value="dots">点</option>
+            <option value="radial">円形放射</option>
+            <option value="mirror">ミラー対称</option>
+          </select>
+        </label>
+        <label>
+          0dB基準
+          <select id="zero-db-mode">
+            <option value="bottom">底辺</option>
+            <option value="center">中央</option>
+          </select>
+        </label>
+      </section>
+
+      <section class="control-group">
+        <h2>レイヤー</h2>
+        <div class="label-row">
+          <span class="label-text">レイヤー数</span>
+          <div class="btn-row">
+            <button id="btn-layer-1" class="active layer-btn">1</button>
+            <button id="btn-layer-2" class="layer-btn">2</button>
+            <button id="btn-layer-3" class="layer-btn">3</button>
+            <button id="btn-layer-4" class="layer-btn">4</button>
+          </div>
+        </div>
+        <div id="layer-settings"></div>
+      </section>
+
+      <section class="control-group">
         <h2>色調整</h2>
         <label>
           色相&ensp;<span id="val-hue">200</span>
@@ -81,6 +116,10 @@
   <script src="js/audio-engine.js"></script>
   <script src="js/media-manager.js"></script>
   <script src="js/renderers/bars.js"></script>
+  <script src="js/renderers/lines.js"></script>
+  <script src="js/renderers/dots.js"></script>
+  <script src="js/renderers/radial.js"></script>
+  <script src="js/renderers/mirror.js"></script>
   <script src="js/visualizer-core.js"></script>
   <script src="js/ui-controller.js"></script>
   <script src="js/app.js"></script>
