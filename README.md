@@ -2,6 +2,10 @@
 
 ブラウザで音声ファイル・動画ファイルを読み込み、再生しながらビジュアライザーを表示するシンプルな Web アプリです。
 
+## デモ
+
+https://youtube.com/shorts/dywUYpVFatw?feature=share
+
 ## セットアップ
 
 本プロジェクトは HTML / CSS / JavaScript のみで構成されており、`npm install` などは不要です。
