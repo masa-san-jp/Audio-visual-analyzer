@@ -2,6 +2,41 @@
 
 ---
 
+## 2026-04-14 — 録画機能実装
+
+### 作業内容
+- 録画モード（Phase 5 相当）を実装
+
+#### 新規・変更ファイル
+| ファイル | 変更内容 |
+|---|---|
+| `js/recorder.js` | 新規: Canvas + Audio 録画モジュール（MediaRecorder API、webm 出力、日時自動命名） |
+| `js/audio-engine.js` | `createStreamDestination()` / `removeStreamDestination()` を追加（録画用オーディオストリーム） |
+| `js/ui-controller.js` | モード切替（再生/録画）、録画制御（開始/停止/保存/再録画）、状態連動のボタン制御を追加 |
+| `js/app.js` | Recorder インスタンス生成と UIController への受け渡しを追加 |
+| `index.html` | モード切替セクション、録画コントロールセクション、recorder.js の script タグを追加 |
+| `style.css` | 録画ステータス表示（.rec-status / .recording）のスタイルを追加 |
+| `README.md` | 録画機能の説明・使いかたを追記 |
+
+#### 実装済み機能
+- **モード切替**: 再生モード / 録画モード
+- **録画開始**: Canvas ストリーム（30fps）+ AudioContext の MediaStreamDestination を合成し MediaRecorder で録画
+- **録画停止**: MediaRecorder を停止し Blob を保持
+- **保存**: webm 形式で日時ベースのファイル名（`visualizer_YYYYMMDD_HHMMSS.webm`）でダウンロード
+- **再録画**: 録画データをリセットし再度録画可能な状態に戻す
+- **録画中の状態表示**: ステータスラベルでの「待機中」「録画中…」「録画完了」表示
+- **再生終了時の自動停止**: 録画中にメディア再生が終了した場合、録画も自動停止
+
+### spec.md 変更（なし）
+- 既存の仕様（セクション 14: 録画モード仕様）に従った実装のため変更不要
+
+### 備考
+- MIME タイプは vp9+opus → vp8+opus → vp8 → webm の順でブラウザサポートを確認し自動選択
+- 映像のみでなく音声も録画に含めることで実用性を確保
+- 録画対象はビジュアライザー描画領域（Canvas）のみ。UIパネルは含まない
+
+---
+
 ## 2026-04-14 — UI改善・ランダマイズ機能追加・ドキュメント更新
 
 ### 作業内容

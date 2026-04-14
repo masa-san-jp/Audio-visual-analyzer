@@ -221,3 +221,17 @@ select:disabled {
   height: 15px;
   cursor: pointer;
 }
+
+/* ── Recording status ── */
+
+.rec-status {
+  font-size: 11px;
+  color: #777;
+  margin-bottom: 8px;
+  line-height: 1.4;
+}
+
+.rec-status.recording {
+  color: #e04040;
+  font-weight: 600;
+}
