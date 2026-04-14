@@ -2,6 +2,29 @@
 
 ---
 
+## 2026-04-14 — MP4出力対応・背景色切替機能追加
+
+### 作業内容
+- **録画フォーマット**: `video/mp4` を `_selectMimeType()` の候補リスト先頭に追加。Chrome 130+・Safari では MP4（H.264/AAC）で録画・保存される。非対応ブラウザは WebM にフォールバック。保存ファイル名の拡張子（`.mp4` / `.webm`）も `blob.type` から自動判定するよう変更。
+- **背景色切替**: 「黒 / 白」トグルを表示比率セクションに追加。設定値 `bgColor`（`'#000'` または `'#fff'`）を新設し、描画クリア・残像フェードの色をそれぞれ連動させた。
+
+#### 変更ファイル
+| ファイル | 変更内容 |
+|---|---|
+| `js/recorder.js` | `_selectMimeType()` に MP4候補追加、`_extFromMime()` 追加、`_generateFilename()` を MIME から拡張子を決定するよう変更 |
+| `js/settings.js` | `bgColor: '#000'` をデフォルト設定に追加 |
+| `js/visualizer-core.js` | `_fillBlack()` を `_fillBackground()` に改名して `bgColor` 対応、残像フェードも白背景対応 |
+| `js/ui-controller.js` | 背景色トグルボタンのハンドラーを `_initAspectRatio()` 内に追加 |
+| `index.html` | 表示比率セクションに「黒 / 白」ボタン追加 |
+
+### spec.md 変更
+- セクション 14.4（出力形式）に MP4対応を追記
+
+### 備考
+- Firefox は `video/mp4` の MediaRecorder 非対応のため WebM のまま
+
+---
+
 ## 2026-04-14 — バグ修正: Cannot read properties of undefined (reading 'state')
 
 ### 作業内容

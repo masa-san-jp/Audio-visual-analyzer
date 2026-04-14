@@ -181,6 +181,25 @@ class UIController {
       btn169.classList.remove('active');
       btn11.classList.add('active');
     });
+
+    // 背景色
+    const btnBlack = document.getElementById('btn-bg-black');
+    const btnWhite = document.getElementById('btn-bg-white');
+
+    const applyBg = (color) => {
+      this.visualizer.settings.bgColor = color;
+      this.visualizer._fillBackground();
+      if (color === '#fff') {
+        btnWhite.classList.add('active');
+        btnBlack.classList.remove('active');
+      } else {
+        btnBlack.classList.add('active');
+        btnWhite.classList.remove('active');
+      }
+    };
+
+    btnBlack.addEventListener('click', () => applyBg('#000'));
+    btnWhite.addEventListener('click', () => applyBg('#fff'));
   }
 
   // ── アナライザー設定 ──
