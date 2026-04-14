@@ -1,17 +1,16 @@
 // 円形放射型ビジュアライザー（全表現方法対応）
-// radialTilt: 0|30|45|60, density: 30~100, baseOffset: 0~99
+// density: 30~100, baseOffset: 0~99
 // expressionMethod: 'bar'|'line'|'dot'
 
 function renderRadialBars(ctx, canvas, dataArray, settings) {
   const { hue, hueRange, brightness, saturation, sensitivity,
-          barWidth, radialTilt, density, baseOffset } = settings;
+          barWidth, density, baseOffset } = settings;
   const len = dataArray.length;
   const cx = canvas.width / 2;
   const cy = canvas.height / 2;
   const maxR = Math.min(cx, cy) * 0.95;
   // baseOffset: 0=小さい中心円, 99=大きい中心円
   const baseR = maxR * (0.1 + (baseOffset / 99) * 0.6);
-  const tiltRad = (radialTilt * Math.PI) / 180;
 
   const gap = 0.5;
   const step = barWidth + gap;
@@ -29,7 +28,7 @@ function renderRadialBars(ctx, canvas, dataArray, settings) {
     const barLen = val * (maxR - baseR);
     if (barLen < 1) continue;
 
-    const angle = i * angleStep - Math.PI / 2 + tiltRad;
+    const angle = i * angleStep - Math.PI / 2;
     const x1 = cx + Math.cos(angle) * baseR;
     const y1 = cy + Math.sin(angle) * baseR;
     const x2 = cx + Math.cos(angle) * (baseR + barLen);
@@ -48,13 +47,12 @@ function renderRadialBars(ctx, canvas, dataArray, settings) {
 
 function renderRadialLines(ctx, canvas, dataArray, settings) {
   const { hue, hueRange, brightness, saturation, sensitivity,
-          barWidth, radialTilt, density, baseOffset } = settings;
+          barWidth, density, baseOffset } = settings;
   const len = dataArray.length;
   const cx = canvas.width / 2;
   const cy = canvas.height / 2;
   const maxR = Math.min(cx, cy) * 0.95;
   const baseR = maxR * (0.1 + (baseOffset / 99) * 0.6);
-  const tiltRad = (radialTilt * Math.PI) / 180;
 
   const maxPoints = Math.min(len, 360);
   const pointCount = Math.max(12, Math.floor(maxPoints * density / 100));
@@ -78,7 +76,7 @@ function renderRadialLines(ctx, canvas, dataArray, settings) {
     const raw = dataArray[idx] / 255;
     const val = Math.min(1, raw * sensitivity);
     const r = baseR + val * (maxR - baseR);
-    const angle = i * angleStep - Math.PI / 2 + tiltRad;
+    const angle = i * angleStep - Math.PI / 2;
     const x = cx + Math.cos(angle) * r;
     const y = cy + Math.sin(angle) * r;
     i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
@@ -89,13 +87,12 @@ function renderRadialLines(ctx, canvas, dataArray, settings) {
 
 function renderRadialDots(ctx, canvas, dataArray, settings) {
   const { hue, hueRange, brightness, saturation, sensitivity,
-          barWidth, radialTilt, density, baseOffset } = settings;
+          barWidth, density, baseOffset } = settings;
   const len = dataArray.length;
   const cx = canvas.width / 2;
   const cy = canvas.height / 2;
   const maxR = Math.min(cx, cy) * 0.95;
   const baseR = maxR * (0.1 + (baseOffset / 99) * 0.6);
-  const tiltRad = (radialTilt * Math.PI) / 180;
   const dotSize = Math.max(1, barWidth);
 
   const maxCount = Math.floor((Math.PI * 2 * baseR) / (dotSize + 1));
@@ -109,7 +106,7 @@ function renderRadialDots(ctx, canvas, dataArray, settings) {
     if (val < 0.01) continue;
 
     const r = baseR + val * (maxR - baseR);
-    const angle = i * angleStep - Math.PI / 2 + tiltRad;
+    const angle = i * angleStep - Math.PI / 2;
     const x = cx + Math.cos(angle) * r - dotSize / 2;
     const y = cy + Math.sin(angle) * r - dotSize / 2;
 

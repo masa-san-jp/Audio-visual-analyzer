@@ -39,13 +39,14 @@ function renderBars(ctx, canvas, dataArray, settings) {
       ctx.fillRect(xLeft, baseY - barHeight, barWidth, barHeight);
     }
   } else if (barDisplayMode === 'mirror-vertical') {
-    // 上下対称
-    const centerY = canvas.height / 2 - (offsetRatio * canvas.height * 0.25) + (offsetRatio * canvas.height * 0.25);
+    // 上下対称: 中心線は常にcanvasの垂直中央
+    const centerY = Math.floor(canvas.height / 2);
+    const halfHeight = centerY;
     for (let i = 0; i < barCount; i++) {
       const idx = Math.floor(i * len / barCount);
       const raw = dataArray[idx] / 255;
       const val = Math.min(1, raw * sensitivity);
-      const barHeight = Math.round(val * canvas.height * 0.5);
+      const barHeight = Math.round(val * halfHeight);
       if (barHeight < 1) continue;
 
       const h = Math.round((hue + val * hueRange) % 360);

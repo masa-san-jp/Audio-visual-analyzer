@@ -39,21 +39,33 @@ class AudioEngine {
     this.analyser.getByteFrequencyData(this.dataArray);
   }
 
+  // アナライザーが表現する帯域: 50Hz〜15kHz
+  _freqRange() {
+    const sampleRate = this.ctx.sampleRate;
+    const binCount = this.dataArray.length; // fftSize / 2
+    const hzPerBin = sampleRate / (binCount * 2);
+    const startBin = Math.round(50 / hzPerBin);
+    const endBin   = Math.min(binCount - 1, Math.round(15000 / hzPerBin));
+    return { startBin, endBin };
+  }
+
   // レイヤーに対応する帯域データを返す
   // layerIndex: 0始まり, layerCount: 1〜4
   getLayerData(layerIndex, layerCount) {
     if (!this.dataArray) return null;
-    const total = this.dataArray.length;
-    const start = Math.floor(layerIndex * total / layerCount);
-    const end = Math.floor((layerIndex + 1) * total / layerCount);
+    const { startBin, endBin } = this._freqRange();
+    const rangeLen = endBin - startBin;
+    const start = startBin + Math.floor(layerIndex * rangeLen / layerCount);
+    const end   = startBin + Math.floor((layerIndex + 1) * rangeLen / layerCount);
     return this.dataArray.subarray(start, end);
   }
 
-  // 後方互換: 全帯域データを返す（captureFrameを内包）
+  // 後方互換: 50Hz〜15kHz 帯域データを返す（captureFrameを内包）
   getFrequencyData() {
     if (!this.analyser) return null;
     this.analyser.getByteFrequencyData(this.dataArray);
-    return this.dataArray;
+    const { startBin, endBin } = this._freqRange();
+    return this.dataArray.subarray(startBin, endBin);
   }
 
   setSmoothing(value) {
