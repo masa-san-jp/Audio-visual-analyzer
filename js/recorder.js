@@ -122,6 +122,9 @@ class Recorder {
 
   _selectMimeType() {
     const candidates = [
+      'video/mp4;codecs=avc1,mp4a.40.2',
+      'video/mp4;codecs=avc1',
+      'video/mp4',
       'video/webm;codecs=vp9,opus',
       'video/webm;codecs=vp8,opus',
       'video/webm;codecs=vp9',
@@ -134,6 +137,11 @@ class Recorder {
     return null;
   }
 
+  _extFromMime(mimeType) {
+    if (mimeType && mimeType.startsWith('video/mp4')) return 'mp4';
+    return 'webm';
+  }
+
   _generateFilename() {
     const d = new Date();
     const pad = (n) => String(n).padStart(2, '0');
@@ -143,6 +151,7 @@ class Recorder {
       pad(d.getHours()) +
       pad(d.getMinutes()) +
       pad(d.getSeconds());
-    return `visualizer_${ts}.webm`;
+    const ext = this._extFromMime(this.blob ? this.blob.type : null);
+    return `visualizer_${ts}.${ext}`;
   }
 }

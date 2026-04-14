@@ -22,6 +22,8 @@ const DEFAULT_SETTINGS = {
   hueContinuousSpeed: 1.0,       // 0.1~5.0
   // Phase 3: 残像
   afterimageIntensity: 0,        // 0~10
+  // 背景色
+  bgColor: '#000',             // '#000' | '#fff'
   // レイヤー
   layerCount: 1,
   layers: [

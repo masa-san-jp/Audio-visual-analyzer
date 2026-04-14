@@ -40,7 +40,7 @@ class VisualizerCore {
       this.canvas.height = size;
     }
 
-    this._fillBlack();
+    this._fillBackground();
   }
 
   start() {
@@ -55,23 +55,25 @@ class VisualizerCore {
       cancelAnimationFrame(this.rafId);
       this.rafId = null;
     }
-    this._fillBlack();
+    this._fillBackground();
   }
 
-  _fillBlack() {
-    this.ctx.fillStyle = '#000';
+  _fillBackground() {
+    this.ctx.fillStyle = this.settings.bgColor;
     this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
   }
 
   _clearWithAfterimage() {
     const intensity = this.settings.afterimageIntensity;
     if (intensity <= 0) {
-      this._fillBlack();
+      this._fillBackground();
       return;
     }
     // intensity 1~10 → fadeAlpha 0.7^1 ~ 0.7^10
     const fadeAlpha = Math.pow(0.7, intensity);
-    this.ctx.fillStyle = `rgba(0,0,0,${fadeAlpha})`;
+    const isWhite = this.settings.bgColor === '#fff';
+    const rgb = isWhite ? '255,255,255' : '0,0,0';
+    this.ctx.fillStyle = `rgba(${rgb},${fadeAlpha})`;
     this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
   }
 
