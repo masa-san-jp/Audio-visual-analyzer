@@ -64,20 +64,10 @@
             <option value="mirror-horizontal">ミラー（左右）</option>
           </select>
         </label>
-        <label id="radial-tilt-group" style="display:none;">
-          傾き
-          <select id="radial-tilt">
-            <option value="0">0度</option>
-            <option value="30">30度</option>
-            <option value="45">45度</option>
-            <option value="60">60度</option>
-          </select>
-        </label>
-      </section>
-
-      <section class="control-group">
-        <h2>レイヤー</h2>
-        <div class="label-row">
+        <div class="btn-row" style="margin-top:6px;">
+          <button id="btn-analyzer-randomize">アナライザーランダム</button>
+        </div>
+        <div class="label-row" style="margin-top:8px;">
           <span class="label-text">レイヤー数</span>
           <div class="btn-row">
             <button id="btn-layer-1" class="active layer-btn">1</button>
@@ -148,6 +138,9 @@
           残像強度&ensp;<span id="val-afterimage">0</span>
           <input type="range" id="slider-afterimage" min="0" max="10" value="0">
         </label>
+        <div class="btn-row" style="margin-top:6px;">
+          <button id="btn-shape-randomize">形状ランダム</button>
+        </div>
       </section>
     </div>
   </div>
