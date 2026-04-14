@@ -40,12 +40,13 @@ function renderBars(ctx, canvas, dataArray, settings) {
     }
   } else if (barDisplayMode === 'mirror-vertical') {
     // 上下対称
-    const centerY = canvas.height / 2 - (offsetRatio * canvas.height * 0.25) + (offsetRatio * canvas.height * 0.25);
+    const centerY = canvas.height - (offsetRatio * canvas.height * 0.5);
+    const availHalfHeight = Math.min(centerY, canvas.height - centerY);
     for (let i = 0; i < barCount; i++) {
       const idx = Math.floor(i * len / barCount);
       const raw = dataArray[idx] / 255;
       const val = Math.min(1, raw * sensitivity);
-      const barHeight = Math.round(val * canvas.height * 0.5);
+      const barHeight = Math.round(val * availHalfHeight);
       if (barHeight < 1) continue;
 
       const h = Math.round((hue + val * hueRange) % 360);
