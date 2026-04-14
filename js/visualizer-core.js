@@ -1,9 +1,14 @@
-const RENDERERS = {
-  bars:   renderBars,
-  lines:  renderLines,
-  dots:   renderDots,
-  radial: renderRadial,
-  mirror: renderMirror,
+// レンダラー選択マップ
+const BAR_RENDERERS = {
+  bar:  renderBars,
+  line: renderLines,
+  dot:  renderDots,
+};
+
+const RADIAL_RENDERERS = {
+  bar:  renderRadialBars,
+  line: renderRadialLines,
+  dot:  renderRadialDots,
 };
 
 class VisualizerCore {
@@ -14,6 +19,8 @@ class VisualizerCore {
     this.settings = createDefaultSettings();
     this.running = false;
     this.rafId = null;
+    // 色相連続変化用の内部カウンター
+    this._huePhase = 0;
   }
 
   resize() {
@@ -56,17 +63,40 @@ class VisualizerCore {
     this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
   }
 
+  _clearWithAfterimage() {
+    const intensity = this.settings.afterimageIntensity;
+    if (intensity <= 0) {
+      this._fillBlack();
+      return;
+    }
+    // intensity 1~10 → fadeAlpha 0.7^1 ~ 0.7^10
+    const fadeAlpha = Math.pow(0.7, intensity);
+    this.ctx.fillStyle = `rgba(0,0,0,${fadeAlpha})`;
+    this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+  }
+
   _loop() {
     if (!this.running) return;
     this.rafId = requestAnimationFrame(() => this._loop());
 
-    this._fillBlack();
+    // 残像付きクリア
+    this._clearWithAfterimage();
 
     // フレームデータを1回だけ取得
     this.audioEngine.captureFrame();
 
-    const { layerCount, layers, rendererType, zeroDbMode } = this.settings;
-    const renderer = RENDERERS[rendererType] || renderBars;
+    // 色相連続変化モード
+    let effectiveHue = this.settings.hue;
+    if (this.settings.hueContinuousMode) {
+      this._huePhase = (this._huePhase + this.settings.hueContinuousSpeed * 0.5) % 360;
+      effectiveHue = (this.settings.hue + this._huePhase) % 360;
+    }
+
+    const { layerCount, layers, analyzerType, expressionMethod } = this.settings;
+
+    // レンダラー選択
+    const rendererMap = analyzerType === 'radial' ? RADIAL_RENDERERS : BAR_RENDERERS;
+    const renderer = rendererMap[expressionMethod] || rendererMap.bar;
 
     for (let i = 0; i < layerCount; i++) {
       const layerData = this.audioEngine.getLayerData(i, layerCount);
@@ -75,9 +105,8 @@ class VisualizerCore {
       const layer = layers[i] || { hueOffset: 0, sensitivity: 1.0 };
       const layerSettings = {
         ...this.settings,
-        hue: (this.settings.hue + layer.hueOffset + 360) % 360,
+        hue: (effectiveHue + layer.hueOffset + 360) % 360,
         sensitivity: this.settings.sensitivity * layer.sensitivity,
-        zeroDbMode,
       };
 
       renderer(this.ctx, this.canvas, layerData, layerSettings);

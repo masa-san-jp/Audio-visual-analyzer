@@ -206,3 +206,18 @@ select:disabled {
   color: #555;
   font-size: 10px;
 }
+
+/* ── Toggle / Checkbox row ── */
+
+.toggle-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.toggle-row input[type="checkbox"] {
+  accent-color: #4070b0;
+  width: 15px;
+  height: 15px;
+  cursor: pointer;
+}
