@@ -3,7 +3,8 @@ document.addEventListener('DOMContentLoaded', () => {
   const audioEngine  = new AudioEngine();
   const mediaManager = new MediaManager(audioEngine);
   const visualizer   = new VisualizerCore(canvas, audioEngine);
-  const ui           = new UIController(visualizer, mediaManager, audioEngine);
+  const recorder     = new Recorder(canvas, audioEngine);
+  const ui           = new UIController(visualizer, mediaManager, audioEngine, recorder);
 
   // 初期レイアウト確定後にキャンバスサイズを設定
   visualizer.resize();

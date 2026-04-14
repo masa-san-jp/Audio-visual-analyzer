@@ -59,4 +59,18 @@ class AudioEngine {
   setSmoothing(value) {
     if (this.analyser) this.analyser.smoothingTimeConstant = value;
   }
+
+  // 録画用: MediaStreamDestination を作成し analyser に接続して返す
+  createStreamDestination() {
+    if (!this.ctx || !this.analyser) return null;
+    const dest = this.ctx.createMediaStreamDestination();
+    this.analyser.connect(dest);
+    return dest;
+  }
+
+  // 録画用: 接続済みの MediaStreamDestination を解除する
+  removeStreamDestination(dest) {
+    if (!this.analyser || !dest) return;
+    try { this.analyser.disconnect(dest); } catch (_) { /* already disconnected */ }
+  }
 }

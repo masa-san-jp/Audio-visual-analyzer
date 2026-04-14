@@ -1,19 +1,46 @@
 class UIController {
-  constructor(visualizer, mediaManager, audioEngine) {
+  constructor(visualizer, mediaManager, audioEngine, recorder) {
     this.visualizer = visualizer;
     this.mediaManager = mediaManager;
     this.audioEngine = audioEngine;
+    this.recorder = recorder;
+    this.mode = 'play'; // 'play' | 'rec'
   }
 
   init() {
+    this._initMode();
     this._initFile();
     this._initPlayback();
+    this._initRecording();
     this._initAspectRatio();
     this._initAnalyzer();
     this._initLayers();
     this._initColorControls();
     this._initShapeControls();
     window.addEventListener('resize', () => this.visualizer.resize());
+  }
+
+  // ── モード切替 ──
+
+  _initMode() {
+    const btnPlay = document.getElementById('btn-mode-play');
+    const btnRec  = document.getElementById('btn-mode-rec');
+    const recControls = document.getElementById('rec-controls');
+
+    btnPlay.addEventListener('click', () => {
+      this.mode = 'play';
+      btnPlay.classList.add('active');
+      btnRec.classList.remove('active');
+      recControls.style.display = 'none';
+    });
+
+    btnRec.addEventListener('click', () => {
+      this.mode = 'rec';
+      btnRec.classList.add('active');
+      btnPlay.classList.remove('active');
+      recControls.style.display = '';
+      this._updateRecButtons();
+    });
   }
 
   // ── ファイル ──
@@ -34,9 +61,11 @@ class UIController {
         fileNameEl.textContent = file.name;
         this.mediaManager.onEnded = () => this._onEnded();
         this._setPlaybackEnabled(true);
+        this._updateRecButtons();
       } catch (err) {
         fileNameEl.textContent = 'エラー: ' + err.message;
         this._setPlaybackEnabled(false);
+        this._updateRecButtons();
       }
       fileInput.value = '';
     });
@@ -58,6 +87,70 @@ class UIController {
       this.mediaManager.stop();
       this.visualizer.stop();
     });
+  }
+
+  // ── 録画制御 ──
+
+  _initRecording() {
+    const btnStart = document.getElementById('btn-rec-start');
+    const btnStop  = document.getElementById('btn-rec-stop');
+    const btnSave  = document.getElementById('btn-rec-save');
+    const btnReset = document.getElementById('btn-rec-reset');
+
+    // 録画開始: 再生も同時に開始する
+    btnStart.addEventListener('click', () => {
+      this.mediaManager.stop();
+      this.mediaManager.play();
+      this.visualizer.start();
+      this.recorder.start();
+    });
+
+    // 録画停止
+    btnStop.addEventListener('click', () => {
+      this.recorder.stop();
+      this.mediaManager.pause();
+    });
+
+    // 保存
+    btnSave.addEventListener('click', () => {
+      this.recorder.save();
+    });
+
+    // 再録画（リセット）
+    btnReset.addEventListener('click', () => {
+      this.recorder.reset();
+      this.mediaManager.stop();
+      this.visualizer.stop();
+    });
+
+    // Recorder の状態変更コールバック
+    this.recorder.onStateChange = () => this._updateRecButtons();
+  }
+
+  _updateRecButtons() {
+    const state = this.recorder.state;
+    const loaded = this.mediaManager.isLoaded;
+    const btnStart = document.getElementById('btn-rec-start');
+    const btnStop  = document.getElementById('btn-rec-stop');
+    const btnSave  = document.getElementById('btn-rec-save');
+    const btnReset = document.getElementById('btn-rec-reset');
+    const statusEl = document.getElementById('rec-status');
+
+    btnStart.disabled = !loaded || state === 'recording';
+    btnStop.disabled  = state !== 'recording';
+    btnSave.disabled  = state !== 'recorded';
+    btnReset.disabled = state === 'idle';
+
+    if (state === 'recording') {
+      statusEl.textContent = '録画中…';
+      statusEl.classList.add('recording');
+    } else if (state === 'recorded') {
+      statusEl.textContent = '録画完了 — 保存可能です';
+      statusEl.classList.remove('recording');
+    } else {
+      statusEl.textContent = '待機中';
+      statusEl.classList.remove('recording');
+    }
   }
 
   // ── 表示比率 ──
@@ -190,12 +283,10 @@ class UIController {
       document.getElementById('slider-hue').value = newHue;
       document.getElementById('val-hue').textContent = newHue;
 
-      // レイヤーの色相オフセットもランダマイズ
       const { layers, layerCount } = this.visualizer.settings;
       for (let i = 0; i < 4; i++) {
         layers[i].hueOffset = Math.floor(Math.random() * 361) - 180;
       }
-      // 表示中のレイヤー設定UIを更新
       this._renderLayerSettings(layerCount);
     });
 
@@ -246,6 +337,10 @@ class UIController {
   }
 
   _onEnded() {
+    // 録画中なら録画も停止
+    if (this.mode === 'rec' && this.recorder.state === 'recording') {
+      this.recorder.stop();
+    }
     this.mediaManager.stop();
     this.visualizer.stop();
   }
