@@ -11,6 +11,12 @@ class MediaManager {
       // Clean up previous element
       if (this.mediaElement) {
         this.mediaElement.pause();
+        // ended リスナーを先に解除してから src を変更する。
+        // src = '' がブラウザによって ended イベントを発火させる場合があり、
+        // 解除しないと _onEnded() が意図せず呼び出される。
+        if (this.onEnded) {
+          this.mediaElement.removeEventListener('ended', this.onEnded);
+        }
         this.mediaElement.src = '';
       }
       if (this.currentUrl) {
