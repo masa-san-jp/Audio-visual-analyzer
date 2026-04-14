@@ -9,13 +9,14 @@ class Recorder {
     this.state = 'idle'; // 'idle' | 'recording' | 'recorded'
     this.blob = null;
     this._audioDest = null;
+    this._resetting = false;
     // コールバック
     this.onStateChange = null;
   }
 
   // 録画開始
   start() {
-    if (this.state === 'recording') return;
+    if (this.state !== 'idle') return;
 
     // Canvas 映像ストリーム (30fps)
     const canvasStream = this.canvas.captureStream(30);
@@ -33,20 +34,33 @@ class Recorder {
     // MIME タイプを決定
     const mimeType = this._selectMimeType();
 
-    this.mediaRecorder = new MediaRecorder(canvasStream, { mimeType });
-    this.chunks = [];
-    this.blob = null;
+    const options = mimeType ? { mimeType } : {};
+    try {
+      this.mediaRecorder = new MediaRecorder(canvasStream, options);
+    } catch (e) {
+      this._cleanupAudioDest();
+      this._setState('idle');
+      if (this.onError) this.onError('この環境では録画がサポートされていません');
+      return;
+    }
+
+    const recordedMime = this.mediaRecorder.mimeType || 'video/webm';
+    const chunks = [];
 
     this.mediaRecorder.ondataavailable = (e) => {
-      if (e.data.size > 0) this.chunks.push(e.data);
+      if (e.data.size > 0) chunks.push(e.data);
     };
 
     this.mediaRecorder.onstop = () => {
-      this.blob = new Blob(this.chunks, { type: mimeType });
+      // reset() による停止の場合は無視する
+      if (this._resetting) {
+        this._cleanupAudioDest();
+        return;
+      }
+      this.chunks = chunks;
+      this.blob = new Blob(chunks, { type: recordedMime });
       this._setState('recorded');
-      // オーディオ録音接続を解除
-      this.audioEngine.removeStreamDestination(this._audioDest);
-      this._audioDest = null;
+      this._cleanupAudioDest();
     };
 
     this.mediaRecorder.start();
@@ -76,11 +90,22 @@ class Recorder {
 
   // 再録画（リセット）
   reset() {
-    if (this.state === 'recording') this.stop();
+    if (this.state === 'recording') {
+      this._resetting = true;
+      this.mediaRecorder.stop();
+    }
     this.chunks = [];
     this.blob = null;
     this.mediaRecorder = null;
+    this._resetting = false;
     this._setState('idle');
+  }
+
+  _cleanupAudioDest() {
+    if (this._audioDest) {
+      this.audioEngine.removeStreamDestination(this._audioDest);
+      this._audioDest = null;
+    }
   }
 
   _setState(newState) {
@@ -99,7 +124,7 @@ class Recorder {
     for (const mime of candidates) {
       if (MediaRecorder.isTypeSupported(mime)) return mime;
     }
-    return 'video/webm';
+    return null;
   }
 
   _generateFilename() {
