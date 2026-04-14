@@ -54,6 +54,10 @@ class UIController {
     const fileInput = document.getElementById('file-input');
     const fileNameEl = document.getElementById('file-name');
 
+    // onEnded を一度だけ設定する（loadFile より先に設定することで
+    // canplay 時点で ended リスナーが確実に登録されるようにする）
+    this.mediaManager.onEnded = () => this._onEnded();
+
     btnFile.addEventListener('click', () => fileInput.click());
 
     fileInput.addEventListener('change', async (e) => {
@@ -63,7 +67,6 @@ class UIController {
       try {
         await this.mediaManager.loadFile(file);
         fileNameEl.textContent = file.name;
-        this.mediaManager.onEnded = () => this._onEnded();
         this._setPlaybackEnabled(true);
         this._updateRecButtons();
       } catch (err) {
