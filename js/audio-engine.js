@@ -33,6 +33,23 @@ class AudioEngine {
     return Promise.resolve();
   }
 
+  // フレームごとに1回呼び出してデータを取得する
+  captureFrame() {
+    if (!this.analyser) return;
+    this.analyser.getByteFrequencyData(this.dataArray);
+  }
+
+  // レイヤーに対応する帯域データを返す
+  // layerIndex: 0始まり, layerCount: 1〜4
+  getLayerData(layerIndex, layerCount) {
+    if (!this.dataArray) return null;
+    const total = this.dataArray.length;
+    const start = Math.floor(layerIndex * total / layerCount);
+    const end = Math.floor((layerIndex + 1) * total / layerCount);
+    return this.dataArray.subarray(start, end);
+  }
+
+  // 後方互換: 全帯域データを返す（captureFrameを内包）
   getFrequencyData() {
     if (!this.analyser) return null;
     this.analyser.getByteFrequencyData(this.dataArray);

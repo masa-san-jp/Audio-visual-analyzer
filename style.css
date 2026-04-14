@@ -149,3 +149,60 @@ label input[type="range"] {
   accent-color: #4070b0;
   cursor: pointer;
 }
+
+/* ── Select ── */
+
+select {
+  background: #272727;
+  border: 1px solid #3a3a3a;
+  color: #bbb;
+  padding: 4px 6px;
+  border-radius: 3px;
+  font-size: 12px;
+  cursor: pointer;
+  width: 100%;
+  margin-top: 4px;
+}
+
+select:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+/* ── Layer settings ── */
+
+.label-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
+.label-text {
+  font-size: 11px;
+  color: #777;
+}
+
+.layer-item {
+  background: #222;
+  border: 1px solid #2e2e2e;
+  border-radius: 4px;
+  padding: 8px 10px;
+  margin-top: 8px;
+}
+
+.layer-title {
+  font-size: 11px;
+  font-weight: 600;
+  color: #888;
+  margin-bottom: 7px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.layer-band {
+  font-weight: 400;
+  color: #555;
+  font-size: 10px;
+}
