@@ -9,9 +9,10 @@ class UIController {
     this._initFile();
     this._initPlayback();
     this._initAspectRatio();
-    this._initRenderer();
+    this._initAnalyzer();
     this._initLayers();
-    this._initSliders();
+    this._initColorControls();
+    this._initShapeControls();
     window.addEventListener('resize', () => this.visualizer.resize());
   }
 
@@ -80,21 +81,40 @@ class UIController {
     });
   }
 
-  // ── 表現タイプ ──
+  // ── アナライザー設定 ──
 
-  _initRenderer() {
-    const rendererSelect = document.getElementById('renderer-type');
-    const zeroDbSelect   = document.getElementById('zero-db-mode');
+  _initAnalyzer() {
+    const analyzerTypeSelect = document.getElementById('analyzer-type');
+    const expressionSelect = document.getElementById('expression-method');
+    const barModeGroup = document.getElementById('bar-mode-group');
+    const barModeSelect = document.getElementById('bar-display-mode');
+    const radialTiltGroup = document.getElementById('radial-tilt-group');
+    const radialTiltSelect = document.getElementById('radial-tilt');
 
-    rendererSelect.addEventListener('change', () => {
-      this.visualizer.settings.rendererType = rendererSelect.value;
-      // radial は zeroDbMode 非依存なので選択肢をグレーアウト
-      zeroDbSelect.disabled = (rendererSelect.value === 'radial');
+    const updateVisibility = () => {
+      const isRadial = analyzerTypeSelect.value === 'radial';
+      barModeGroup.style.display = isRadial ? 'none' : '';
+      radialTiltGroup.style.display = isRadial ? '' : 'none';
+    };
+
+    analyzerTypeSelect.addEventListener('change', () => {
+      this.visualizer.settings.analyzerType = analyzerTypeSelect.value;
+      updateVisibility();
     });
 
-    zeroDbSelect.addEventListener('change', () => {
-      this.visualizer.settings.zeroDbMode = zeroDbSelect.value;
+    expressionSelect.addEventListener('change', () => {
+      this.visualizer.settings.expressionMethod = expressionSelect.value;
     });
+
+    barModeSelect.addEventListener('change', () => {
+      this.visualizer.settings.barDisplayMode = barModeSelect.value;
+    });
+
+    radialTiltSelect.addEventListener('change', () => {
+      this.visualizer.settings.radialTilt = parseInt(radialTiltSelect.value, 10);
+    });
+
+    updateVisibility();
   }
 
   // ── レイヤー ──
@@ -111,7 +131,6 @@ class UIController {
       });
     });
 
-    // 初期状態（レイヤー1）を描画
     this._renderLayerSettings(1);
   }
 
@@ -144,38 +163,71 @@ class UIController {
 
       document.getElementById(`layer-hue-${i}`).addEventListener('input', (e) => {
         const v = parseInt(e.target.value, 10);
-        this.visualizer.settings.layers[i] = {
-          ...this.visualizer.settings.layers[i],
-          hueOffset: v,
-        };
+        this.visualizer.settings.layers[i].hueOffset = v;
         document.getElementById(`val-layer-hue-${i}`).textContent = v;
       });
 
       document.getElementById(`layer-sens-${i}`).addEventListener('input', (e) => {
         const v = parseFloat(e.target.value);
-        this.visualizer.settings.layers[i] = {
-          ...this.visualizer.settings.layers[i],
-          sensitivity: v,
-        };
+        this.visualizer.settings.layers[i].sensitivity = v;
         document.getElementById(`val-layer-sens-${i}`).textContent = v.toFixed(1);
       });
     }
   }
 
-  // ── スライダー ──
+  // ── 色調整 ──
 
-  _initSliders() {
-    this._bindSlider('hue',         'val-hue',         v => { this.visualizer.settings.hue         = v; });
-    this._bindSlider('hue-range',   'val-hue-range',   v => { this.visualizer.settings.hueRange    = v; });
-    this._bindSlider('brightness',  'val-brightness',  v => { this.visualizer.settings.brightness  = v; });
-    this._bindSlider('saturation',  'val-saturation',  v => { this.visualizer.settings.saturation  = v; });
+  _initColorControls() {
+    this._bindSlider('hue',        'val-hue',        v => { this.visualizer.settings.hue        = v; });
+    this._bindSlider('hue-range',  'val-hue-range',  v => { this.visualizer.settings.hueRange   = v; });
+    this._bindSlider('brightness', 'val-brightness',  v => { this.visualizer.settings.brightness = v; });
+    this._bindSlider('saturation', 'val-saturation',  v => { this.visualizer.settings.saturation = v; });
+
+    // 色相ランダマイズ
+    document.getElementById('btn-hue-randomize').addEventListener('click', () => {
+      const newHue = Math.floor(Math.random() * 360);
+      this.visualizer.settings.hue = newHue;
+      document.getElementById('slider-hue').value = newHue;
+      document.getElementById('val-hue').textContent = newHue;
+
+      // レイヤーの色相オフセットもランダマイズ
+      const { layers, layerCount } = this.visualizer.settings;
+      for (let i = 0; i < 4; i++) {
+        layers[i].hueOffset = Math.floor(Math.random() * 361) - 180;
+      }
+      // 表示中のレイヤー設定UIを更新
+      this._renderLayerSettings(layerCount);
+    });
+
+    // 色相連続変化モード
+    const chk = document.getElementById('chk-hue-continuous');
+    const speedGroup = document.getElementById('hue-speed-group');
+
+    chk.addEventListener('change', () => {
+      this.visualizer.settings.hueContinuousMode = chk.checked;
+      speedGroup.style.display = chk.checked ? '' : 'none';
+    });
+
+    this._bindSlider('hue-speed', 'val-hue-speed', v => {
+      this.visualizer.settings.hueContinuousSpeed = v;
+    }, 1);
+  }
+
+  // ── 感度・形状 ──
+
+  _initShapeControls() {
     this._bindSlider('sensitivity', 'val-sensitivity', v => { this.visualizer.settings.sensitivity = v; }, 1);
     this._bindSlider('smoothing',   'val-smoothing',   v => {
       this.visualizer.settings.smoothing = v;
       this.audioEngine.setSmoothing(v);
     }, 2);
     this._bindSlider('bar-width',   'val-bar-width',   v => { this.visualizer.settings.barWidth    = v; });
+    this._bindSlider('density',     'val-density',     v => { this.visualizer.settings.density     = v; });
+    this._bindSlider('base-offset', 'val-base-offset', v => { this.visualizer.settings.baseOffset  = v; });
+    this._bindSlider('afterimage',  'val-afterimage',  v => { this.visualizer.settings.afterimageIntensity = v; });
   }
+
+  // ── ヘルパー ──
 
   _bindSlider(sliderId, valId, setter, decimals = 0) {
     const slider = document.getElementById('slider-' + sliderId);
@@ -186,8 +238,6 @@ class UIController {
       setter(v);
     });
   }
-
-  // ── ヘルパー ──
 
   _setPlaybackEnabled(enabled) {
     document.getElementById('btn-play').disabled  = !enabled;

@@ -11,9 +11,19 @@ const DEFAULT_SETTINGS = {
   barWidth: 2,
   // 表示
   aspectRatio: '16:9',
-  // Phase 2
-  rendererType: 'bars',   // 'bars' | 'lines' | 'dots' | 'radial' | 'mirror'
-  zeroDbMode: 'bottom',   // 'bottom' | 'center'
+  // Phase 3: アナライザー構造
+  analyzerType: 'bar',           // 'bar' | 'radial'
+  expressionMethod: 'bar',       // 'bar' | 'line' | 'dot'
+  barDisplayMode: 'normal',      // 'normal' | 'mirror-vertical' | 'mirror-horizontal'
+  radialTilt: 0,                 // 0 | 30 | 45 | 60
+  density: 100,                  // 30~100
+  baseOffset: 0,                 // 0~99
+  // Phase 3: 色相拡張
+  hueContinuousMode: false,
+  hueContinuousSpeed: 1.0,       // 0.1~5.0
+  // Phase 3: 残像
+  afterimageIntensity: 0,        // 0~10
+  // レイヤー
   layerCount: 1,
   layers: [
     { hueOffset: 0,   sensitivity: 1.0 },

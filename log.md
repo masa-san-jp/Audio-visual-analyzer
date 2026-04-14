@@ -2,6 +2,48 @@
 
 ---
 
+## 2026-04-14 — Phase 3 実装
+
+### 作業内容
+- Phase 3「表現拡張・追加仕様」を実装・完了
+
+#### 変更・追加ファイル
+| ファイル | 変更内容 |
+|---|---|
+| `js/settings.js` | `rendererType`/`zeroDbMode` を廃止し `analyzerType`/`expressionMethod`/`barDisplayMode`/`radialTilt`/`density`/`baseOffset`/`hueContinuousMode`/`hueContinuousSpeed`/`afterimageIntensity` を追加 |
+| `js/renderers/bars.js` | 棒グラフ型・棒表現に書き換え。ミラー（上下/左右）・密度・基準点オフセット対応 |
+| `js/renderers/lines.js` | 棒グラフ型・波形線表現に書き換え。ミラー・密度・オフセット対応 |
+| `js/renderers/dots.js` | 棒グラフ型・点表現に書き換え。ミラー・密度・オフセット対応 |
+| `js/renderers/radial.js` | 円形放射型・全表現（棒/波形線/点）対応に書き換え。傾き・密度・オフセット対応 |
+| `js/renderers/mirror.js` | 削除（ミラー機能は bars/lines/dots に統合） |
+| `js/visualizer-core.js` | レンダラー選択を analyzerType×expressionMethod に変更、残像表現（rgba クリア）、色相連続変化モード対応 |
+| `js/ui-controller.js` | Phase 3 UI 全面刷新。アナライザータイプ・表現方法・表示モード・傾き・密度・オフセット・残像・色相ランダム・色相連続変化の各コントロールを追加 |
+| `index.html` | Phase 3 UI 構造に全面更新。mirror.js の参照を削除 |
+| `style.css` | トグル行・チェックボックスのスタイルを追加 |
+| `README.md` | Phase 3 の機能・使いかたを追記 |
+
+#### Phase 3 実装済み機能
+- **アナライザータイプ切替**: 棒グラフ / 円形放射
+- **表現方法切替**: 棒 / 波形線 / 点（全6組み合わせ）
+- **棒グラフ表示モード**: 通常 / ミラー上下 / ミラー左右
+- **円形放射の傾き**: 0度 / 30度 / 45度 / 60度
+- **密度調整**: 30〜100（最小でもアナライザーが消失しない）
+- **基準点オフセット**: 0〜99
+- **線の太さ調整**: 1〜20px
+- **色相ランダマイズ**: 色相+レイヤー色相オフセットをランダム値に設定
+- **色相連続変化モード**: 再生中に色相が自動的に変化
+- **残像表現**: 強度 0〜10（rgba フェードによる実装、過剰設定は上限10でクランプ）
+
+### spec.md 変更（なし）
+- 今回は既存の Phase 3 仕様に従った実装のため、spec.md への変更は不要
+
+### 備考
+- Phase 2 の `rendererType`（bars/lines/dots/radial/mirror）と `zeroDbMode` は廃止し、`analyzerType`（bar/radial）× `expressionMethod`（bar/line/dot）の2軸構造に再編
+- mirror.js は削除し、ミラー機能は棒グラフ型の `barDisplayMode` として統合
+- 次フェーズ（Phase 4）では3スロット再生キュー・自動循環再生を予定
+
+---
+
 ## 2026-04-14 — spec.md 復元・Phase 3 仕様追記
 
 ### 作業内容
