@@ -52,9 +52,14 @@ class Recorder {
     };
 
     this.mediaRecorder.onstop = () => {
-      // reset() による停止の場合は無視する
+      // reset() による停止の場合はここですべてのクリーンアップを行う
       if (this._resetting) {
+        this._resetting = false;
+        this.chunks = [];
+        this.blob = null;
+        this.mediaRecorder = null;
         this._cleanupAudioDest();
+        this._setState('idle');
         return;
       }
       this.chunks = chunks;
@@ -91,13 +96,14 @@ class Recorder {
   // 再録画（リセット）
   reset() {
     if (this.state === 'recording') {
+      // _resettingをtrueにしたままonstopに後処理を委譲する（非同期）
       this._resetting = true;
       this.mediaRecorder.stop();
+      return;
     }
     this.chunks = [];
     this.blob = null;
     this.mediaRecorder = null;
-    this._resetting = false;
     this._setState('idle');
   }
 
