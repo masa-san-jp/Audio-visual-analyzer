@@ -104,6 +104,12 @@ class UIController {
     const btnStop  = document.getElementById('btn-rec-stop');
     const btnSave  = document.getElementById('btn-rec-save');
     const btnReset = document.getElementById('btn-rec-reset');
+    const recFps   = document.getElementById('rec-fps');
+
+    this.recorder.setFrameRate(recFps.value);
+    recFps.addEventListener('change', () => {
+      this.recorder.setFrameRate(recFps.value);
+    });
 
     // 録画開始: 再生も同時に開始する
     btnStart.addEventListener('click', () => {

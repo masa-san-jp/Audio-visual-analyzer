@@ -10,6 +10,7 @@ class Recorder {
     this.blob = null;
     this._audioDest = null;
     this._resetting = false;
+    this.frameRate = 30;
     // コールバック
     this.onStateChange = null;
   }
@@ -18,8 +19,8 @@ class Recorder {
   start() {
     if (this.state !== 'idle') return;
 
-    // Canvas 映像ストリーム (30fps)
-    const canvasStream = this.canvas.captureStream(30);
+    // Canvas 映像ストリーム
+    const canvasStream = this.canvas.captureStream(this.frameRate);
 
     // AudioContext からオーディオストリームを取得して合成
     const audioDest = this.audioEngine.createStreamDestination();
@@ -113,6 +114,13 @@ class Recorder {
       this.audioEngine.removeStreamDestination(this._audioDest);
       this._audioDest = null;
     }
+  }
+
+  setFrameRate(fps) {
+    const allowed = [25, 29.97, 30];
+    const numericFps = Number(fps);
+    if (!allowed.includes(numericFps)) return;
+    this.frameRate = numericFps;
   }
 
   _setState(newState) {
