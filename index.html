@@ -42,6 +42,14 @@
       <section class="control-group" id="rec-controls" style="display:none;">
         <h2>録画</h2>
         <div id="rec-status" class="rec-status">待機中</div>
+        <label>
+          FPS
+          <select id="rec-fps">
+            <option value="25">25fps</option>
+            <option value="29.97">29.97fps</option>
+            <option value="30" selected>30fps</option>
+          </select>
+        </label>
         <div class="btn-row">
           <button id="btn-rec-start" disabled>録画開始</button>
           <button id="btn-rec-stop" disabled>録画停止</button>
