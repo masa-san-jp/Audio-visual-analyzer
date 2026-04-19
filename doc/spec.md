@@ -403,7 +403,7 @@ Phase 1・2 では汎用的な表示タイプを扱ってきたが、Phase 3 以
 
 ### 14.4 出力形式
 - `MediaRecorder.isTypeSupported()` で対応可能な形式を自動選択する
-- 優先順位: `video/mp4`（H.264/AAC）→ `video/webm`（VP9/VP8）
+- 優先順位: `video/mp4`（H.264/AAC の一般的プロファイル候補）→ `video/webm`（VP9/VP8）
 - Chrome 130+ / Safari では MP4、Firefox など非対応ブラウザでは WebM にフォールバック
 - 保存ファイル名の拡張子（`.mp4` / `.webm`）は実際に録画した MIME タイプから自動決定する
 
