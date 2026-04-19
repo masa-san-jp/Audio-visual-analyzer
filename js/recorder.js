@@ -1,5 +1,5 @@
 // Canvas + Audio 録画モジュール
-// MediaRecorder API を使用し webm 形式で出力する
+// MediaRecorder API を使用し mp4 / webm 形式で出力する
 class Recorder {
   constructor(canvas, audioEngine) {
     this.canvas = canvas;
@@ -130,8 +130,9 @@ class Recorder {
 
   _selectMimeType() {
     const candidates = [
-      'video/mp4;codecs=avc1,mp4a.40.2',
-      'video/mp4;codecs=avc1',
+      'video/mp4;codecs=avc1.640028,mp4a.40.2',
+      'video/mp4;codecs=avc1.4d401f,mp4a.40.2',
+      'video/mp4;codecs=avc1.42e01e,mp4a.40.2',
       'video/mp4',
       'video/webm;codecs=vp9,opus',
       'video/webm;codecs=vp8,opus',
