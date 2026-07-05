@@ -116,8 +116,18 @@ class UIController {
       if (this.recorder.state !== 'idle') return;
       this.mediaManager.stop();
       this.visualizer.start();
-      const started = await this.recorder.start();
-      if (started) this.mediaManager.play();
+      let started = false;
+      try {
+        started = await this.recorder.start();
+      } catch (_) {
+        started = false;
+      }
+      if (started) {
+        this.mediaManager.play();
+      } else if (this.recorder.state === 'idle') {
+        // 開始できなかった場合は描画ループを止めて待機状態に戻す
+        this.visualizer.stop();
+      }
     });
 
     // 録画停止

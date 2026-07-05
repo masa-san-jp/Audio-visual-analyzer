@@ -50,7 +50,12 @@ class Recorder {
 
     // AudioContext が suspended のままだと音声トラックにデータが流れず、
     // 冒頭の A/V ずれの原因になるため、先に必ず resume を完了させる
-    await this.audioEngine.resume();
+    try {
+      await this.audioEngine.resume();
+    } catch (e) {
+      this._abortStart('音声の初期化に失敗しました');
+      return false;
+    }
 
     // Canvas 映像ストリーム
     const canvasStream = this.canvas.captureStream(this.frameRate);
@@ -92,20 +97,41 @@ class Recorder {
     };
 
     return new Promise((resolve) => {
+      let settled = false;
+      const settle = (ok) => {
+        if (!settled) {
+          settled = true;
+          resolve(ok);
+        }
+      };
+
       this.mediaRecorder.onstart = () => {
         // 実際にキャプチャが始まった時刻を録画長の計測基準にする
         this._startedAt = performance.now();
         this._stoppedAt = 0;
         this._starting = false;
         this._setState('recording');
-        resolve(true);
+        settle(true);
       };
+
+      this.mediaRecorder.onerror = () => {
+        if (!settled) {
+          // キャプチャ開始前のエラー: 開始失敗として状態を戻す
+          this._abortStart('録画を開始できませんでした');
+          settle(false);
+        } else if (this.state === 'recording') {
+          // 録画中のエラー: 録画を停止して回収済みデータを保全する
+          if (this.onError) this.onError('録画中にエラーが発生しました');
+          this.stop();
+        }
+      };
+
       try {
         // タイムスライス付きで開始し、長時間録画でもチャンクを定期回収する
         this.mediaRecorder.start(RECORDER_TIMESLICE_MS);
       } catch (e) {
         this._abortStart('録画を開始できませんでした');
-        resolve(false);
+        settle(false);
       }
     });
   }
