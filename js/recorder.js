@@ -1,5 +1,26 @@
 // Canvas + Audio 録画モジュール
 // MediaRecorder API を使用し mp4 / webm 形式で出力する
+
+// MIME タイプ候補（編集ソフト互換性の高い MP4 を優先し、非対応環境は WebM へフォールバック）
+const RECORDER_MIME_CANDIDATES = [
+  'video/mp4;codecs=avc1.640028,mp4a.40.2',
+  'video/mp4;codecs=avc1.4d401f,mp4a.40.2',
+  'video/mp4;codecs=avc1.42e01e,mp4a.40.2',
+  'video/mp4',
+  'video/webm;codecs=vp9,opus',
+  'video/webm;codecs=vp8,opus',
+  'video/webm;codecs=vp9',
+  'video/webm;codecs=vp8',
+  'video/webm',
+];
+
+// 映像ビットレートの算出パラメーター
+const RECORDER_BITS_PER_PIXEL = 0.15;      // 1ピクセル・1フレームあたりのビット数
+const RECORDER_MIN_VIDEO_BPS  = 6000000;   // 6 Mbps
+const RECORDER_MAX_VIDEO_BPS  = 24000000;  // 24 Mbps
+const RECORDER_AUDIO_BPS      = 192000;    // 192 kbps
+const RECORDER_TIMESLICE_MS   = 1000;      // チャンク回収間隔
+
 class Recorder {
   constructor(canvas, audioEngine) {
     this.canvas = canvas;
@@ -8,16 +29,28 @@ class Recorder {
     this.chunks = [];
     this.state = 'idle'; // 'idle' | 'recording' | 'recorded'
     this.blob = null;
+    this.frameRate = 30;
     this._audioDest = null;
     this._resetting = false;
-    this.frameRate = 30;
+    this._starting = false;
+    this._startedAt = 0;
+    this._stoppedAt = 0;
     // コールバック
     this.onStateChange = null;
+    this.onError = null;
   }
 
   // 録画開始
-  start() {
-    if (this.state !== 'idle') return;
+  // MediaRecorder の start イベント発火を待って resolve する。
+  // 呼び出し側は resolve（true）後に再生を開始することで、録画準備が整う前に
+  // 音が鳴り始めて映像と音声の頭がずれることを防ぐ。
+  async start() {
+    if (this.state !== 'idle' || this._starting) return false;
+    this._starting = true;
+
+    // AudioContext が suspended のままだと音声トラックにデータが流れず、
+    // 冒頭の A/V ずれの原因になるため、先に必ず resume を完了させる
+    await this.audioEngine.resume();
 
     // Canvas 映像ストリーム
     const canvasStream = this.canvas.captureStream(this.frameRate);
@@ -32,20 +65,22 @@ class Recorder {
       }
     }
 
-    // MIME タイプを決定
+    // MIME タイプとビットレートを決定
     const mimeType = this._selectMimeType();
+    const options = {
+      videoBitsPerSecond: this._videoBitrate(),
+      audioBitsPerSecond: RECORDER_AUDIO_BPS,
+    };
+    if (mimeType) options.mimeType = mimeType;
 
-    const options = mimeType ? { mimeType } : {};
     try {
       this.mediaRecorder = new MediaRecorder(canvasStream, options);
     } catch (e) {
-      this._cleanupAudioDest();
-      this._setState('idle');
-      if (this.onError) this.onError('この環境では録画がサポートされていません');
-      return;
+      this._abortStart('この環境では録画がサポートされていません');
+      return false;
     }
 
-    const recordedMime = this.mediaRecorder.mimeType || 'video/webm';
+    const recordedMime = this.mediaRecorder.mimeType || mimeType || 'video/webm';
     const chunks = [];
 
     this.mediaRecorder.ondataavailable = (e) => {
@@ -53,29 +88,32 @@ class Recorder {
     };
 
     this.mediaRecorder.onstop = () => {
-      // reset() による停止の場合はここですべてのクリーンアップを行う
-      if (this._resetting) {
-        this._resetting = false;
-        this.chunks = [];
-        this.blob = null;
-        this.mediaRecorder = null;
-        this._cleanupAudioDest();
-        this._setState('idle');
-        return;
-      }
-      this.chunks = chunks;
-      this.blob = new Blob(chunks, { type: recordedMime });
-      this._setState('recorded');
-      this._cleanupAudioDest();
+      this._handleStop(chunks, recordedMime);
     };
 
-    this.mediaRecorder.start();
-    this._setState('recording');
+    return new Promise((resolve) => {
+      this.mediaRecorder.onstart = () => {
+        // 実際にキャプチャが始まった時刻を録画長の計測基準にする
+        this._startedAt = performance.now();
+        this._stoppedAt = 0;
+        this._starting = false;
+        this._setState('recording');
+        resolve(true);
+      };
+      try {
+        // タイムスライス付きで開始し、長時間録画でもチャンクを定期回収する
+        this.mediaRecorder.start(RECORDER_TIMESLICE_MS);
+      } catch (e) {
+        this._abortStart('録画を開始できませんでした');
+        resolve(false);
+      }
+    });
   }
 
   // 録画停止
   stop() {
     if (this.mediaRecorder && this.state === 'recording') {
+      this._stoppedAt = performance.now();
       this.mediaRecorder.stop();
     }
   }
@@ -109,13 +147,6 @@ class Recorder {
     this._setState('idle');
   }
 
-  _cleanupAudioDest() {
-    if (this._audioDest) {
-      this.audioEngine.removeStreamDestination(this._audioDest);
-      this._audioDest = null;
-    }
-  }
-
   setFrameRate(fps) {
     const allowed = [25, 29.97, 30];
     const numericFps = Number(fps);
@@ -123,31 +154,79 @@ class Recorder {
     this.frameRate = numericFps;
   }
 
+  // ── 内部処理 ──
+
+  // MediaRecorder 停止後の後処理（Blob 生成・WebM の Duration 書き込み）
+  async _handleStop(chunks, recordedMime) {
+    this._cleanupAudioDest();
+    this.mediaRecorder = null;
+
+    // reset() による停止の場合はクリーンアップのみ行う
+    if (this._resetting) {
+      this._resetting = false;
+      this.chunks = [];
+      this.blob = null;
+      this._setState('idle');
+      return;
+    }
+
+    const stoppedAt = this._stoppedAt || performance.now();
+    const durationMs = this._startedAt ? stoppedAt - this._startedAt : 0;
+
+    let blob = new Blob(chunks, { type: recordedMime });
+
+    // WebM は MediaRecorder が Duration を書き込まないため、
+    // ヘッダーに再生時間を書き込み、編集ソフトでの長さ認識・シークを可能にする
+    if (recordedMime.indexOf('webm') !== -1 &&
+        typeof patchWebmDuration === 'function' && durationMs > 0) {
+      try {
+        blob = await patchWebmDuration(blob, durationMs);
+      } catch (_) {
+        // パッチ失敗時は元の Blob をそのまま使う
+      }
+    }
+
+    this.chunks = chunks;
+    this.blob = blob;
+    this._setState('recorded');
+  }
+
+  _abortStart(message) {
+    this._starting = false;
+    this.mediaRecorder = null;
+    this._cleanupAudioDest();
+    this._setState('idle');
+    if (this.onError) this.onError(message);
+  }
+
+  _cleanupAudioDest() {
+    if (this._audioDest) {
+      this.audioEngine.removeStreamDestination(this._audioDest);
+      this._audioDest = null;
+    }
+  }
+
   _setState(newState) {
     this.state = newState;
     if (this.onStateChange) this.onStateChange(newState);
   }
 
+  // 解像度・フレームレートに応じた映像ビットレート（bps）を算出する
+  _videoBitrate() {
+    const pixelsPerSecond = this.canvas.width * this.canvas.height * this.frameRate;
+    const bps = Math.round(pixelsPerSecond * RECORDER_BITS_PER_PIXEL);
+    return Math.min(RECORDER_MAX_VIDEO_BPS, Math.max(RECORDER_MIN_VIDEO_BPS, bps));
+  }
+
   _selectMimeType() {
-    const candidates = [
-      'video/mp4;codecs=avc1.640028,mp4a.40.2',
-      'video/mp4;codecs=avc1.4d401f,mp4a.40.2',
-      'video/mp4;codecs=avc1.42e01e,mp4a.40.2',
-      'video/mp4',
-      'video/webm;codecs=vp9,opus',
-      'video/webm;codecs=vp8,opus',
-      'video/webm;codecs=vp9',
-      'video/webm;codecs=vp8',
-      'video/webm',
-    ];
-    for (const mime of candidates) {
+    for (const mime of RECORDER_MIME_CANDIDATES) {
       if (MediaRecorder.isTypeSupported(mime)) return mime;
     }
     return null;
   }
 
   _extFromMime(mimeType) {
-    if (mimeType && mimeType.startsWith('video/mp4')) return 'mp4';
+    if (mimeType && mimeType.toLowerCase().indexOf('video/mp4') === 0) return 'mp4';
     return 'webm';
   }
 

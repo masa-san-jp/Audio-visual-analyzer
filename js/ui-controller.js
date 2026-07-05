@@ -111,12 +111,13 @@ class UIController {
       this.recorder.setFrameRate(recFps.value);
     });
 
-    // 録画開始: 再生も同時に開始する
-    btnStart.addEventListener('click', () => {
+    // 録画開始: 録画キャプチャの開始を待ってから再生を始める（A/V同期のため）
+    btnStart.addEventListener('click', async () => {
+      if (this.recorder.state !== 'idle') return;
       this.mediaManager.stop();
-      this.mediaManager.play();
       this.visualizer.start();
-      this.recorder.start();
+      const started = await this.recorder.start();
+      if (started) this.mediaManager.play();
     });
 
     // 録画停止
@@ -139,6 +140,13 @@ class UIController {
 
     // Recorder の状態変更コールバック
     this.recorder.onStateChange = () => this._updateRecButtons();
+
+    // Recorder のエラー表示
+    this.recorder.onError = (message) => {
+      const statusEl = document.getElementById('rec-status');
+      statusEl.textContent = message;
+      statusEl.classList.remove('recording');
+    };
   }
 
   _updateRecButtons() {
