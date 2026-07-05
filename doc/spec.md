@@ -2,8 +2,8 @@
 
 - Repository: `masa-san-jp/Audio-visual-analyzer-`
 - Default branch: `main`
-- Document version: `v1.2`
-- Date: `2026-04-14`
+- Document version: `v1.3`
+- Date: `2026-07-05`
 - Purpose: 開発担当者への引き継ぎ用仕様書
 
 ---
@@ -406,6 +406,11 @@ Phase 1・2 では汎用的な表示タイプを扱ってきたが、Phase 3 以
 - 優先順位: `video/mp4`（H.264/AAC の一般的プロファイル候補）→ `video/webm`（VP9/VP8）
 - Chrome 130+ / Safari では MP4、Firefox など非対応ブラウザでは WebM にフォールバック
 - 保存ファイル名の拡張子（`.mp4` / `.webm`）は実際に録画した MIME タイプから自動決定する
+- エンコードビットレートは解像度・フレームレートから自動算出する
+  - 映像: 約 0.15 bit/pixel/frame、下限 6 Mbps・上限 24 Mbps
+  - 音声: 192 kbps
+- WebM 出力時は録画終了後に `Segment > Info` へ `Duration` 要素を書き込み、再生時間情報を持つファイルとして保存する（MediaRecorder の WebM は Duration を持たず、編集ソフトで長さ不明になる問題への対策。外部ライブラリは使用しない）
+- 録画データは 1 秒間隔のタイムスライスで回収し、長時間録画時のチャンク肥大とデータ損失リスクを抑える
 
 ### 14.5 操作
 - FPS選択（25 / 29.97 / 30）
@@ -417,6 +422,13 @@ Phase 1・2 では汎用的な表示タイプを扱ってきたが、Phase 3 以
 ### 14.6 保存ファイル名
 - 初期仕様では日時ベースの自動命名でよい
 - 将来的に任意名称指定を検討する
+
+### 14.7 A/V同期
+- 録画開始時は以下の順序で処理し、録画冒頭の映像と音声のずれを防止する
+  1. `AudioContext` の `resume()` 完了を待つ（suspended のままでは音声トラックにデータが流れないため）
+  2. `MediaRecorder` の `start` イベント（キャプチャ開始）を待つ
+  3. その後にメディア再生を開始する
+- 録画終了時の停止指示時刻から実測した録画長を WebM の `Duration` に使用する
 
 ---
 

@@ -81,11 +81,15 @@ class AudioEngine {
   }
 
   // 録画用: 接続済みの MediaStreamDestination を解除する
-  // disconnect(dest) は環境によって全接続を切ることがあるため、
-  // 全切断後に ctx.destination へ再接続して音声チェーンを維持する
   removeStreamDestination(dest) {
     if (!this.analyser || !dest || !this.ctx) return;
-    try { this.analyser.disconnect(); } catch (_) {}
-    try { this.analyser.connect(this.ctx.destination); } catch (_) {}
+    try {
+      // 対象ノードのみを切断し、スピーカー出力への接続はそのまま維持する
+      this.analyser.disconnect(dest);
+    } catch (_) {
+      // 引数付き disconnect 非対応環境では全切断後に出力へ再接続する
+      try { this.analyser.disconnect(); } catch (_) {}
+      try { this.analyser.connect(this.ctx.destination); } catch (_) {}
+    }
   }
 }

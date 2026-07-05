@@ -2,6 +2,42 @@
 
 ---
 
+## 2026-07-05
+
+### 作業内容
+- 録画まわりのリファクタリング（A/V同期精度・ファイル形式・エンコーディング品質の向上）
+- **A/V同期精度の向上**
+  - `Recorder.start()` を async 化し、`AudioContext.resume()` の完了 → `MediaRecorder` の `start` イベント発火を待ってから resolve するよう変更
+  - `UIController` の録画開始ハンドラーを「録画キャプチャ開始を待ってから `mediaManager.play()` を呼ぶ」順序に変更し、録画準備前に音が鳴り始めて冒頭がずれる問題を解消
+  - 録画長は `start` イベント時刻〜停止指示時刻の実測値で算出するよう変更
+  - `AudioEngine.removeStreamDestination()` を対象ノードのみの `disconnect(dest)` 優先に変更（非対応環境のみ全切断+再接続へフォールバック）
+- **エンコーディング品質の向上**
+  - `videoBitsPerSecond` を解像度×FPSから自動算出（約0.15bpp、6〜24Mbpsでクランプ）、`audioBitsPerSecond` を192kbpsに設定
+  - `MediaRecorder.start(1000)` のタイムスライス指定で1秒ごとにチャンクを回収し、長時間録画の安定性を改善
+- **ファイル形式の精度向上**
+  - `js/webm-duration.js` を新規追加。MediaRecorder の WebM 出力に欠落している `Duration` 要素を EBML 最小パースで `Segment > Info` に書き込み、編集ソフトで長さ表示・シークが正しく機能するファイルとして保存（外部ライブラリ不使用、パース失敗時は元データをそのまま使用する安全設計）
+  - MIME 候補リストをモジュール定数 `RECORDER_MIME_CANDIDATES` に抽出、`_extFromMime()` を大文字小文字非依存に変更
+- **その他リファクタリング**
+  - `Recorder` の停止後処理を `_handleStop()` に分離、開始失敗処理を `_abortStart()` に集約、二重開始防止フラグ `_starting` を追加
+  - `UIController` に `recorder.onError` の表示ハンドラーを追加（従来は未接続だった）
+- Node によるロジック検証: 全JSの構文チェック、および WebM Duration パッチの挿入・上書き・不正データフォールバック・TimecodeScale 換算の各ケースをテストし全件パス
+- **レビュー指摘対応（Copilot）**
+  - `AudioContext.resume()` 失敗時に `_starting` フラグが残り以後録画不能になる問題を修正（try/catch + `_abortStart()` で状態復帰）
+  - `MediaRecorder` の `onerror` ハンドラーを追加し、キャプチャ開始前のエラーで `start()` の Promise が永久に未解決になる問題を修正（録画中のエラーは録画停止して回収済みデータを保全）
+  - UI の録画開始ハンドラーに try/catch を追加し、開始失敗時は描画ループを停止して待機状態に戻すよう修正
+
+### spec.md 変更（あれば）
+- version `v1.2` → `v1.3`、Date を `2026-07-05` に更新
+- 14.4 出力形式: ビットレート自動算出（映像6〜24Mbps・音声192kbps）、WebM への Duration 書き込み、タイムスライス回収を追記
+- 14.7 A/V同期を新設: 録画開始シーケンス（resume 完了 → キャプチャ開始 → 再生開始）と録画長実測の方針を明記
+- 理由: 録画品質・同期精度の実装変更を仕様として明文化するため（Phase 5 品質改善に相当）
+
+### 備考
+- Duration パッチは WebM のみ対象。MP4 は MediaRecorder が停止時に moov へ長さを書き込むため不要
+- Info サイズの vint 再エンコードが同一バイト長で収まらない等の想定外構造では、パッチを断念して元の Blob を保存する（録画データを壊さない）
+
+---
+
 ## 2026-04-18
 
 ### 作業内容
