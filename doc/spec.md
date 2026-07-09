@@ -1,6 +1,6 @@
 # Audio Visual Analyzer 仕様設計書
 
-- Repository: `masa-san-jp/Audio-visual-analyzer-`
+- Repository: `masa-san-jp/Audio-visual-analyzer`
 - Default branch: `main`
 - Document version: `v1.4`
 - Date: `2026-07-09`

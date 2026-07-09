@@ -44,7 +44,8 @@
 - `tester.mjs` は約 50 行想定: 失敗時に期待値/実際値を表示し、プロセス終了コードで
   green/red を返す（PR 記載用）。
 - アプリ本体は classic script のため、unit テストからは
-  `vm.runInContext`（既存 `webm-duration` テストと同方式）で読み込む。
+  `vm.runInContext` で読み込む（Phase 5 の `webm-duration` 検証で実績のある方式。
+  `log.md` 2026-07-05 の記録参照。当該テストコードはリポジトリ未収録）。
   読み込みヘルパー `loadScript(path, extraGlobals)` を `tester.mjs` に含める。
 
 ### 2.2 モック音源 `mock-audio.js`（M1-13）
@@ -109,10 +110,11 @@ AudioEngine 互換のインターフェースを持ち、**再現可能な合成
 | P-03 | 再利用 | 消滅後に spawn | 同スロットが再利用される（プールサイズ不変） |
 | P-04 | dt 独立性 | 16.7ms×60 回 と 33.4ms×30 回 | 位置誤差 5% 以内（実時間基準の動き） |
 
-### 3.4 既存回帰
+### 3.4 既存機能の回帰テスト
 
-- 既存の `webm-duration` テスト（Phase 5）を `test/unit/webm-duration.test.mjs` として
-  移設し、run-all に含める（挿入・上書き・不正データ・TimecodeScale の 4 ケース維持）。
+- Phase 5 検証時に作成した `webm-duration` の Node テスト（リポジトリ未収録・
+  `log.md` 2026-07-05 参照）を `test/unit/webm-duration.test.mjs` として**新設**し、
+  run-all に含める（挿入・上書き・不正データ・TimecodeScale 換算の 4 ケースを再現する）。
 
 ---
 
