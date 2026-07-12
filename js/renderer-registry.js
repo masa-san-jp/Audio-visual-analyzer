@@ -50,15 +50,10 @@ const RENDERER_REGISTRY = {
     create: (canvas) => new SpectrogramRenderer(canvas),
     capabilities: { methods: [], layers: false, selfClear: true, sliders: ['history'] },
   },
-  'spectrogram-radial': {
-    label: '円形スペクトログラム', group: '時間軸', stateful: true,
-    create: (canvas) => new SpectrogramRadialRenderer(canvas),
-    capabilities: { methods: [], layers: false, selfClear: true, sliders: ['history', 'motion'] },
-  },
   terrain: {
     label: '3D地形', group: '時間軸', stateful: true,
     create: (canvas) => new TerrainRenderer(canvas),
-    capabilities: { methods: ['line', 'dot'], layers: false, sliders: ['history'], physics: true },
+    capabilities: { methods: ['line', 'dot'], layers: false, sliders: ['history', 'angle'], physics: true },
   },
   tunnel: {
     label: 'トンネル', group: '時間軸', stateful: true,
@@ -109,12 +104,12 @@ const RENDERER_REGISTRY = {
   flower: {
     label: '極座標フラワー', group: '幾何', stateful: true,
     create: (canvas) => new FlowerRenderer(canvas),
-    capabilities: { methods: ['bar', 'line', 'dot'], layers: true, sliders: ['motion'], physics: true },
+    capabilities: { methods: ['bar', 'line', 'dot'], layers: true, sliders: ['motion', 'petals'], physics: true },
   },
   voronoi: {
     label: 'ボロノイ脈動', group: '幾何', stateful: true,
     create: (canvas) => new VoronoiRenderer(canvas),
-    capabilities: { methods: [], layers: true, sliders: ['particles'] },
+    capabilities: { methods: [], layers: true, sliders: ['particles', 'motion'] },
   },
 };
 

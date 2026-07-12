@@ -52,7 +52,8 @@ class TerrainRenderer {
     // ── 設定 ──
     const sensitivity = settings && settings.sensitivity != null ? settings.sensitivity : 1;
     const density = settings && settings.density != null ? settings.density : 50;
-    const baseOffset = settings && settings.baseOffset != null ? settings.baseOffset : 50;
+    const baseOffset = settings && settings.baseOffset != null ? settings.baseOffset : 0;
+    const depthAngle = clamp(settings && settings.depthAngle != null ? settings.depthAngle : 50, 0, 100);
     const method = settings && settings.expressionMethod ? settings.expressionMethod : 'line';
     const lineW = settings && settings.barWidth != null ? Math.max(1, settings.barWidth) : 2;
     const hue = settings && settings.hue != null ? settings.hue : 200;
@@ -66,11 +67,13 @@ class TerrainRenderer {
     if (cols < 2) cols = 2;
 
     // ── レイアウト（キャンバス基準）──
-    const frontHalf = W * 0.45;        // 最前列の半幅（画面幅の 90%）
-    const depthSpan = H * 0.32;        // 奥行きで持ち上がる量（奥ほど上へ）
-    const elevPx = H * 0.28;           // 高さ振幅の最大ピクセル
-    // baseOffset(0..99): 地形全体の縦位置。大きいほど下へ。
-    const frontBaseY = H * (0.30 + (baseOffset / 99) * 0.50);
+    // 奥行き角度 angleT(0..1): 大きいほど奥が高く持ち上がり、傾斜が急に見える。
+    const angleT = depthAngle / 100;
+    const frontHalf = W * 0.46;        // 最前列の半幅（画面幅の 92%）
+    const depthSpan = H * lerp(0.14, 0.55, angleT); // 奥行きで持ち上がる量（角度で可変）
+    const elevPx = H * 0.26;           // 高さ振幅の最大ピクセル
+    // baseOffset(0..99): 最前列（手前）の基準位置。0=画面底辺、上げるほど上へ。
+    const frontBaseY = H * (0.98 - (baseOffset / 99) * 0.60);
 
     const rowDenom = rows > 1 ? rows - 1 : 1;
     const colDenom = cols > 1 ? cols - 1 : 1;

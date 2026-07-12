@@ -39,10 +39,12 @@ class TunnelRenderer {
     const h = canvas ? canvas.height : 0;
     this.cx = w / 2;
     this.cy = h / 2;
-    const maxR = Math.min(this.cx, this.cy) * 0.95; // 画面内に収まる最大半径
+    // 16:9 でも画面の横幅いっぱいまでリングが広がるよう、対角基準の大きい半径にする
+    // （上下は画面外にはみ出してクリップされ、トンネルが画面を満たす）。
+    const maxR = Math.hypot(this.cx, this.cy) * 1.02;
     this.maxR = maxR;
     // scale=1.6（破棄直前）でほぼ maxR に届くよう基準半径を決める
-    this.baseRadius = maxR * 0.6;
+    this.baseRadius = maxR * 0.62;
   }
 
   onResize(canvas) {

@@ -46,10 +46,10 @@ class Bar3dRenderer {
     if (barCount > 96) barCount = 96;
 
     // ── 立体の奥行きとレイヤー後退量 ──
-    // 奥行き量。バー幅に比例させつつ、画面が小さいときも視認できる下限を設ける。
-    const depth = Math.max(4, Math.min(barWidth * 1.4, W * 0.03));
+    // 奥行き量。棒グラフとの差が明確になるよう大きめに取り、立体感を強調する。
+    const depth = Math.max(14, Math.min(barWidth * 3 + 12, W * 0.07));
     // 1レイヤーぶんの後退量（isoProject で計算）。4レイヤーで階段状に見える距離。
-    const layerStep = depth * 1.6;
+    const layerStep = depth * 1.5;
 
     // 奥行きオフセット（全バー共通なので1回だけ isoProject で算出：ホットループ内の割り当て回避）
     const depthOff = isoProject(0, 0, depth, this.kx, this.ky); // {x:+depth*kx, y:-depth*ky}

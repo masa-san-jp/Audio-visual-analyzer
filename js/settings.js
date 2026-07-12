@@ -27,6 +27,8 @@ const DEFAULT_SETTINGS = {
   motionSpeed: 1.0,              // 0.1~3.0 回転・流れ・脈動の速度
   particleAmount: 50,            // 10~100 粒子・要素の量
   physicsAmount: 0,              // 0~10  粘性揺らぎ（バネ物理）
+  depthAngle: 50,                // 0~100 3D地形の奥行き角度
+  petalCount: 6,                 // 2~16  極座標フラワーの花弁数
   // 背景色
   bgColor: '#000',             // '#000' | '#fff'
   // レイヤー

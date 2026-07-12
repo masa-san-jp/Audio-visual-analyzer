@@ -366,6 +366,8 @@ class UIController {
     show('group-history',   sliders.indexOf('history') !== -1);
     show('group-motion',    sliders.indexOf('motion') !== -1);
     show('group-particles', sliders.indexOf('particles') !== -1);
+    show('group-angle',     sliders.indexOf('angle') !== -1);
+    show('group-petals',    sliders.indexOf('petals') !== -1);
     show('group-physics',   !!caps.physics);
   }
 
@@ -462,6 +464,8 @@ class UIController {
     this._bindSlider('history',   'val-history',   v => { this.visualizer.settings.historySeconds = v; });
     this._bindSlider('motion',    'val-motion',    v => { this.visualizer.settings.motionSpeed    = v; }, 1);
     this._bindSlider('particles', 'val-particles', v => { this.visualizer.settings.particleAmount = v; });
+    this._bindSlider('angle',     'val-angle',     v => { this.visualizer.settings.depthAngle     = v; });
+    this._bindSlider('petals',    'val-petals',    v => { this.visualizer.settings.petalCount     = v; });
     this._bindSlider('physics',   'val-physics',   v => { this.visualizer.settings.physicsAmount  = v; });
 
     document.getElementById('btn-shape-randomize').addEventListener('click', () => {

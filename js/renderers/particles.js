@@ -189,34 +189,53 @@ class ParticlesRenderer {
     const p = this.pool;
     const cap = p.capacity;
     const method = settings.expressionMethod === 'line' ? 'line' : 'dot';
-    const dotSize = Math.max(1, settings.barWidth || 3);
+    const baseSize = Math.max(1, settings.barWidth || 3);
+
+    // 加算合成でグロー感を出す（美しさ向上）。描画後に必ず戻す。
+    const prevOp = ctx.globalCompositeOperation;
+    ctx.globalCompositeOperation = 'lighter';
 
     if (method === 'line') {
+      // ── 線: 速度方向に伸びる流れ星状のストリーク ──
       ctx.lineCap = 'round';
-      ctx.lineWidth = Math.max(1, (settings.barWidth || 3) * 0.8);
-    }
-
-    for (let i = 0; i < cap; i++) {
-      if (!p.active[i]) continue;
-      const frac = clamp(p.life[i] / p.maxLife[i], 0, 1); // 1→0 でフェードアウト
-      const alpha = frac;
-      const col = makeColor(p.hue[i], clamp(p.amp[i], 0, 1), settings, alpha);
-      if (method === 'line') {
-        // 軌跡: 前位置 → 現位置の線分
-        ctx.strokeStyle = col;
+      for (let i = 0; i < cap; i++) {
+        if (!p.active[i]) continue;
+        const frac = clamp(p.life[i] / p.maxLife[i], 0, 1);
+        const alpha = frac * frac; // 尾は淡く
+        // 速度に比例した尾の長さ（px/秒 → 一定時間ぶんの変位）
+        const vx = p.vx[i], vy = p.vy[i];
+        const speed = Math.hypot(vx, vy) || 1;
+        const tail = clamp(speed * 0.05, 4, 60);
+        const tx = p.x[i] - (vx / speed) * tail;
+        const ty = p.y[i] - (vy / speed) * tail;
+        ctx.lineWidth = Math.max(1, baseSize * (0.4 + 0.6 * frac));
+        ctx.strokeStyle = makeColor(p.hue[i], clamp(p.amp[i], 0, 1), settings, alpha);
         ctx.beginPath();
-        ctx.moveTo(p.px[i], p.py[i]);
+        ctx.moveTo(tx, ty);
         ctx.lineTo(p.x[i], p.y[i]);
         ctx.stroke();
-      } else {
-        // dot: 円（寿命で縮小）
-        const r = dotSize * (0.4 + 0.6 * frac);
-        ctx.fillStyle = col;
+      }
+    } else {
+      // ── 点: 中心が明るく外周が透明な放射グラデーションの光球 ──
+      for (let i = 0; i < cap; i++) {
+        if (!p.active[i]) continue;
+        const frac = clamp(p.life[i] / p.maxLife[i], 0, 1);
+        const amp = clamp(p.amp[i], 0, 1);
+        const r = baseSize * (0.8 + 1.6 * amp) * (0.35 + 0.65 * frac);
+        if (r < 0.5) continue;
+        const x = p.x[i], y = p.y[i];
+        const g = ctx.createRadialGradient(x, y, 0, x, y, r);
+        g.addColorStop(0, makeColor(p.hue[i], amp, settings, frac));
+        g.addColorStop(0.5, makeColor(p.hue[i], amp, settings, frac * 0.5));
+        g.addColorStop(1, makeColor(p.hue[i], amp, settings, 0));
+        ctx.fillStyle = g;
         ctx.beginPath();
-        ctx.arc(p.x[i], p.y[i], r, 0, TAU);
+        ctx.arc(x, y, r, 0, TAU);
         ctx.fill();
       }
     }
+
+    ctx.globalCompositeOperation = prevOp;
   }
 
   dispose() { this.pool = null; }
@@ -331,24 +350,53 @@ class FlowRenderer {
       }
     }
 
-    // 描画（前位置→現位置の線分）
-    ctx.lineCap = 'round';
-    ctx.lineWidth = Math.max(1, (settings.barWidth || 2) * 0.8);
-    for (let i = 0; i < cap; i++) {
-      if (!p.active[i]) continue;
-      const layer = this.band[i];
-      const a = amp[layer] || 0;
-      const lyr = _layerOf(settings, layer);
-      const baseHue = (settings.hue || 0) + (lyr.hueOffset || 0);
-      // 寿命の入り/終わりを淡くしつつ、流速でも軽く濃淡をつける
-      const frac = clamp(p.life[i] / p.maxLife[i], 0, 1);
-      const alpha = clamp(0.15 + a * 0.7, 0, 1) * clamp(frac * 3, 0, 1);
-      ctx.strokeStyle = makeColor(baseHue, clamp(0.2 + a, 0, 1), settings, alpha);
-      ctx.beginPath();
-      ctx.moveTo(p.px[i], p.py[i]);
-      ctx.lineTo(p.x[i], p.y[i]);
-      ctx.stroke();
+    // ── 描画: 表現方法で明確に描き分ける ──
+    const method = settings.expressionMethod === 'dot' ? 'dot' : 'line';
+    const prevOp = ctx.globalCompositeOperation;
+    ctx.globalCompositeOperation = 'lighter'; // グロー感
+
+    if (method === 'dot') {
+      // 点: 流れに沿って移動する小さな光点（線でつながず粒として見せる）
+      const dotSize = Math.max(1, (settings.barWidth || 2));
+      for (let i = 0; i < cap; i++) {
+        if (!p.active[i]) continue;
+        const layer = this.band[i];
+        const a = amp[layer] || 0;
+        const lyr = _layerOf(settings, layer);
+        const baseHue = (settings.hue || 0) + (lyr.hueOffset || 0);
+        const frac = clamp(p.life[i] / p.maxLife[i], 0, 1);
+        const alpha = clamp(0.2 + a * 0.8, 0, 1) * clamp(frac * 3, 0, 1);
+        const r = dotSize * (0.6 + a * 1.4);
+        const x = p.x[i], y = p.y[i];
+        const g = ctx.createRadialGradient(x, y, 0, x, y, r);
+        g.addColorStop(0, makeColor(baseHue, clamp(0.25 + a, 0, 1), settings, alpha));
+        g.addColorStop(1, makeColor(baseHue, clamp(0.25 + a, 0, 1), settings, 0));
+        ctx.fillStyle = g;
+        ctx.beginPath();
+        ctx.arc(x, y, r, 0, TAU);
+        ctx.fill();
+      }
+    } else {
+      // 線: 流線（前位置→現位置の線分）。連続したなめらかな流れとして見せる。
+      ctx.lineCap = 'round';
+      for (let i = 0; i < cap; i++) {
+        if (!p.active[i]) continue;
+        const layer = this.band[i];
+        const a = amp[layer] || 0;
+        const lyr = _layerOf(settings, layer);
+        const baseHue = (settings.hue || 0) + (lyr.hueOffset || 0);
+        const frac = clamp(p.life[i] / p.maxLife[i], 0, 1);
+        const alpha = clamp(0.15 + a * 0.7, 0, 1) * clamp(frac * 3, 0, 1);
+        ctx.lineWidth = Math.max(1, (settings.barWidth || 2) * (0.6 + a));
+        ctx.strokeStyle = makeColor(baseHue, clamp(0.2 + a, 0, 1), settings, alpha);
+        ctx.beginPath();
+        ctx.moveTo(p.px[i], p.py[i]);
+        ctx.lineTo(p.x[i], p.y[i]);
+        ctx.stroke();
+      }
     }
+
+    ctx.globalCompositeOperation = prevOp;
   }
 
   dispose() { this.pool = null; this.noise = null; this.band = null; }
