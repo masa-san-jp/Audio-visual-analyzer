@@ -84,7 +84,7 @@
             <option value="radial">円形放射</option>
           </select>
         </label>
-        <label>
+        <label id="group-expression">
           表現方法
           <select id="expression-method">
             <option value="bar">棒</option>
@@ -103,7 +103,7 @@
         <div class="btn-row" style="margin-top:6px;">
           <button id="btn-analyzer-randomize">アナライザーランダム</button>
         </div>
-        <div class="label-row" style="margin-top:8px;">
+        <div class="label-row" style="margin-top:8px;" id="group-layers">
           <span class="label-text">レイヤー数</span>
           <div class="btn-row">
             <button id="btn-layer-1" class="active layer-btn">1</button>
@@ -174,6 +174,22 @@
           残像強度&ensp;<span id="val-afterimage">0</span>
           <input type="range" id="slider-afterimage" min="0" max="10" value="0">
         </label>
+        <label id="group-history" style="display:none;">
+          時間幅（秒）&ensp;<span id="val-history">4</span>
+          <input type="range" id="slider-history" min="1" max="8" value="4">
+        </label>
+        <label id="group-motion" style="display:none;">
+          動きの速さ&ensp;<span id="val-motion">1.0</span>
+          <input type="range" id="slider-motion" min="0.1" max="3.0" step="0.1" value="1.0">
+        </label>
+        <label id="group-particles" style="display:none;">
+          要素量&ensp;<span id="val-particles">50</span>
+          <input type="range" id="slider-particles" min="10" max="100" value="50">
+        </label>
+        <label id="group-physics" style="display:none;">
+          粘性揺らぎ&ensp;<span id="val-physics">0</span>
+          <input type="range" id="slider-physics" min="0" max="10" value="0">
+        </label>
         <div class="btn-row" style="margin-top:6px;">
           <button id="btn-shape-randomize">形状ランダム</button>
         </div>
@@ -184,10 +200,27 @@
   <script src="js/settings.js"></script>
   <script src="js/audio-engine.js"></script>
   <script src="js/media-manager.js"></script>
+  <!-- Phase 6 共通ユーティリティ（レンダラーより先に読み込む） -->
+  <script src="js/vis-utils.js"></script>
+  <script src="js/history-buffer.js"></script>
+  <!-- レンダラー（既存 + Phase 6） -->
   <script src="js/renderers/bars.js"></script>
   <script src="js/renderers/lines.js"></script>
   <script src="js/renderers/dots.js"></script>
   <script src="js/renderers/radial.js"></script>
+  <script src="js/renderers/spectrogram.js"></script>
+  <script src="js/renderers/terrain.js"></script>
+  <script src="js/renderers/tunnel.js"></script>
+  <script src="js/renderers/bar3d.js"></script>
+  <script src="js/renderers/ring3d.js"></script>
+  <script src="js/renderers/particles.js"></script>
+  <script src="js/renderers/ripple.js"></script>
+  <script src="js/renderers/metaball.js"></script>
+  <script src="js/renderers/lissajous.js"></script>
+  <script src="js/renderers/flower.js"></script>
+  <script src="js/renderers/voronoi.js"></script>
+  <!-- レジストリ（全レンダラー読み込み後・コアより前） -->
+  <script src="js/renderer-registry.js"></script>
   <script src="js/visualizer-core.js"></script>
   <script src="js/webm-duration.js"></script>
   <script src="js/recorder.js"></script>

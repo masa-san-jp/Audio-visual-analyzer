@@ -22,6 +22,11 @@ const DEFAULT_SETTINGS = {
   hueContinuousSpeed: 1.0,       // 0.1~5.0
   // Phase 3: 残像
   afterimageIntensity: 0,        // 0~10
+  // Phase 6: 拡張表現パラメーター
+  historySeconds: 4,             // 1~8   時間軸系の履歴長
+  motionSpeed: 1.0,              // 0.1~3.0 回転・流れ・脈動の速度
+  particleAmount: 50,            // 10~100 粒子・要素の量
+  physicsAmount: 0,              // 0~10  粘性揺らぎ（バネ物理）
   // 背景色
   bgColor: '#000',             // '#000' | '#fff'
   // レイヤー
