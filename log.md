@@ -2,6 +2,36 @@
 
 ---
 
+## 2026-07-12 — Phase 6 拡張表現 実装
+
+### 作業内容
+- Phase 6「拡張表現」を実装。アナライザータイプを 13 種追加し計 15 種にした。
+- **基盤**
+  - `js/vis-utils.js` 新規: 純ロジック集（clamp/lerp/isoProject/polarToXy、makeColor、ValueNoise、Spring/SpringArray、springParamsFromAmount、BeatDetector、Voronoi分割、makeRng）
+  - `js/history-buffer.js` 新規: `FrameHistory`（事前確保リングバッファ）
+  - `js/renderer-registry.js` 新規: レンダラーレジストリ + ケイパビリティ（タイプ別の対応表現/レイヤー/スライダー/selfClear を宣言）
+  - `js/audio-engine.js`: 時間波形取得（`getByteTimeDomainData`）・`getFreqSlice`/`freqSliceLength` を追加
+  - `js/visualizer-core.js`: 描画ループ v2 に刷新。frame オブジェクト組み立て（freq/time/history/beat/dtMs）、ステートフルレンダラーのライフサイクル（生成/onResize/dispose）、selfClear、粘性揺らぎ（physicsAmount）を実装。既存 bar/radial は physicsAmount=0 で従来と同一動作
+  - `js/settings.js`: `historySeconds`/`motionSpeed`/`particleAmount`/`physicsAmount` を追加
+- **新レンダラー（js/renderers/）**
+  - spectrogram.js（T1滝/T2円形）, terrain.js（T3 3D地形）, tunnel.js（T4トンネル）, bar3d.js（T5擬似3Dバー）, ring3d.js（T6回転リング）, particles.js（T7粒子/T9ノイズフロー）, ripple.js（T8波紋）, metaball.js（T10・blur+contrast合成、filter非対応時フォールバック）, lissajous.js（T11オシロ）, flower.js（T12フラワー）, voronoi.js（T13脈動）
+- **UI（ui-controller.js / index.html）**: タイプセレクトをレジストリから系統別 optgroup で動的生成。選択タイプのケイパビリティに応じて表現方法・表示モード・レイヤー・追加スライダーを表示/非表示。ランダマイズもケイパビリティ準拠で不正組み合わせを生成しないよう変更。追加スライダー4本を配線。
+- `index.html`: 依存順（vis-utils/history-buffer → renderers → registry → core）でスクリプトを読み込み。
+- **検証**
+  - 全JS `node --check` パス
+  - foundation 単体テスト 23 アサーション全通過（ノイズ決定性・バネ収束/無発散/バイパス・ビート検出・Voronoi面積保存・FrameHistory コピー等）
+  - ヘッドレス煙テスト: mock canvas/ctx で全13ステートフルタイプ × 表現方法 × 4パターン × 2アスペクト = 176 render-cases、例外0・描画0件なし
+  - Chromium 実ブラウザ起動テスト: 15タイプ×5系統の optgroup 生成確認、全タイプ切替＋ランダマイズ40連打でコンソール/ページエラー0
+
+### spec.md 変更（あれば）
+- 20 Phase 6 を「計画中」→「実装済み」に更新（計15タイプ）
+
+### 備考
+- 実装は設計文書（doc/spec-phase6.md / plan-phase6.md / test-phase6.md）に準拠。実装契約は doc/renderer-contract.md に整理
+- 音声を伴う実描画の目視確認はブラウザ実機（スマホ含む）で別途推奨。ヘッドレスでは合成データによる例外・描画有無まで検証
+
+---
+
 ## 2026-07-10
 
 ### 作業内容

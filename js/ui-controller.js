@@ -231,17 +231,15 @@ class UIController {
   _initAnalyzer() {
     const analyzerTypeSelect = document.getElementById('analyzer-type');
     const expressionSelect = document.getElementById('expression-method');
-    const barModeGroup = document.getElementById('bar-mode-group');
     const barModeSelect = document.getElementById('bar-display-mode');
 
-    const updateVisibility = () => {
-      const isRadial = analyzerTypeSelect.value === 'radial';
-      barModeGroup.style.display = isRadial ? 'none' : '';
-    };
+    // タイプ選択肢をレジストリから系統別に生成
+    this._populateTypeSelect(analyzerTypeSelect);
+    analyzerTypeSelect.value = this.visualizer.settings.analyzerType;
 
     analyzerTypeSelect.addEventListener('change', () => {
       this.visualizer.settings.analyzerType = analyzerTypeSelect.value;
-      updateVisibility();
+      this._applyCapabilities(analyzerTypeSelect.value);
     });
 
     expressionSelect.addEventListener('change', () => {
@@ -251,8 +249,6 @@ class UIController {
     barModeSelect.addEventListener('change', () => {
       this.visualizer.settings.barDisplayMode = barModeSelect.value;
     });
-
-    updateVisibility();
 
     // レイヤー数ボタン
     const layerButtons = document.querySelectorAll('.layer-btn');
@@ -267,40 +263,110 @@ class UIController {
     });
 
     this._renderLayerSettings(1);
+    this._applyCapabilities(this.visualizer.settings.analyzerType);
 
     document.getElementById('btn-analyzer-randomize').addEventListener('click', () => {
-      const types    = ['bar', 'radial'];
-      const methods  = ['bar', 'line', 'dot'];
-      const barModes = ['normal', 'mirror-vertical', 'mirror-horizontal'];
-      const rInt     = (min, max) => min + Math.floor(Math.random() * (max - min + 1));
+      const rInt = (min, max) => min + Math.floor(Math.random() * (max - min + 1));
+      const pick = (arr) => arr[Math.floor(Math.random() * arr.length)];
 
-      const newType   = types[Math.floor(Math.random() * types.length)];
-      const newMethod = methods[Math.floor(Math.random() * methods.length)];
-      const newMode   = barModes[Math.floor(Math.random() * barModes.length)];
-      const newCount  = rInt(1, 4);
+      // 全タイプから選び、ケイパビリティに従って表現方法・表示モード・レイヤー数を決める
+      const types = Object.keys(RENDERER_REGISTRY);
+      const newType = pick(types);
+      const caps = getRendererEntry(newType).capabilities || {};
 
-      this.visualizer.settings.analyzerType    = newType;
-      this.visualizer.settings.expressionMethod = newMethod;
-      this.visualizer.settings.barDisplayMode   = newMode;
-      this.visualizer.settings.layerCount       = newCount;
+      this.visualizer.settings.analyzerType = newType;
 
-      analyzerTypeSelect.value = newType;
-      expressionSelect.value   = newMethod;
-      barModeSelect.value      = newMode;
+      if (caps.methods && caps.methods.length > 0) {
+        this.visualizer.settings.expressionMethod = pick(caps.methods);
+      }
+      if (caps.barDisplayMode) {
+        this.visualizer.settings.barDisplayMode = pick(['normal', 'mirror-vertical', 'mirror-horizontal']);
+      }
+      const newCount = caps.layers ? rInt(1, 4) : 1;
+      this.visualizer.settings.layerCount = newCount;
 
       // レイヤー個別設定をランダム化（感度はデフォルト1.0を維持）
       for (let i = 0; i < 4; i++) {
-        this.visualizer.settings.layers[i].hueOffset  = rInt(-180, 180);
+        this.visualizer.settings.layers[i].hueOffset   = rInt(-180, 180);
         this.visualizer.settings.layers[i].sensitivity = 1.0;
       }
 
-      // レイヤー数ボタンのアクティブ状態を更新
+      // UI 反映
+      analyzerTypeSelect.value = newType;
+      expressionSelect.value   = this.visualizer.settings.expressionMethod;
+      barModeSelect.value      = this.visualizer.settings.barDisplayMode;
       layerButtons.forEach(b => b.classList.remove('active'));
-      document.getElementById(`btn-layer-${newCount}`).classList.add('active');
+      const activeLayerBtn = document.getElementById(`btn-layer-${newCount}`);
+      if (activeLayerBtn) activeLayerBtn.classList.add('active');
       this._renderLayerSettings(newCount);
-
-      updateVisibility();
+      this._applyCapabilities(newType);
     });
+  }
+
+  // タイプセレクトを RENDERER_REGISTRY から系統別 optgroup で構築する
+  _populateTypeSelect(select) {
+    select.innerHTML = '';
+    const byGroup = {};
+    Object.keys(RENDERER_REGISTRY).forEach(key => {
+      const entry = RENDERER_REGISTRY[key];
+      const g = entry.group || 'その他';
+      (byGroup[g] = byGroup[g] || []).push({ key, label: entry.label });
+    });
+    RENDERER_GROUP_ORDER.forEach(group => {
+      const items = byGroup[group];
+      if (!items) return;
+      const og = document.createElement('optgroup');
+      og.label = group;
+      items.forEach(({ key, label }) => {
+        const opt = document.createElement('option');
+        opt.value = key;
+        opt.textContent = label;
+        og.appendChild(opt);
+      });
+      select.appendChild(og);
+    });
+  }
+
+  // 選択タイプのケイパビリティに応じて非対応コントロールを表示/非表示する
+  _applyCapabilities(type) {
+    const caps = getRendererEntry(type).capabilities || {};
+    const show = (id, visible) => {
+      const el = document.getElementById(id);
+      if (el) el.style.display = visible ? '' : 'none';
+    };
+
+    // 表現方法: 対応 method のみ option を残す。無ければセクションごと隠す
+    const methods = caps.methods || [];
+    const exprSelect = document.getElementById('expression-method');
+    if (methods.length === 0) {
+      show('group-expression', false);
+    } else {
+      show('group-expression', true);
+      Array.from(exprSelect.options).forEach(opt => {
+        opt.hidden = methods.indexOf(opt.value) === -1;
+      });
+      if (methods.indexOf(this.visualizer.settings.expressionMethod) === -1) {
+        this.visualizer.settings.expressionMethod = methods[0];
+        exprSelect.value = methods[0];
+      }
+    }
+
+    // 表示モード（ミラー）
+    show('bar-mode-group', !!caps.barDisplayMode);
+
+    // レイヤー数
+    show('group-layers', !!caps.layers);
+    if (!caps.layers) {
+      this.visualizer.settings.layerCount = 1;
+    }
+    document.getElementById('layer-settings').style.display = caps.layers ? '' : 'none';
+
+    // 追加スライダー（sliders 宣言 + physics）
+    const sliders = caps.sliders || [];
+    show('group-history',   sliders.indexOf('history') !== -1);
+    show('group-motion',    sliders.indexOf('motion') !== -1);
+    show('group-particles', sliders.indexOf('particles') !== -1);
+    show('group-physics',   !!caps.physics);
   }
 
   _renderLayerSettings(count) {
@@ -392,6 +458,11 @@ class UIController {
     this._bindSlider('density',     'val-density',     v => { this.visualizer.settings.density     = v; });
     this._bindSlider('base-offset', 'val-base-offset', v => { this.visualizer.settings.baseOffset  = v; });
     this._bindSlider('afterimage',  'val-afterimage',  v => { this.visualizer.settings.afterimageIntensity = v; });
+    // Phase 6 追加スライダー
+    this._bindSlider('history',   'val-history',   v => { this.visualizer.settings.historySeconds = v; });
+    this._bindSlider('motion',    'val-motion',    v => { this.visualizer.settings.motionSpeed    = v; }, 1);
+    this._bindSlider('particles', 'val-particles', v => { this.visualizer.settings.particleAmount = v; });
+    this._bindSlider('physics',   'val-physics',   v => { this.visualizer.settings.physicsAmount  = v; });
 
     document.getElementById('btn-shape-randomize').addEventListener('click', () => {
       const rFloat = (min, max, step) => {

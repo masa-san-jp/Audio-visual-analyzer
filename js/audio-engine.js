@@ -13,6 +13,7 @@ class AudioEngine {
     this.analyser.fftSize = 2048;
     this.analyser.smoothingTimeConstant = 0.80;
     this.dataArray = new Uint8Array(this.analyser.frequencyBinCount);
+    this.timeArray = new Uint8Array(this.analyser.fftSize); // 時間波形（Phase 6）
     this.analyser.connect(this.ctx.destination);
   }
 
@@ -37,6 +38,26 @@ class AudioEngine {
   captureFrame() {
     if (!this.analyser) return;
     this.analyser.getByteFrequencyData(this.dataArray);
+    if (this.timeArray) this.analyser.getByteTimeDomainData(this.timeArray);
+  }
+
+  // 時間波形データ（Phase 6: リサージュ等）
+  getTimeDomainData() {
+    return this.timeArray || null;
+  }
+
+  // 50Hz〜15kHz の全帯域スライス（captureFrame 済みのデータを使う）
+  getFreqSlice() {
+    if (!this.dataArray) return null;
+    const { startBin, endBin } = this._freqRange();
+    return this.dataArray.subarray(startBin, endBin);
+  }
+
+  // 全帯域スライスの長さ（履歴バッファのサイズ確定に使用）
+  freqSliceLength() {
+    if (!this.dataArray) return 0;
+    const { startBin, endBin } = this._freqRange();
+    return endBin - startBin;
   }
 
   // アナライザーが表現する帯域: 50Hz〜15kHz
