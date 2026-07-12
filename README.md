@@ -25,6 +25,32 @@ python3 -m http.server 8000
 
 起動後、ブラウザで `http://localhost:8000` を開きます。
 
+同じ Wi-Fi 上のスマホなどからテストする場合は、`localhost` の代わりに PC の
+IP アドレス（Mac / Linux は `ifconfig`、Windows は `ipconfig` で確認）を使って
+`http://<PCのIPアドレス>:8000` を開きます。
+
+### 方法3: Cloudflare Pages で公開する（スマホ実機テスト向け）
+
+本アプリはルート直下が静的ファイル構成のため、Cloudflare Pages にビルドなしで
+そのまま公開でき、生成された URL をスマホのブラウザで開けば実機テストができます。
+
+1. [Cloudflare ダッシュボード](https://dash.cloudflare.com) → **Workers & Pages** →
+   **Create** → **Pages** → **Connect to Git** で本リポジトリを選択します。
+2. ビルド設定は以下のとおり、**すべて空 / なし** で構いません。
+
+   | 項目 | 値 |
+   |---|---|
+   | Production branch | `main` |
+   | Framework preset | None |
+   | Build command | （空欄） |
+   | Build output directory | `/`（ルート） |
+
+3. **Save and Deploy** を押すと `https://<プロジェクト名>.pages.dev` が生成されます。
+   以後 `main` に push するたび自動で再デプロイされます。
+
+> GitHub Pages を使う場合も同様に、リポジトリ設定の **Pages** で
+> `main` ブランチ・`/ (root)` を指定するだけで公開できます。
+
 ## 使いかた
 
 1. `ファイルを選択` を押して、音声ファイルまたは動画ファイルを読み込みます。
@@ -53,6 +79,16 @@ python3 -m http.server 8000
 
 - Google Chrome
 - Microsoft Edge
+
+## スマホでの利用について
+
+モバイル最適化は正式な対象外（`doc/spec.md` §2.3）ですが、動作確認は可能です。
+以下の点にご注意ください。
+
+- **初回再生**: モバイルの自動再生制限のため、必ず画面を操作して `再生` を押してください。
+- **レイアウト**: 本体はデスクトップの2カラム前提のため、スマホでは操作パネルが窮屈に表示されます。
+- **録画**: Android Chrome は動作見込みです。iOS Safari は `MediaRecorder` の
+  挙動差（出力形式・ビットレート指定の扱い）があり、録画品質は PC と同等になりません。
 
 ## 補足
 
