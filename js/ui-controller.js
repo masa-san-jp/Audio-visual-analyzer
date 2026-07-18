@@ -12,6 +12,7 @@ class UIController {
   init() {
     this._initMode();
     this._initFile();
+    this._initSlots();
     this._initPlayback();
     this._initDragDrop();
     this._initRecording();
@@ -68,12 +69,19 @@ class UIController {
     // canplay 時点で ended リスナーが確実に登録されるようにする）
     this.mediaManager.onEnded = () => this._onEnded();
 
-    btnFile.addEventListener('click', () => fileInput.click());
+    this._loadTargetSlot = null; // スロット行の「読込」で指定されたスロット番号
+
+    btnFile.addEventListener('click', () => {
+      this._loadTargetSlot = null; // アクティブスロットへ
+      fileInput.click();
+    });
 
     fileInput.addEventListener('change', async (e) => {
       const file = e.target.files[0];
+      const target = this._loadTargetSlot;
+      this._loadTargetSlot = null;
       if (!file) return;
-      await this._loadMediaFile(file);
+      await this._loadMediaFile(file, target);
       fileInput.value = '';
     });
 
@@ -101,28 +109,101 @@ class UIController {
     });
   }
 
-  // ファイル選択・ドラッグ&ドロップ共通の読込処理
-  async _loadMediaFile(file) {
+  // ファイル選択・ドラッグ&ドロップ・スロット読込の共通処理
+  // slotIndex 省略時はアクティブスロットへ読み込む
+  async _loadMediaFile(file, slotIndex) {
     const fileNameEl = document.getElementById('file-name');
     const btnMic = document.getElementById('btn-mic');
     // マイク入力中にファイルを選んだ場合はマイクを停止して切り替える
     if (this.micInput.active) this._stopMic(btnMic, fileNameEl);
-    fileNameEl.textContent = '読み込み中…';
+    const index = slotIndex != null ? slotIndex : this.mediaManager.activeIndex;
+    const isActive = index === this.mediaManager.activeIndex;
+    if (isActive) fileNameEl.textContent = '読み込み中…';
     try {
-      const loaded = await this.mediaManager.loadFile(file);
-      fileNameEl.textContent = file.name;
-      this._lastFileName = file.name;
-      this._setPlaybackEnabled(true);
-      this._updateRecButtons();
-      this._setVideoElement(loaded.isVideo ? loaded.element : null);
-      this._attachMediaListeners(loaded.element);
+      await this.mediaManager.loadFile(file, index);
+      if (isActive) {
+        this._applyActiveSlot();
+      } else {
+        this._updateSlotUI();
+      }
     } catch (err) {
-      fileNameEl.textContent = 'エラー: ' + err.message;
-      this._lastFileName = 'エラー: ' + err.message;
+      if (isActive) {
+        fileNameEl.textContent = 'エラー: ' + err.message;
+        this._lastFileName = 'エラー: ' + err.message;
+        // 読込失敗時は旧スロット内容が保持される。再生可否は現状に合わせる
+        this._setPlaybackEnabled(this.mediaManager.isLoaded && !this.micInput.active);
+        this._updateRecButtons();
+        if (!this.mediaManager.isLoaded) this._setVideoElement(null);
+      }
+      this._updateSlotUI();
+    }
+  }
+
+  // アクティブスロットの内容を表示系（ファイル名/再生可否/動画合成/シーク）へ反映する
+  _applyActiveSlot() {
+    const mm = this.mediaManager;
+    const slot = mm.slots[mm.activeIndex];
+    const fileNameEl = document.getElementById('file-name');
+    if (slot) {
+      fileNameEl.textContent = slot.name;
+      this._lastFileName = slot.name;
+      this._setPlaybackEnabled(!this.micInput.active);
+      this._setVideoElement(slot.isVideo ? slot.element : null);
+      this._attachMediaListeners(slot.element);
+    } else {
+      fileNameEl.textContent = '未選択';
+      this._lastFileName = '未選択';
       this._setPlaybackEnabled(false);
-      this._updateRecButtons();
       this._setVideoElement(null);
     }
+    this._updateRecButtons();
+    this._updateSlotUI();
+  }
+
+  // ── スロットUI（Phase 12: doc/spec.md §8） ──
+
+  _initSlots() {
+    document.querySelectorAll('#slot-list .slot-row').forEach((row) => {
+      const idx = Number(row.dataset.slot);
+      row.querySelector('.slot-load').addEventListener('click', () => {
+        if (this.recorder.state === 'recording') return;
+        this._loadTargetSlot = idx;
+        document.getElementById('file-input').click();
+      });
+      row.querySelector('.slot-select').addEventListener('click', () => {
+        if (this.recorder.state === 'recording') return;
+        const wasPlaying = this.mediaManager.isPlaying;
+        if (this.mediaManager.selectSlot(idx)) {
+          this._applyActiveSlot();
+          if (wasPlaying && !this.micInput.active) this.mediaManager.play();
+        }
+      });
+      row.querySelector('.slot-clear').addEventListener('click', () => {
+        if (this.recorder.state === 'recording') return;
+        const wasActive = idx === this.mediaManager.activeIndex;
+        this.mediaManager.clearSlot(idx);
+        if (wasActive) {
+          this.visualizer.stop();
+          this._applyActiveSlot();
+        } else {
+          this._updateSlotUI();
+        }
+      });
+    });
+    this._updateSlotUI();
+  }
+
+  _updateSlotUI() {
+    const mm = this.mediaManager;
+    document.querySelectorAll('#slot-list .slot-row').forEach((row) => {
+      const idx = Number(row.dataset.slot);
+      const slot = mm.slots[idx];
+      row.classList.toggle('active', idx === mm.activeIndex);
+      row.querySelector('.slot-name').textContent = slot ? slot.name : '未設定';
+      row.querySelector('.slot-kind').textContent = slot ? (slot.isVideo ? '動画' : '音声') : '';
+      row.querySelector('.slot-select').disabled = !slot || idx === mm.activeIndex;
+      row.querySelector('.slot-clear').disabled = !slot;
+    });
   }
 
   // ビジュアライザー表示領域への音声/動画ファイルのドロップで読み込む
@@ -193,6 +274,20 @@ class UIController {
       this.mediaManager.stop();
       this.visualizer.stop();
     });
+
+    // ── 次へ / 前へ（Phase 12: スロット循環） ──
+    const advanceSlot = (dir) => {
+      if (this.recorder.state === 'recording') return;
+      const wasPlaying = this.mediaManager.isPlaying;
+      const idx = this.mediaManager.advance(dir);
+      if (idx < 0) return;
+      this._applyActiveSlot();
+      const el = this.mediaManager.mediaElement;
+      if (el) el.currentTime = 0;
+      if (wasPlaying && !this.micInput.active) this.mediaManager.play();
+    };
+    document.getElementById('btn-prev').addEventListener('click', () => advanceSlot(-1));
+    document.getElementById('btn-next').addEventListener('click', () => advanceSlot(1));
 
     // ── シークバー・音量 ──
     this._volume = 1;          // セッション内で保持し、ファイル切替時にも適用する
@@ -1033,16 +1128,30 @@ class UIController {
     document.getElementById('btn-play').disabled  = !enabled;
     document.getElementById('btn-pause').disabled = !enabled;
     document.getElementById('btn-stop').disabled  = !enabled;
+    document.getElementById('btn-prev').disabled  = !enabled;
+    document.getElementById('btn-next').disabled  = !enabled;
     document.getElementById('seek-bar').disabled  = !enabled;
     if (!enabled) this._updateSeekDisplay();
   }
 
   _onEnded() {
-    // 録画中なら録画も停止
-    if (this.mode === 'rec' && this.recorder.state === 'recording') {
-      this.recorder.stop();
+    // 録画モードでは自動循環せず、現行どおり停止する（録画中なら録画も停止）
+    if (this.mode === 'rec') {
+      if (this.recorder.state === 'recording') this.recorder.stop();
+      this.mediaManager.stop();
+      this.visualizer.stop();
+      return;
     }
-    this.mediaManager.stop();
-    this.visualizer.stop();
+    // 再生モード: 次の設定済みスロットへ自動循環（§8.2/8.3。1スロットのみならループ再生）
+    const idx = this.mediaManager.advance(1);
+    if (idx < 0) {
+      this.mediaManager.stop();
+      this.visualizer.stop();
+      return;
+    }
+    this._applyActiveSlot();
+    const el = this.mediaManager.mediaElement;
+    if (el) el.currentTime = 0;
+    this.mediaManager.play();
   }
 }
