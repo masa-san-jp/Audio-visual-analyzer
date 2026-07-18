@@ -61,13 +61,9 @@ class AudioEngine {
   }
 
   // アナライザーが表現する帯域: 50Hz〜15kHz
+  // オフライン書き出し（offline-exporter.js）と同一ロジックを共有する（vis-utils.js）
   _freqRange() {
-    const sampleRate = this.ctx.sampleRate;
-    const binCount = this.dataArray.length; // fftSize / 2
-    const hzPerBin = sampleRate / (binCount * 2);
-    const startBin = Math.round(50 / hzPerBin);
-    const endBin   = Math.min(binCount - 1, Math.round(15000 / hzPerBin));
-    return { startBin, endBin };
+    return computeFreqRange(this.ctx.sampleRate, this.dataArray.length);
   }
 
   // レイヤーに対応する帯域データを返す

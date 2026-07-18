@@ -60,6 +60,35 @@
         </div>
       </section>
 
+      <section class="control-group" id="offline-export-controls">
+        <h2>オフライン書き出し</h2>
+        <div id="offline-export-status" class="rec-status">音楽ファイルを選択してください</div>
+        <button id="btn-offline-file">音楽ファイルを選択</button>
+        <input type="file" id="offline-file-input" accept="audio/*,video/*" hidden>
+        <div id="offline-file-name" class="label-text" style="margin-top:4px;">未選択</div>
+        <label style="margin-top:8px;">
+          FPS
+          <select id="offline-fps">
+            <option value="25">25fps</option>
+            <option value="29.97">29.97fps</option>
+            <option value="30" selected>30fps</option>
+          </select>
+        </label>
+        <div id="offline-progress-wrap" style="display:none; margin-top:6px;">
+          <progress id="offline-progress" value="0" max="100" style="width:100%;"></progress>
+        </div>
+        <div class="btn-row" style="margin-top:6px;">
+          <button id="btn-offline-start" disabled>書き出し開始</button>
+          <button id="btn-offline-cancel" disabled>キャンセル</button>
+        </div>
+        <div class="btn-row" style="margin-top:5px;">
+          <button id="btn-offline-save" disabled>保存</button>
+        </div>
+        <div class="label-text" style="margin-top:6px;">
+          現在の設定（アナライザー・色・形状など）に合わせて、再生を伴わず解析結果から直接書き出します。
+        </div>
+      </section>
+
       <section class="control-group">
         <h2>表示比率</h2>
         <div class="btn-row">
@@ -206,11 +235,11 @@
   </div>
 
   <script src="js/settings.js"></script>
-  <script src="js/audio-engine.js"></script>
-  <script src="js/media-manager.js"></script>
-  <!-- Phase 6 共通ユーティリティ（レンダラーより先に読み込む） -->
+  <!-- Phase 6 共通ユーティリティ（audio-engine.js が computeFreqRange を使うため先に読み込む） -->
   <script src="js/vis-utils.js"></script>
   <script src="js/history-buffer.js"></script>
+  <script src="js/audio-engine.js"></script>
+  <script src="js/media-manager.js"></script>
   <!-- レンダラー（既存 + Phase 6） -->
   <script src="js/renderers/bars.js"></script>
   <script src="js/renderers/lines.js"></script>
@@ -232,6 +261,9 @@
   <script src="js/visualizer-core.js"></script>
   <script src="js/webm-duration.js"></script>
   <script src="js/recorder.js"></script>
+  <!-- オフライン書き出し（音楽ファイルを解析し実時間に依存せず書き出す） -->
+  <script src="js/webm-muxer.js"></script>
+  <script src="js/offline-exporter.js"></script>
   <script src="js/ui-controller.js"></script>
   <script src="js/app.js"></script>
 </body>
