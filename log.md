@@ -2,6 +2,42 @@
 
 ---
 
+## 2026-07-18 — Phase 14.2 MP4 デマルチプレクサ対応
+
+### 作業内容
+Phase 14.1（WebM）に続き、`doc/plan-phase14.md` §4 の設計に基づいて MP4（ISOBMFF）のデマルチプレクサを実装し、MP4 入力でもデコーダー方式の動画合成が使えるようにした。これで `doc/spec.md` §23 の実装可能な残候補はすべて完了。
+
+#### 新規ファイル
+- `js/mp4-demuxer.js`: 自前 ISOBMFF デマルチプレクサ（`js/mp4-muxer.js` の読み取り側対応物）
+  - progressive MP4: `stbl` のサンプルテーブル（`stts`/`ctts`/`stss`/`stsc`/`stsz`/`stco`/`co64`）からサンプル列を構築
+  - fragmented MP4: `mvex>trex` の既定値 + `moof>traf`（`tfhd`/`tfdt`/`trun`、base-data-offset / default-base-is-moof / first-sample-flags 対応）を走査
+  - サンプルエントリ `avc1`/`avc3` の `avcC` を抽出して `VideoDecoder` の `description` に使用。コーデック文字列（`avc1.PPCCLL`）は `avcC` の profile/compat/level から導出
+  - pts（dts + `ctts` オフセット、version 0/1 両対応）は tick 領域で最小値0へ正規化してから μs 変換（丸め誤差の回避。実装時に丸め後正規化のずれをテストで検出して修正）
+  - 非対応入力は例外を投げ、呼び出し側がフォールバックする
+- `js/offline-exporter.js`: `_createDecoderCompositeSource()` が WebmDemuxer → Mp4Demuxer の順に解析を試み、`description` があれば `VideoDecoder` 設定へ渡すよう拡張
+- `index.html`: `js/mp4-demuxer.js` の `<script>` タグを追加
+
+### 検証
+- 全JS `node --check` パス
+- Node 単体（新規 `test-mp4-demuxer.mjs`、15アサーション全パス）:
+  - fragmented: `mp4-muxer.js` の出力（映像65チャンク+音声混在）を読み戻し、チャンクバイト列・キーフレーム・pts（±1μs）・`avcC` の完全往復一致、音声トラックの無視を検証
+  - progressive: 手組みの moov+mdat（`ctts` によるBフレーム風の提示順オフセット・`stss` キーフレーム・`stsc` のチャンク切替・2チャンク配置）でサンプル抽出と pts 正規化を厳密検証
+  - 不正データ / WebM ヘッダーでの例外
+- Chromium実ブラウザE2E（新規 `phase14-2-e2e.mjs`）: ①ブラウザ内で `Mp4Demuxer` が自前ミュクサ出力を正しく解析（コーデック・チャンク数・キーフレーム数・description）、②この環境の Chromium は H.264 デコード非対応（`isConfigSupported` false）であり、その場合デコーダーソースが null になりシーク方式へ正しく譲ること、③ダミーMP4の書き出しがハングせずエラー状態で終了すること、を確認。コンソールエラー0
+- 既存回帰: Phase 14.1 E2E（WebM は引き続きデコーダー方式が選択される・優先順維持）・Phase 10.2 動画合成・オフライン書き出し（通常/4バリアント）・全14タイプ切替・mp4-muxer/webm-demuxer 構造テスト、すべてパス
+
+### spec.md 変更
+- version `v2.4` → `v2.5`
+- §14.8.2 のデコーダー方式に MP4（AVC）対応を追記
+- §20 に「Phase 14.2: MP4 デマルチプレクサ対応（実装済み）」を追加
+- §23 を更新（残候補はモバイル録画品質のみ）
+- 理由: 対応コンテナの拡大を仕様に反映するため
+
+### 備考
+- H.264 の実デコードを伴う E2E は開発環境の Chromium（H.264 デコーダー非搭載）では実行できないため、構造レベルの完全検証（往復一致・手組みフィクスチャ）+ フォールバック動作の実機確認で品質を担保した。実 H.264 環境ではデコード失敗時もフレーム単位でシーク方式へ自動フォールバックする安全網がある
+
+---
+
 ## 2026-07-18 — Phase 14.1 オフライン書き出しの動画デコード高速化
 
 ### 作業内容

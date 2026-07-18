@@ -602,18 +602,22 @@ class OfflineExporter {
   // ── 動画合成（Phase 10.2 / 14.1）──
   // フレームソースは { type, frameAt(tSec) -> drawable|null, dispose() } のインターフェースで抽象化する
 
-  // デコーダー方式（Phase 14.1）: WebM を自前デマルチプレクサで解析し、
+  // デコーダー方式（Phase 14.1/14.2）: WebM または MP4 を自前デマルチプレクサで解析し、
   // WebCodecs VideoDecoder で順次デコードする。シーク待ちが無いため高速。
-  // 非WebM・非対応コーデック・VideoDecoder 非対応環境では null を返す
+  // 未対応コンテナ・非対応コーデック・VideoDecoder 非対応環境では null を返す
   async _createDecoderCompositeSource(file) {
-    if (typeof VideoDecoder === 'undefined' || typeof WebmDemuxer === 'undefined') return null;
-    let parsed;
-    try {
-      parsed = WebmDemuxer.parse(new Uint8Array(await file.arrayBuffer()));
-    } catch (_) {
-      return null;
+    if (typeof VideoDecoder === 'undefined') return null;
+    const bytes = new Uint8Array(await file.arrayBuffer());
+    let parsed = null;
+    if (typeof WebmDemuxer !== 'undefined') {
+      try { parsed = WebmDemuxer.parse(bytes); } catch (_) { parsed = null; }
     }
+    if (!parsed && typeof Mp4Demuxer !== 'undefined') {
+      try { parsed = Mp4Demuxer.parse(bytes); } catch (_) { parsed = null; }
+    }
+    if (!parsed) return null;
     const config = { codec: parsed.codec };
+    if (parsed.description) config.description = parsed.description;
     if (parsed.codedWidth > 0) config.codedWidth = parsed.codedWidth;
     if (parsed.codedHeight > 0) config.codedHeight = parsed.codedHeight;
     const support = await VideoDecoder.isConfigSupported(config).catch(() => ({ supported: false }));
