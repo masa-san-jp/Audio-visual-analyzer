@@ -53,6 +53,9 @@ class SpectrogramRenderer {
     if (shiftPx < 1) shiftPx = 1;
     if (shiftPx > 4) shiftPx = 4;
     this._shiftAcc -= shiftPx;
+    // 強制的に1px送った分が wantShift の実績を上回っても負債を残さない
+    // （残さないと wantShift が後で増えたときに解消まで1pxへ張り付き続ける）
+    if (this._shiftAcc < 0) this._shiftAcc = 0;
 
     // オフスクリーンを丸ごと左へずらす（自己 drawImage）
     octx.drawImage(this.off, -shiftPx, 0);

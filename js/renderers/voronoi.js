@@ -132,8 +132,9 @@ class VoronoiRenderer {
     const n = base.length;
     const len = freq.length;
     const wander = Math.min(w, h) * 0.06; // 徘徊量
+    // n が変化したときのみ配列長を調整（要素オブジェクト自体は使い回す）
     const sites = this._sitesPx;
-    sites.length = 0;
+    if (sites.length !== n) sites.length = n;
     for (let i = 0; i < n; i++) {
       const s = base[i];
       // 担当帯域の平均振幅（サイト移動量にも寄与させ、音で暴れる）
@@ -149,11 +150,11 @@ class VoronoiRenderer {
       const dy = (this.noise.noise2(s.seed + 50, this._t) - 0.5);
       // 音が大きいほど大きく動く（追従）
       const mv = wander * (0.5 + amp * 1.8);
-      sites.push({
-        x: clamp(s.nx * w + dx * mv, 0, w),
-        y: clamp(s.ny * h + dy * mv, 0, h),
-        amp: amp,
-      });
+      let obj = sites[i];
+      if (!obj) { obj = { x: 0, y: 0, amp: 0 }; sites[i] = obj; }
+      obj.x = clamp(s.nx * w + dx * mv, 0, w);
+      obj.y = clamp(s.ny * h + dy * mv, 0, h);
+      obj.amp = amp;
     }
 
     // ── ボロノイ再計算（毎フレーム。n ≤ 64 で O(n^2)） ──
