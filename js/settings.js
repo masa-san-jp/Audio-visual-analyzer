@@ -29,6 +29,10 @@ const DEFAULT_SETTINGS = {
   physicsAmount: 0,              // 0~10  粘性揺らぎ（バネ物理）
   depthAngle: 50,                // 0~100 3D地形の奥行き角度
   petalCount: 6,                 // 2~16  極座標フラワーの花弁数
+  // Phase 10: 動画合成表示（動画ファイル読込時のみ有効）
+  videoCompositeEnabled: false,
+  videoCompositeOpacity: 100,        // 0~100
+  videoCompositeBlendMode: 'source-over',
   // 背景色
   bgColor: '#000',             // '#000' | '#fff'
   // レイヤー

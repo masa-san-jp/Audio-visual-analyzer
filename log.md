@@ -2,6 +2,39 @@
 
 ---
 
+## 2026-07-18 — Phase 10.1 ライブ動画合成表示を追加
+
+### 作業内容
+`doc/plan-phase8.md` §4 Phase 10.1 に定めた「動画ファイルの映像フレームをビジュアライザーの背景として合成表示する」機能を実装した。
+
+#### 変更ファイル
+- `js/settings.js`: `videoCompositeEnabled`(既定false) / `videoCompositeOpacity`(0〜100) / `videoCompositeBlendMode` を追加
+- `js/visualizer-core.js`: `videoElement` プロパティを追加。`_drawVideoComposite()` を新設し、`_loop()` の背景クリア直後（selfClearタイプは対象外）に、cover フィット（アスペクト比差は中央基準トリミング）で動画フレームを描画。不透明度・合成モードは `ctx.globalAlpha`/`ctx.globalCompositeOperation` で適用し、描画後に必ず復元する
+- `js/ui-controller.js`:
+  - `_initFile()`: `loadFile()` の戻り値から `isVideo` を判定し `_setVideoElement()` で反映。読込失敗時・マイク入力開始時はクリア
+  - `_setVideoElement(element)`: 動画合成セクションの表示/非表示、要素なし時のトグル自動オフを行う
+  - `_initVideoComposite()`: トグル・不透明度・合成モードの各コントロールを配線
+  - `_syncControlsFromSettings()`: プリセット/JSON読込時に動画合成の各コントロールも同期するよう拡張
+- `index.html`: 「動画合成」セクション（既定非表示、動画ファイル読込時のみ表示）を追加
+
+### 検証
+- 全JS `node --check` パス
+- 既存回帰: foundation単体テスト23件・煙テスト168ケース・webm-muxer構造テスト22件・settings-io16件、いずれも既存と同結果
+- Chromium実ブラウザE2E: `MediaRecorder` で合成した短い動画ファイルを実際にファイル入力へ投入し、①動画読込時にセクションが表示される、②トグルで `settings.videoCompositeEnabled` が反映される、③再生中にキャンバスへ動画由来のピクセルが描画される、④マイク入力へ切替時にセクションが非表示・設定が自動オフになる、をすべて確認。コンソールエラー0
+- 既存の全14タイプ切替＋ランダマイズ回帰、Phase 8機能のE2E、オフライン書き出しE2Eも再実行しすべて0エラー（`_loop()` 変更による cross-feature 影響がないことを確認）
+
+### spec.md 変更
+- version `v1.6` → `v1.7`
+- §13.3 を更新（動画映像の合成表示が可能になった旨）
+- §14.9「動画合成表示（Phase 10.1）」を新設
+- §20 に「Phase 10.1: ライブ動画合成表示（実装済み）」を追加
+- 理由: 新機能を仕様体系に正式に組み込むため
+
+### 備考
+- オフライン書き出しでの動画合成（Phase 10.2）・MP4オフライン対応とAudioWorklet移行（Phase 9）は `doc/plan-phase8.md` に設計を記載済みで、次フェーズとして継続する
+
+---
+
 ## 2026-07-18 — Phase 8 ユーザー向け機能拡張・計画書（Phase 8〜10）を追加
 
 ### 作業内容
