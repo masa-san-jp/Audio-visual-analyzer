@@ -27,6 +27,17 @@ class AudioEngine {
     this.source.connect(this.analyser);
   }
 
+  // マイク入力等の MediaStream を解析グラフへ接続する（Phase 8: マイク入力対応）
+  connectStream(stream) {
+    this._ensureContext();
+    if (this.source) {
+      this.source.disconnect();
+      this.source = null;
+    }
+    this.source = this.ctx.createMediaStreamSource(stream);
+    this.source.connect(this.analyser);
+  }
+
   resume() {
     if (this.ctx && this.ctx.state === 'suspended') {
       return this.ctx.resume();

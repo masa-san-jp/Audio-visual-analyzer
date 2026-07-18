@@ -34,10 +34,10 @@ const DEFAULT_SETTINGS = {
   // レイヤー
   layerCount: 1,
   layers: [
-    { hueOffset: 0,   sensitivity: 1.0 },
-    { hueOffset: 90,  sensitivity: 1.0 },
-    { hueOffset: 180, sensitivity: 1.0 },
-    { hueOffset: 270, sensitivity: 1.0 },
+    { hueOffset: 0,   sensitivity: 1.0, blendMode: 'source-over' },
+    { hueOffset: 90,  sensitivity: 1.0, blendMode: 'source-over' },
+    { hueOffset: 180, sensitivity: 1.0, blendMode: 'source-over' },
+    { hueOffset: 270, sensitivity: 1.0, blendMode: 'source-over' },
   ],
 };
 

@@ -1,10 +1,12 @@
 class UIController {
-  constructor(visualizer, mediaManager, audioEngine, recorder) {
+  constructor(visualizer, mediaManager, audioEngine, recorder, micInput) {
     this.visualizer = visualizer;
     this.mediaManager = mediaManager;
     this.audioEngine = audioEngine;
     this.recorder = recorder;
+    this.micInput = micInput || new MicInputManager(audioEngine);
     this.mode = 'play'; // 'play' | 'rec'
+    this._lastFileName = '未選択';
   }
 
   init() {
@@ -13,10 +15,13 @@ class UIController {
     this._initPlayback();
     this._initRecording();
     this._initOfflineExport();
+    this._initPresets();
     this._initAspectRatio();
+    this._initFullscreen();
     this._initAnalyzer();
     this._initColorControls();
     this._initShapeControls();
+    this._initKeyboardShortcuts();
     window.addEventListener('resize', () => this.visualizer.resize());
   }
 
@@ -55,6 +60,7 @@ class UIController {
     const btnFile = document.getElementById('btn-file');
     const fileInput = document.getElementById('file-input');
     const fileNameEl = document.getElementById('file-name');
+    const btnMic = document.getElementById('btn-mic');
 
     // onEnded を一度だけ設定する（loadFile より先に設定することで
     // canplay 時点で ended リスナーが確実に登録されるようにする）
@@ -65,19 +71,54 @@ class UIController {
     fileInput.addEventListener('change', async (e) => {
       const file = e.target.files[0];
       if (!file) return;
+      // マイク入力中にファイルを選んだ場合はマイクを停止して切り替える
+      if (this.micInput.active) this._stopMic(btnMic, fileNameEl);
       fileNameEl.textContent = '読み込み中…';
       try {
         await this.mediaManager.loadFile(file);
         fileNameEl.textContent = file.name;
+        this._lastFileName = file.name;
         this._setPlaybackEnabled(true);
         this._updateRecButtons();
       } catch (err) {
         fileNameEl.textContent = 'エラー: ' + err.message;
+        this._lastFileName = 'エラー: ' + err.message;
         this._setPlaybackEnabled(false);
         this._updateRecButtons();
       }
       fileInput.value = '';
     });
+
+    // マイク入力トグル
+    btnMic.addEventListener('click', async () => {
+      if (this.micInput.active) {
+        this._stopMic(btnMic, fileNameEl);
+        return;
+      }
+      btnMic.disabled = true;
+      try {
+        await this.micInput.start();
+        btnMic.classList.add('active');
+        btnMic.textContent = 'マイク入力停止';
+        fileNameEl.textContent = 'マイク入力中';
+        this._setPlaybackEnabled(false);
+        this.visualizer.start();
+      } catch (err) {
+        fileNameEl.textContent = 'エラー: ' + err.message;
+      } finally {
+        btnMic.disabled = false;
+        this._updateRecButtons();
+      }
+    });
+  }
+
+  _stopMic(btnMic, fileNameEl) {
+    this.micInput.stop();
+    btnMic.classList.remove('active');
+    btnMic.textContent = 'マイク入力';
+    fileNameEl.textContent = this._lastFileName;
+    this._setPlaybackEnabled(this.mediaManager.isLoaded);
+    this._updateRecButtons();
   }
 
   // ── 再生制御 ──
@@ -113,9 +154,11 @@ class UIController {
     });
 
     // 録画開始: 録画キャプチャの開始を待ってから再生を始める（A/V同期のため）
+    // マイク入力中は「再生」の概念がないため、そのまま録画キャプチャのみ開始する。
     btnStart.addEventListener('click', async () => {
       if (this.recorder.state !== 'idle') return;
-      this.mediaManager.stop();
+      const usingMic = this.micInput.active;
+      if (!usingMic) this.mediaManager.stop();
       this.visualizer.start();
       let started = false;
       try {
@@ -124,7 +167,7 @@ class UIController {
         started = false;
       }
       if (started) {
-        this.mediaManager.play();
+        if (!usingMic) this.mediaManager.play();
       } else if (this.recorder.state === 'idle') {
         // 開始できなかった場合は描画ループを止めて待機状態に戻す
         this.visualizer.stop();
@@ -163,7 +206,7 @@ class UIController {
   _updateRecButtons() {
     if (!this.recorder) return;
     const state = this.recorder.state;
-    const loaded = this.mediaManager.isLoaded;
+    const loaded = this.mediaManager.isLoaded || this.micInput.active;
     const btnStart = document.getElementById('btn-rec-start');
     const btnStop  = document.getElementById('btn-rec-stop');
     const btnSave  = document.getElementById('btn-rec-save');
@@ -290,6 +333,200 @@ class UIController {
       statusEl.textContent = 'エラー: ' + message;
       progressWrap.style.display = 'none';
     };
+  }
+
+  // ── プリセット / JSON設定入出力 ──
+
+  _initPresets() {
+    const select = document.getElementById('preset-select');
+    const nameInput = document.getElementById('preset-name');
+    const btnSave = document.getElementById('btn-preset-save');
+    const btnLoad = document.getElementById('btn-preset-load');
+    const btnDelete = document.getElementById('btn-preset-delete');
+    const btnExport = document.getElementById('btn-settings-export');
+    const btnImport = document.getElementById('btn-settings-import');
+    const importInput = document.getElementById('settings-import-input');
+    const statusEl = document.getElementById('preset-status');
+
+    const refreshList = () => {
+      const names = listPresets();
+      select.innerHTML = '';
+      if (names.length === 0) {
+        const opt = document.createElement('option');
+        opt.value = '';
+        opt.textContent = '(保存済みプリセットなし)';
+        select.appendChild(opt);
+      } else {
+        names.forEach((name) => {
+          const opt = document.createElement('option');
+          opt.value = name;
+          opt.textContent = name;
+          select.appendChild(opt);
+        });
+      }
+    };
+    refreshList();
+
+    // 設定を UI・アナライザー双方へ反映する
+    const applySettings = (settings) => {
+      this.visualizer.settings = settings;
+      // UI 側の各コントロールを設定値に同期する
+      this._syncControlsFromSettings();
+    };
+
+    btnSave.addEventListener('click', () => {
+      const name = nameInput.value.trim();
+      if (!name) { statusEl.textContent = 'プリセット名を入力してください'; return; }
+      const ok = savePreset(name, this.visualizer.settings);
+      statusEl.textContent = ok ? `「${name}」を保存しました` : '保存に失敗しました';
+      if (ok) refreshList();
+    });
+
+    btnLoad.addEventListener('click', () => {
+      const name = select.value;
+      if (!name) return;
+      const settings = loadPreset(name);
+      if (!settings) { statusEl.textContent = '読込に失敗しました'; return; }
+      applySettings(settings);
+      statusEl.textContent = `「${name}」を読み込みました`;
+    });
+
+    btnDelete.addEventListener('click', () => {
+      const name = select.value;
+      if (!name) return;
+      deletePreset(name);
+      refreshList();
+      statusEl.textContent = `「${name}」を削除しました`;
+    });
+
+    btnExport.addEventListener('click', () => {
+      downloadSettingsJson(this.visualizer.settings);
+    });
+
+    btnImport.addEventListener('click', () => importInput.click());
+    importInput.addEventListener('change', async (e) => {
+      const file = e.target.files[0];
+      importInput.value = '';
+      if (!file) return;
+      try {
+        const settings = await readSettingsJsonFile(file);
+        applySettings(settings);
+        statusEl.textContent = 'JSONから設定を読み込みました';
+      } catch (err) {
+        statusEl.textContent = 'JSONの読み込みに失敗しました: ' + err.message;
+      }
+    });
+  }
+
+  // プリセット/JSON読込後、UIコントロールを settings の値へ同期する
+  _syncControlsFromSettings() {
+    const s = this.visualizer.settings;
+    this._setSlider('hue', 'val-hue', s.hue, 0);
+    this._setSlider('hue-range', 'val-hue-range', s.hueRange, 0);
+    this._setSlider('brightness', 'val-brightness', s.brightness, 0);
+    this._setSlider('saturation', 'val-saturation', s.saturation, 0);
+    this._setSlider('sensitivity', 'val-sensitivity', s.sensitivity, 1);
+    this._setSlider('smoothing', 'val-smoothing', s.smoothing, 2);
+    this._setSlider('bar-width', 'val-bar-width', s.barWidth, 0);
+    this._setSlider('density', 'val-density', s.density, 0);
+    this._setSlider('base-offset', 'val-base-offset', s.baseOffset, 0);
+    this._setSlider('afterimage', 'val-afterimage', s.afterimageIntensity, 0);
+    this._setSlider('history', 'val-history', s.historySeconds, 0);
+    this._setSlider('motion', 'val-motion', s.motionSpeed, 1);
+    this._setSlider('particles', 'val-particles', s.particleAmount, 0);
+    this._setSlider('angle', 'val-angle', s.depthAngle, 0);
+    this._setSlider('petals', 'val-petals', s.petalCount, 0);
+    this._setSlider('physics', 'val-physics', s.physicsAmount, 0);
+    this.audioEngine.setSmoothing(s.smoothing);
+
+    document.getElementById('analyzer-type').value = s.analyzerType;
+    document.getElementById('expression-method').value = s.expressionMethod;
+    document.getElementById('bar-display-mode').value = s.barDisplayMode;
+    this._applyCapabilities(s.analyzerType);
+
+    document.querySelectorAll('.layer-btn').forEach((b) => b.classList.remove('active'));
+    const activeLayerBtn = document.getElementById(`btn-layer-${s.layerCount}`);
+    if (activeLayerBtn) activeLayerBtn.classList.add('active');
+    this._renderLayerSettings(s.layerCount);
+
+    const chk = document.getElementById('chk-hue-continuous');
+    chk.checked = s.hueContinuousMode;
+    document.getElementById('hue-speed-group').style.display = s.hueContinuousMode ? '' : 'none';
+    this._setSlider('hue-speed', 'val-hue-speed', s.hueContinuousSpeed, 1);
+
+    const btn169 = document.getElementById('btn-16-9');
+    const btn11 = document.getElementById('btn-1-1');
+    btn169.classList.toggle('active', s.aspectRatio === '16:9');
+    btn11.classList.toggle('active', s.aspectRatio === '1:1');
+    const btnBlack = document.getElementById('btn-bg-black');
+    const btnWhite = document.getElementById('btn-bg-white');
+    btnBlack.classList.toggle('active', s.bgColor !== '#fff');
+    btnWhite.classList.toggle('active', s.bgColor === '#fff');
+
+    this.visualizer.resize();
+  }
+
+  // ── フルスクリーン ──
+
+  _initFullscreen() {
+    const btn = document.getElementById('btn-fullscreen');
+    const area = document.getElementById('visualizer-area');
+    if (!btn || !area) return;
+
+    btn.addEventListener('click', () => {
+      if (document.fullscreenElement) {
+        document.exitFullscreen();
+      } else if (area.requestFullscreen) {
+        area.requestFullscreen().catch(() => {});
+      }
+    });
+
+    document.addEventListener('fullscreenchange', () => {
+      btn.classList.toggle('active', !!document.fullscreenElement);
+      this.visualizer.resize();
+    });
+  }
+
+  // ── キーボードショートカット ──
+
+  _initKeyboardShortcuts() {
+    document.addEventListener('keydown', (e) => {
+      const tag = (e.target && e.target.tagName || '').toLowerCase();
+      if (tag === 'input' || tag === 'select' || tag === 'textarea') return;
+
+      switch (e.code) {
+        case 'Space': {
+          e.preventDefault();
+          if (this.mediaManager.isPlaying) {
+            this.mediaManager.pause();
+          } else if (this.mediaManager.isLoaded) {
+            this.mediaManager.play();
+            this.visualizer.start();
+          }
+          break;
+        }
+        case 'KeyR':
+          document.getElementById('btn-analyzer-randomize').click();
+          break;
+        case 'KeyH':
+          document.getElementById('btn-hue-randomize').click();
+          break;
+        case 'KeyS':
+          document.getElementById('btn-shape-randomize').click();
+          break;
+        case 'KeyF':
+          document.getElementById('btn-fullscreen').click();
+          break;
+        case 'KeyB': {
+          if (this.mode !== 'rec') break;
+          const btnStart = document.getElementById('btn-rec-start');
+          const btnStop = document.getElementById('btn-rec-stop');
+          if (!btnStart.disabled) btnStart.click();
+          else if (!btnStop.disabled) btnStop.click();
+          break;
+        }
+      }
+    });
   }
 
   // ── 表示比率 ──
@@ -501,6 +738,15 @@ class UIController {
           感度&ensp;<span id="val-layer-sens-${i}">${layer.sensitivity.toFixed(1)}</span>
           <input type="range" id="layer-sens-${i}" min="0.1" max="3.0" step="0.1" value="${layer.sensitivity}">
         </label>
+        <label>
+          合成モード
+          <select id="layer-blend-${i}">
+            <option value="source-over">通常</option>
+            <option value="lighter">加算</option>
+            <option value="multiply">乗算</option>
+            <option value="screen">スクリーン</option>
+          </select>
+        </label>
       `;
       container.appendChild(section);
 
@@ -514,6 +760,12 @@ class UIController {
         const v = parseFloat(e.target.value);
         this.visualizer.settings.layers[i].sensitivity = v;
         document.getElementById(`val-layer-sens-${i}`).textContent = v.toFixed(1);
+      });
+
+      const blendSelect = document.getElementById(`layer-blend-${i}`);
+      blendSelect.value = layer.blendMode || 'source-over';
+      blendSelect.addEventListener('change', (e) => {
+        this.visualizer.settings.layers[i].blendMode = e.target.value;
       });
     }
   }

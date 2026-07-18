@@ -25,7 +25,10 @@
 
       <section class="control-group">
         <h2>ファイル</h2>
-        <button id="btn-file">ファイルを選択</button>
+        <div class="btn-row">
+          <button id="btn-file">ファイルを選択</button>
+          <button id="btn-mic">マイク入力</button>
+        </div>
         <input type="file" id="file-input" accept="audio/*,video/*" hidden>
         <div id="file-name">未選択</div>
       </section>
@@ -90,6 +93,31 @@
       </section>
 
       <section class="control-group">
+        <h2>プリセット</h2>
+        <div id="preset-status" class="label-text" style="margin-bottom:6px;">&nbsp;</div>
+        <label>
+          プリセット名
+          <input type="text" id="preset-name" placeholder="名前を入力">
+        </label>
+        <div class="btn-row" style="margin-top:4px;">
+          <button id="btn-preset-save">保存</button>
+        </div>
+        <label style="margin-top:8px;">
+          保存済み
+          <select id="preset-select"></select>
+        </label>
+        <div class="btn-row" style="margin-top:4px;">
+          <button id="btn-preset-load">読込</button>
+          <button id="btn-preset-delete">削除</button>
+        </div>
+        <div class="btn-row" style="margin-top:8px;">
+          <button id="btn-settings-export">JSON保存</button>
+          <button id="btn-settings-import">JSON読込</button>
+        </div>
+        <input type="file" id="settings-import-input" accept="application/json" hidden>
+      </section>
+
+      <section class="control-group">
         <h2>表示比率</h2>
         <div class="btn-row">
           <button id="btn-16-9" class="active">16:9</button>
@@ -101,6 +129,9 @@
             <button id="btn-bg-black" class="active">黒</button>
             <button id="btn-bg-white">白</button>
           </div>
+        </div>
+        <div class="btn-row" style="margin-top:8px;">
+          <button id="btn-fullscreen">フルスクリーン</button>
         </div>
       </section>
 
@@ -231,15 +262,29 @@
           <button id="btn-shape-randomize">形状ランダム</button>
         </div>
       </section>
+
+      <details class="control-group">
+        <summary>キーボードショートカット</summary>
+        <ul class="shortcut-list">
+          <li><kbd>Space</kbd> 再生 / 一時停止</li>
+          <li><kbd>R</kbd> アナライザーランダム</li>
+          <li><kbd>H</kbd> 色相ランダム</li>
+          <li><kbd>S</kbd> 形状ランダム</li>
+          <li><kbd>F</kbd> フルスクリーン切替</li>
+          <li><kbd>B</kbd> 録画開始 / 停止（録画モード時）</li>
+        </ul>
+      </details>
     </div>
   </div>
 
   <script src="js/settings.js"></script>
+  <script src="js/settings-io.js"></script>
   <!-- Phase 6 共通ユーティリティ（audio-engine.js が computeFreqRange を使うため先に読み込む） -->
   <script src="js/vis-utils.js"></script>
   <script src="js/history-buffer.js"></script>
   <script src="js/audio-engine.js"></script>
   <script src="js/media-manager.js"></script>
+  <script src="js/mic-input.js"></script>
   <!-- レンダラー（既存 + Phase 6） -->
   <script src="js/renderers/bars.js"></script>
   <script src="js/renderers/lines.js"></script>

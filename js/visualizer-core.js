@@ -186,13 +186,16 @@ class VisualizerCore {
 
       if (usePhysics) layerData = this._applyPhysics(layerData, this._frame.dtMs);
 
-      const layer = layers[i] || { hueOffset: 0, sensitivity: 1.0 };
+      const layer = layers[i] || { hueOffset: 0, sensitivity: 1.0, blendMode: 'source-over' };
       const layerSettings = {
         ...this.settings,
         hue: (effectiveHue + layer.hueOffset + 360) % 360,
         sensitivity: this.settings.sensitivity * layer.sensitivity,
       };
+      const prevOp = this.ctx.globalCompositeOperation;
+      this.ctx.globalCompositeOperation = layer.blendMode || 'source-over';
       renderer(this.ctx, this.canvas, layerData, layerSettings);
+      this.ctx.globalCompositeOperation = prevOp;
     }
   }
 

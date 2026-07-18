@@ -2,8 +2,8 @@
 
 - Repository: `masa-san-jp/Audio-visual-analyzer`
 - Default branch: `main`
-- Document version: `v1.5`
-- Date: `2026-07-12`
+- Document version: `v1.6`
+- Date: `2026-07-18`
 - Purpose: 開発担当者への引き継ぎ用仕様書
 
 ---
@@ -692,6 +692,15 @@ Phase 6.1（表現調整）: 実機レビューを受けて各タイプを改善
 - WebCodecs（`VideoEncoder`/`AudioEncoder`）によるエンコードと、自前実装の WebM マクサー（`js/webm-muxer.js`）によるコンテナ化
 - Cues（シーク索引）を含む WebM を生成し、通常録画（14.4）より編集ソフト互換性が高い
 - 通常録画とは独立した専用UI・専用ファイル選択を持つ
+
+### Phase 8: ユーザー向け機能拡張（実装済み）
+`doc/plan-phase8.md` §2 に定める5項目を実装した。Phase 9（書き出し品質強化）・Phase 10（動画合成表示）は同計画書に設計を記載し、順次実装する。
+
+- **設定シリアライズ基盤**（`js/settings-io.js`）: プリセット保存/読込（`localStorage`）、JSON設定入出力（エクスポート/インポート）。プリセットとJSON入出力は同一のシリアライズ形式（`{version, settings}`）を共有し、不正な値は既定値へ安全にフォールバックする
+- **マイク入力対応**（`js/mic-input.js`）: `getUserMedia` によるライブ入力。`AudioEngine.connectStream()` で解析グラフへ接続する。マイク入力中はファイル再生系ボタンを無効化し、録画は継続して利用できる
+- **フルスクリーン表示**: ビジュアライザー表示領域単位でのフルスクリーン切替。既存の `resize()` がリサイズイベントに追従するため実装は薄い
+- **キーボードショートカット**: `Space`(再生/一時停止) / `R`(アナライザーランダム) / `H`(色相ランダム) / `S`(形状ランダム) / `F`(フルスクリーン) / `B`(録画モード時の録画開始/停止)。テキスト入力中は無効化される
+- **レイヤーごとのブレンドモード**: 各レイヤーに `blendMode`（通常/加算/乗算/スクリーン）を追加。棒グラフ/円形放射のレイヤー合成時に `ctx.globalCompositeOperation` として適用する
 
 ---
 

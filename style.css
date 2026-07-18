@@ -255,3 +255,44 @@ progress::-webkit-progress-value {
   background: #4070b0;
   border-radius: 4px;
 }
+
+/* ── Keyboard shortcuts legend ── */
+
+details.control-group {
+  padding-bottom: 0;
+}
+
+details.control-group summary {
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: #555;
+  cursor: pointer;
+  margin-bottom: 8px;
+}
+
+details.control-group[open] summary {
+  margin-bottom: 8px;
+}
+
+.shortcut-list {
+  list-style: none;
+  font-size: 11px;
+  color: #999;
+  line-height: 1.8;
+}
+
+.shortcut-list kbd {
+  display: inline-block;
+  min-width: 18px;
+  text-align: center;
+  padding: 1px 5px;
+  margin-right: 6px;
+  background: #272727;
+  border: 1px solid #3a3a3a;
+  border-radius: 3px;
+  font-family: inherit;
+  font-size: 10px;
+  color: #bbb;
+}
