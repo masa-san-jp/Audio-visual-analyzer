@@ -2,6 +2,37 @@
 
 ---
 
+## 2026-07-18 — Phase 9.2 AudioWorkletベース解析への移行
+
+### 作業内容
+`doc/plan-phase8.md` §9.2 に定めた「AudioWorklet ベース解析への移行」を実装した。オフライン書き出しの解析経路から非推奨APIの `ScriptProcessorNode` への依存を外し（フォールバックとしては維持）、AudioWorklet + 自前FFTを主経路とした。これをもって計画書（Phase 8〜10）の全項目が完了。
+
+#### 新規ファイル
+- `js/fft.js`: `SpectrumAnalyzer` クラス。Web Audio API 仕様の `AnalyserNode` と同じ手順（Blackman窓 α=0.16 → Radix-2 Cooley-Tukey FFT（1/N 正規化・回転因子/ビット反転テーブル事前計算）→ 線形振幅の時間平滑化EMA → dB変換 → minDecibels/maxDecibels による byte マッピング（切り捨て・クランプ））を自前実装。`getByteTimeDomainData` 互換の `timeDomainToBytes` も提供。ワークレット（別レルム）へ `toString()` で埋め込むため外部依存なしの自己完結実装
+- `js/analysis-worklet.js`: `AudioWorkletProcessor` 実装のソースを生成し data: URL として返す。`file://` 直開きでは blob: URL の `addModule` が拒否されることを実測で確認したため（トリビアルなモジュールでも AbortError）、data: URL を採用。PCMをリングバッファへ蓄積し、2048サンプル境界でのみ FFT + 平滑化を実行して `port.postMessage` でフレームを送出（`ScriptProcessorNode` 版とスナップショット時刻・平滑化の進み方を完全に揃えるため）。全サンプル処理後に完了通知を送出する
+
+#### 変更ファイル
+- `js/offline-exporter.js`: `_analyze()` をデコード + 経路選択に再構成し、採取処理を `_captureFramesWorklet()`（主経路）/ `_captureFramesScriptProcessor()`（従来実装、フォールバック）へ分離。ワークレット側は `AudioWorkletNode` を `channelCount:1 / explicit / speakers` で構成し、`AnalyserNode` の解析時と同じ規則のモノラルダウンミックスをブラウザに任せる。`startRendering()` 解決後に port の完了通知（FIFOで全フレーム到着後に届く）を待ってから結果を確定する
+- `index.html`: `js/fft.js`・`js/analysis-worklet.js` の `<script>` タグを追加
+
+### 検証
+- 全JS `node --check` パス
+- `js/fft.js` 単体（Node, 19アサーション全パス）: 独立実装の素朴DFT（O(N²)・倍精度）を参照実装とし、正弦波のピークbin位置・Blackman窓の漏れ形状・期待振幅のbyte値・ランダム信号での全binバイト一致（誤差±1以内）・平滑化EMAの2フレーム連続一致・無音の全ゼロ・時間波形マッピングの境界値（クランプ/切り捨て）を検証
+- Chromium実ブラウザE2E（新規 `phase9-2-e2e.mjs`）: **ワークレット版と ScriptProcessorNode 版（本物の `AnalyserNode`）を同一のステレオ音源（440/1320Hzトーン+エンベロープ+決定的ノイズ）で直接比較**。fps30/smoothing0.8 と fps29.97/smoothing0.5 の両条件で、フレーム数・フレーム時刻列は完全一致、時間波形バイト列は全フレーム完全一致（maxDiff 0）、周波数バイト列は maxDiff 1・平均誤差 0.00002（±1の量子化境界のみ）を確認
+- 主経路の確認: `_captureFramesScriptProcessor` を強制的に例外にした状態でUIからの書き出しが完走することを確認（本番経路がワークレットであることの実証）
+- 既存回帰: オフライン書き出しE2E（音声のみ/4バリアント/動画合成/MP4モック）・Phase 8/10.1 E2E・全14タイプ切替回帰・Node全テスト（foundation23/settings-io16/webm-muxer22/mp4-muxer39）、いずれもパス。バリアントの出力blobサイズが移行前と完全一致しており、解析出力の同一性が間接的にも裏付けられた
+
+### spec.md 変更
+- version `v1.9` → `v2.0`
+- §14.8 の解析手順の記述を経路非依存の表現に変更し、§14.8.3「解析経路（Phase 9.2）」を新設
+- §20 に「Phase 9.2: AudioWorkletベース解析への移行（実装済み）」を追加
+- 理由: 解析経路の変更を仕様体系に正式に組み込むため
+
+### 備考
+- `doc/plan-phase8.md` の全フェーズ（8 / 9.1 / 9.2 / 10.1 / 10.2）が完了した
+
+---
+
 ## 2026-07-18 — Phase 10.2 オフライン書き出しでの動画合成を追加
 
 ### 作業内容
