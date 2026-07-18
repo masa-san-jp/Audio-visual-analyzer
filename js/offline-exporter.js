@@ -3,13 +3,11 @@
 //
 // 処理の流れ:
 //  1. ファイルを AudioBuffer にデコードする
-//  2. OfflineAudioContext 上で AnalyserNode を通し、ScriptProcessorNode の
-//     コールバックで各出力フレーム時刻の周波数/時間波形スナップショットを採取する。
-//     AnalyserNode は音声グラフ上でしか動作しないためこの手法を用いる。
+//  2. OfflineAudioContext 上で各出力フレーム時刻の周波数/時間波形スナップショットを
+//     採取する。AudioWorklet + 自前FFT（js/fft.js の SpectrumAnalyzer を
+//     js/analysis-worklet.js がワークレットへ埋め込む）を優先し、非対応環境では
+//     従来の ScriptProcessorNode + AnalyserNode へフォールバックする。
 //     OfflineAudioContext は実時間より高速に処理されるため、採取自体も高速に終わる
-//     （ScriptProcessorNode は非推奨 API だが、対象ブラウザ（Chrome/Edge）では
-//      オフラインレンダリング中に AnalyserNode のスナップショットを取得できる
-//      標準APIとして現状もっとも確実な手段のため使用する）。
 //  3. 採取したフレーム列を、既存レンダラー群（renderer-registry.js）を用いて
 //     固定 dt（1/fps）で1枚ずつ Canvas に描画する。
 //  4. WebCodecs（VideoEncoder / AudioEncoder）でエンコードし、
@@ -23,6 +21,10 @@ const OFFLINE_EXPORT_MIN_VIDEO_BPS = 6000000;
 const OFFLINE_EXPORT_MAX_VIDEO_BPS = 24000000;
 const OFFLINE_EXPORT_AUDIO_BPS = 192000;
 const OFFLINE_EXPORT_KEYFRAME_INTERVAL_SEC = 2;
+const OFFLINE_ANALYSIS_FFT_SIZE = 2048;
+// スナップショット採取の粒度。ScriptProcessorNode 版のバッファサイズと同じ値にして
+// ワークレット版でも平滑化の進み方・スナップショット時刻を一致させる
+const OFFLINE_ANALYSIS_BLOCK_SIZE = 2048;
 const OFFLINE_EXPORT_RESOLUTIONS = {
   '16:9': { width: 1920, height: 1080 },
   '1:1': { width: 1080, height: 1080 },
@@ -112,7 +114,11 @@ class OfflineExporter {
     URL.revokeObjectURL(url);
   }
 
-  // ── 解析フェーズ: OfflineAudioContext + AnalyserNode でフレーム列を採取 ──
+  // ── 解析フェーズ: OfflineAudioContext 上でフレーム列を採取 ──
+  // AudioWorklet + 自前FFT（js/fft.js / js/analysis-worklet.js）を優先し、
+  // 非対応環境では従来の ScriptProcessorNode + AnalyserNode へフォールバックする。
+  // 両経路はスナップショット粒度（2048サンプル境界）・平滑化の進み方を揃えており、
+  // 同一音源に対して実用上同一の出力を返す
   async _analyze(file, settings, fps) {
     const arrayBuffer = await file.arrayBuffer();
     const probeCtx = new (window.AudioContext || window.webkitAudioContext)();
@@ -129,23 +135,114 @@ class OfflineExporter {
     const durationMs = (totalSamples / sampleRate) * 1000;
     if (durationMs <= 0) throw new Error('音声データが空です');
 
+    const smoothing = clamp(settings.smoothing != null ? settings.smoothing : 0.8, 0, 0.99);
+    const { startBin, endBin } = computeFreqRange(sampleRate, OFFLINE_ANALYSIS_FFT_SIZE / 2);
+    const freqLen = endBin - startBin;
+
+    let captured = null;
+    if (typeof AudioWorkletNode !== 'undefined' && typeof createAnalysisWorkletUrl === 'function') {
+      try {
+        captured = await this._captureFramesWorklet(audioBuffer, smoothing, fps, startBin, endBin);
+      } catch (_) {
+        captured = null; // ワークレットを利用できない環境では従来経路へ
+      }
+    }
+    if (!captured) {
+      captured = await this._captureFramesScriptProcessor(audioBuffer, smoothing, fps, startBin, endBin);
+    }
+
+    if (captured.cancelled) throw new _ExportCancelled();
+    if (captured.freqFrames.length === 0) throw new Error('解析結果が空です（音声が短すぎる可能性があります）');
+
+    return {
+      audioBuffer, sampleRate, numberOfChannels, durationMs, freqLen,
+      freqFrames: captured.freqFrames,
+      timeFrames: captured.timeFrames,
+      frameTimesMs: captured.frameTimesMs,
+    };
+  }
+
+  // AudioWorklet 経路（Phase 9.2）: ワークレット内の SpectrumAnalyzer で解析する
+  async _captureFramesWorklet(audioBuffer, smoothing, fps, startBin, endBin) {
+    const sampleRate = audioBuffer.sampleRate;
+    const totalSamples = audioBuffer.length;
+    const offlineCtx = new OfflineAudioContext(audioBuffer.numberOfChannels, totalSamples, sampleRate);
+    if (!offlineCtx.audioWorklet) throw new Error('AudioWorklet 非対応');
+
+    await offlineCtx.audioWorklet.addModule(createAnalysisWorkletUrl());
+
+    const source = offlineCtx.createBufferSource();
+    source.buffer = audioBuffer;
+
+    // channelCount:1 / explicit / speakers で、AnalyserNode が解析時に行うのと
+    // 同じ規則のモノラルダウンミックスをブラウザ側に任せる
+    const node = new AudioWorkletNode(offlineCtx, 'offline-analysis', {
+      numberOfInputs: 1,
+      numberOfOutputs: 1,
+      channelCount: 1,
+      channelCountMode: 'explicit',
+      channelInterpretation: 'speakers',
+      processorOptions: {
+        fftSize: OFFLINE_ANALYSIS_FFT_SIZE,
+        blockSize: OFFLINE_ANALYSIS_BLOCK_SIZE,
+        samplesPerFrame: sampleRate / fps,
+        totalSamples,
+        smoothing,
+      },
+    });
+
+    const freqFrames = [];
+    const timeFrames = [];
+    const frameTimesMs = [];
+    let cancelled = false;
+    let done = false;
+
+    node.port.onmessage = (e) => {
+      const d = e.data;
+      if (d && d.done) { done = true; return; }
+      if (this._cancelRequested) { cancelled = true; return; }
+      freqFrames.push(d.freq.slice(startBin, endBin));
+      timeFrames.push(d.time);
+      frameTimesMs.push(d.timeMs);
+      this._setProgress(clamp((d.timeMs / 1000) * sampleRate / totalSamples, 0, 1) * 0.4);
+    };
+
+    source.connect(node);
+    node.connect(offlineCtx.destination);
+    source.start(0);
+    await offlineCtx.startRendering();
+
+    // port のメッセージは startRendering 解決後に届く場合があるため、
+    // ワークレットからの完了通知（FIFO なので全フレーム到着後に届く）を待つ
+    const deadline = Date.now() + 5000;
+    while (!done && Date.now() < deadline) await this._yield();
+    try { node.disconnect(); source.disconnect(); } catch (_) {}
+    if (!done) throw new Error('ワークレット解析の完了通知を受信できませんでした');
+
+    return { freqFrames, timeFrames, frameTimesMs, cancelled };
+  }
+
+  // ScriptProcessorNode 経路（従来実装・フォールバック）:
+  // AnalyserNode のスナップショットをバッファ境界（2048サンプル）ごとに採取する
+  async _captureFramesScriptProcessor(audioBuffer, smoothing, fps, startBin, endBin) {
+    const sampleRate = audioBuffer.sampleRate;
+    const numberOfChannels = audioBuffer.numberOfChannels;
+    const totalSamples = audioBuffer.length;
+
     const offlineCtx = new OfflineAudioContext(numberOfChannels, totalSamples, sampleRate);
     const source = offlineCtx.createBufferSource();
     source.buffer = audioBuffer;
 
     const analyser = offlineCtx.createAnalyser();
-    analyser.fftSize = 2048;
-    analyser.smoothingTimeConstant = clamp(settings.smoothing != null ? settings.smoothing : 0.8, 0, 0.99);
+    analyser.fftSize = OFFLINE_ANALYSIS_FFT_SIZE;
+    analyser.smoothingTimeConstant = smoothing;
 
-    const bufSize = 2048;
+    const bufSize = OFFLINE_ANALYSIS_BLOCK_SIZE;
     const processor = offlineCtx.createScriptProcessor(bufSize, numberOfChannels, numberOfChannels);
 
     source.connect(analyser);
     analyser.connect(processor);
     processor.connect(offlineCtx.destination);
-
-    const { startBin, endBin } = computeFreqRange(sampleRate, analyser.frequencyBinCount);
-    const freqLen = endBin - startBin;
 
     const samplesPerFrame = sampleRate / fps;
     let nextFrameSample = 0;
@@ -157,10 +254,10 @@ class OfflineExporter {
 
     const fullFreq = new Uint8Array(analyser.frequencyBinCount);
     const fullTime = new Uint8Array(analyser.fftSize);
-    let cancelledDuringAnalyze = false;
+    let cancelled = false;
 
     processor.onaudioprocess = () => {
-      if (this._cancelRequested) { cancelledDuringAnalyze = true; return; }
+      if (this._cancelRequested) { cancelled = true; return; }
       processedSamples += bufSize;
       while (nextFrameSample <= processedSamples && nextFrameSample <= totalSamples) {
         analyser.getByteFrequencyData(fullFreq);
@@ -177,10 +274,7 @@ class OfflineExporter {
     await offlineCtx.startRendering();
     try { processor.disconnect(); analyser.disconnect(); source.disconnect(); } catch (_) {}
 
-    if (cancelledDuringAnalyze) throw new _ExportCancelled();
-    if (freqFrames.length === 0) throw new Error('解析結果が空です（音声が短すぎる可能性があります）');
-
-    return { audioBuffer, sampleRate, numberOfChannels, durationMs, freqLen, freqFrames, timeFrames, frameTimesMs };
+    return { freqFrames, timeFrames, frameTimesMs, cancelled };
   }
 
   // ── 描画 + エンコードフェーズ ──
