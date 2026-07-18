@@ -36,8 +36,9 @@ class Ring3dRenderer {
     const h = canvas ? canvas.height : 0;
     this.cx = w / 2;
     this.cy = h / 2;
-    // 16:9 / 1:1 いずれでも収まるよう短辺基準で半径上限を決める。
-    this.maxR = Math.max(0, Math.min(this.cx, this.cy) * 0.92);
+    // 画面を大きく使う。横長では幅方向にも広げるため、短辺よりやや大きめに取る
+    // （楕円 TILT で縦は潰れるため上下にはみ出しにくい）。
+    this.maxR = Math.max(0, Math.min(this.cx * 0.98, this.cy * 1.35));
   }
 
   render(ctx, canvas, frame, settings) {
@@ -91,10 +92,10 @@ class Ring3dRenderer {
 
     // 要素数（性能予算で 8..96 にクランプ）。
     const count = clamp(Math.round(this.MAX * density / 100), 8, this.MAX);
-    // baseOffset で環半径を可変（0=小さい環, 99=大きい環）。
-    const ringR = this.maxR * (0.35 + (baseOffset / 99) * 0.45) * layerScale;
-    // 高さ（上方向変位）の最大値。
-    const hMax = this.maxR * 0.55 * layerScale;
+    // baseOffset で環半径を可変（0=標準, 99=最大）。既定でも画面を大きく使う。
+    const ringR = this.maxR * (0.62 + (baseOffset / 99) * 0.36) * layerScale;
+    // 高さ（上方向変位）の最大値。画面を大きく使うため大きめに。
+    const hMax = this.maxR * 0.7 * layerScale;
     const TILT = this.TILT;
     const phase = this.phase;
 

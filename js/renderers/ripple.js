@@ -17,6 +17,11 @@ class RippleRenderer {
     // ── 帯域ローカルピーク検出用: 前フレームのレイヤー帯域振幅（最大4レイヤー）──
     this.prevBand = new Float32Array(4);
     this.prevBandValid = false;
+
+    // 単層時の全体エネルギー追従用（立ち上がり検出）
+    this.prevEnergy = 0;
+    this.energyEma = 0;
+    this._emaInit = false;
   }
 
   onResize() {
@@ -75,20 +80,38 @@ class RippleRenderer {
     const baseSens = settings.sensitivity != null ? settings.sensitivity : 1.0;
     const layerDefs = settings.layers || [];
 
+    // ── 全体エネルギー（freq 全帯域平均）を算出。単層のサウンド追従に使う ──
+    let energyNow = 0;
+    if (frame && frame.freq && frame.freq.length > 0) {
+      const f = frame.freq;
+      let sum = 0;
+      for (let b = 0; b < f.length; b++) sum += f[b];
+      energyNow = clamp((sum / f.length) / 255 * baseSens, 0, 1);
+    }
+    if (!this._emaInit) { this.energyEma = energyNow; this._emaInit = true; }
+
     // ── 発生: ビート ──
     if (beat && beat.isBeat) {
       const energy = clamp(beat.energy != null ? beat.energy : 0, 0, 1);
       if (layersOn) {
-        // 各レイヤーの発生点を横に等配置してビート波を出す
         for (let i = 0; i < layerCount; i++) {
           const px = W * (i + 1) / (layerCount + 1);
           const off = layerDefs[i] ? layerDefs[i].hueOffset : 0;
-          this._spawn(px, cy, settings.hue + off, energy);
+          this._spawn(px, cy, settings.hue + off, Math.max(0.4, energy));
         }
       } else {
-        // 単層は中心から
-        this._spawn(cx, cy, settings.hue, energy);
+        this._spawn(cx, cy, settings.hue, Math.max(0.4, energy));
       }
+    }
+
+    // ── 発生: 単層の全体エネルギー立ち上がり（ビートが無い曲でも追従させる）──
+    // 現在値が移動平均を一定比率超え、かつ前フレームより増加していれば波を出す。
+    if (!layersOn) {
+      if (energyNow > this.energyEma * 1.18 && energyNow > this.prevEnergy && energyNow > 0.06) {
+        this._spawn(cx, cy, settings.hue, clamp(energyNow * 1.2, 0.25, 1));
+      }
+      this.energyEma = this.energyEma * 0.9 + energyNow * 0.1;
+      this.prevEnergy = energyNow;
     }
 
     // ── 発生: レイヤー帯域のローカルピーク（前フレーム比 +30%）──
@@ -122,8 +145,11 @@ class RippleRenderer {
     }
 
     // ── 更新 + 描画 ──
-    const lineW = Math.max(1, settings.barWidth || 1);
-    ctx.lineWidth = lineW;
+    // 線幅は波の強さ（誕生時振幅）に比例させ、強い音ほど太い波にする。
+    const baseW = Math.max(1, settings.barWidth || 2);
+    ctx.lineCap = 'round';
+    const prevOp = ctx.globalCompositeOperation;
+    ctx.globalCompositeOperation = 'lighter'; // 干渉部が明るく重なる
     for (let i = 0; i < this.MAX_WAVES; i++) {
       const w = this.waves[i];
       if (!w.active) continue;
@@ -136,12 +162,14 @@ class RippleRenderer {
       if (w.amp < 0.02) { w.active = false; continue; }
       if (w.r < 0.5) continue;
 
-      const alpha = clamp(w.amp, 0, 1);
-      ctx.strokeStyle = makeColor(w.hue, w.colorAmp, settings, alpha);
+      const alpha = clamp(w.amp * 1.2, 0, 1);
+      ctx.lineWidth = baseW * (0.6 + w.colorAmp * 2.4);
+      ctx.strokeStyle = makeColor(w.hue, clamp(0.4 + w.colorAmp, 0, 1), settings, alpha);
       ctx.beginPath();
       ctx.arc(w.x, w.y, w.r, 0, Math.PI * 2);
       ctx.stroke();
     }
+    ctx.globalCompositeOperation = prevOp;
   }
 
   dispose() {

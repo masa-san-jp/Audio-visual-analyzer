@@ -40,16 +40,23 @@ class MetaballRenderer {
     for (let i = 0; i < METABALL_MAX_BLOBS; i++) {
       this._blobs[i] = {
         // 周回中心（画面中央からの正規化オフセット、minDim 倍で画素化）
-        ox: (rng() - 0.5) * 0.44,
-        oy: (rng() - 0.5) * 0.44,
-        orbitR: 0.04 + rng() * 0.08, // 周回半径（正規化）
+        ox: (rng() - 0.5) * 0.5,
+        oy: (rng() - 0.5) * 0.5,
+        orbitR: 0.05 + rng() * 0.14, // 周回半径（正規化・個体差を拡大）
         angle: rng() * Math.PI * 2,  // 現在の周回角（毎フレーム更新して保持）
-        speed: (0.0003 + rng() * 0.0005) * (rng() < 0.5 ? -1 : 1), // rad/ms
+        speed: (0.0002 + rng() * 0.0009) * (rng() < 0.5 ? -1 : 1), // rad/ms（個体差拡大）
         bandFrac: rng(),             // レイヤー内の担当帯域位置（0..1）
+        // ノイズ徘徊用の固有位相（中心をゆっくり漂わせて形状ランダム性を高める）
+        nseed: rng() * 100,
+        rBias: 0.7 + rng() * 0.9,    // 基準半径の個体差
       };
       // 半径揺れ用の Spring（instance に保持）
       this._springs[i] = new Spring(0.35, 0.75);
     }
+
+    // 中心徘徊用ノイズ（決定的）と時間アキュムレータ
+    this._noise = new ValueNoise(0x2b71);
+    this._t = 0;
 
     // ── オフスクリーン（メインの 1/2 解像度） ──
     this._off = (typeof document !== 'undefined') ? document.createElement('canvas') : null;
@@ -103,11 +110,13 @@ class MetaballRenderer {
 
     const minDim = Math.min(w, h);
     const cx = w * 0.5, cy = h * 0.5;
-    const baseR = minDim * 0.05;          // ブロブ基準半径
-    const ampR = minDim * 0.11;           // 振幅による最大加算
+    const baseR = minDim * 0.055;         // ブロブ基準半径
+    const ampR = minDim * 0.14;           // 振幅による最大加算（膨らみを強調）
     const dt = frame.dtMs || 16.7;
     const motion = settings.motionSpeed != null ? settings.motionSpeed : 1;
     const globalSens = settings.sensitivity != null ? settings.sensitivity : 1;
+    // ノイズ時間を進める（中心の徘徊速度も motionSpeed に連動）
+    this._t += (dt / 1000) * (0.15 + motion * 0.25);
 
     // ── 描画ターゲットとスケール ──
     // filter 使用時: オフスクリーン（1/2）へ 'lighter' で描画。
@@ -141,16 +150,22 @@ class MetaballRenderer {
       const raw = layerData[idx] / 255;
       const amp = clamp(raw * sens, 0, 1);
 
-      // 半径を Spring で揺らす（instance 保持のバネ）
+      // 半径を Spring で揺らす（instance 保持のバネ）。個体差 rBias で大小に散らす。
       const spr = this._springs[b];
-      spr.target(baseR + amp * ampR);
+      spr.target((baseR + amp * ampR) * blob.rBias);
       let r = spr.update(dt);
       if (r < 1) r = 1;
 
-      // 位置はゆっくり周回（dtMs 基準 × motionSpeed）
+      // 中心をノイズでゆっくり徘徊させ、形状のランダム性を高める
+      const nx = this._noise.noise2(blob.nseed, this._t) - 0.5;
+      const ny = this._noise.noise2(blob.nseed + 50, this._t) - 0.5;
+      const wanderX = nx * minDim * 0.22;
+      const wanderY = ny * minDim * 0.22;
+
+      // 位置はゆっくり周回（dtMs 基準 × motionSpeed）＋ノイズ徘徊
       blob.angle += blob.speed * motion * dt;
-      const centerX = cx + blob.ox * minDim;
-      const centerY = cy + blob.oy * minDim;
+      const centerX = cx + blob.ox * minDim + wanderX;
+      const centerY = cy + blob.oy * minDim + wanderY;
       const px = centerX + Math.cos(blob.angle) * blob.orbitR * minDim;
       const py = centerY + Math.sin(blob.angle) * blob.orbitR * minDim;
 
@@ -181,7 +196,9 @@ class MetaballRenderer {
 
       // ── メインへ filter 転写（blur + contrast でしきい値融合） ──
       const prevFilter = ctx.filter;
-      ctx.filter = 'blur(12px) contrast(24)';
+      // blur を画面サイズに比例させ、contrast を高めて融合輪郭を滑らかかつ明瞭にする
+      const blurPx = Math.max(8, Math.round(minDim * 0.018));
+      ctx.filter = 'blur(' + blurPx + 'px) contrast(30)';
       ctx.drawImage(this._off, 0, 0, this._off.width, this._off.height, 0, 0, w, h);
       // CRITICAL: filter は必ずリセットする
       ctx.filter = (typeof prevFilter === 'string' && prevFilter) ? prevFilter : 'none';
@@ -194,5 +211,6 @@ class MetaballRenderer {
     this._octx = null;
     this._blobs = null;
     this._springs = null;
+    this._noise = null;
   }
 }

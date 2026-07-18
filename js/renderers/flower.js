@@ -65,8 +65,8 @@ class FlowerRenderer {
     this.phi += motion * (dtMs / 1000);
     if (this.phi > Math.PI * 4) this.phi -= Math.PI * 4; // 桁あふれ防止
 
-    // ── 花弁数 k = 4 + round(density/100 * 12) ──
-    const k = 4 + Math.round((density / 100) * 12);
+    // ── 花弁数 k は専用パラメーター petalCount(2..16) で直接指定 ──
+    const k = clamp(Math.round(settings.petalCount != null ? settings.petalCount : 6), 2, 16);
 
     // ── 輪郭サンプル数（density で密度調整・上限クランプ） ──
     let sampleCount = Math.round(this.MAX_SAMPLES * density / 100);

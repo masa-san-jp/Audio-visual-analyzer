@@ -43,8 +43,11 @@ class LissajousRenderer {
 
     const cx = this.cx;
     const cy = this.cy;
-    const scale = this.scale;
     const barWidth = settings.barWidth != null ? settings.barWidth : 2;
+
+    // baseOffset(0..99): 図形の中心からの距離（広がり）。大きいほど外へ広がる。
+    const spread = clamp(settings.baseOffset != null ? settings.baseOffset : 0, 0, 99) / 99;
+    const scale = this.scale * (1 + spread * 1.8);
 
     const time = frame.time;
     // ── ガード: time が null なら中央に点を打って終了（無音相当の表示） ──
@@ -56,10 +59,8 @@ class LissajousRenderer {
     const len = time.length;
     const sens = settings.sensitivity != null ? settings.sensitivity : 1.0;
 
-    // ── 位相遅延: delay = 128 + baseOffset*4（0..99 → 128..524） ──
-    // len で剰余を取り、必ず範囲内に収める。
-    const baseOffset = clamp(settings.baseOffset != null ? settings.baseOffset : 0, 0, 99);
-    const delay = (128 + baseOffset * 4) % len;
+    // ── 位相遅延: 固定（baseOffset は中心からの距離に割り当てたため）──
+    const delay = 128 % len;
 
     // ── 点数: density 30..100 を 256..2048 に線形補間して間引く ──
     const density = clamp(settings.density != null ? settings.density : 100, 30, 100);
