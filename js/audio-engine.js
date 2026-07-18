@@ -23,7 +23,15 @@ class AudioEngine {
       this.source.disconnect();
       this.source = null;
     }
-    this.source = this.ctx.createMediaElementSource(mediaElement);
+    // createMediaElementSource は同一要素へ2回呼ぶと例外になるため、
+    // 要素→ソースノードをキャッシュしてスロット再選択時に再利用する（Phase 12）
+    if (!this._mediaSources) this._mediaSources = new WeakMap();
+    let source = this._mediaSources.get(mediaElement);
+    if (!source) {
+      source = this.ctx.createMediaElementSource(mediaElement);
+      this._mediaSources.set(mediaElement, source);
+    }
+    this.source = source;
     this.source.connect(this.analyser);
   }
 

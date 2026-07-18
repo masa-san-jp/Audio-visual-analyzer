@@ -35,6 +35,43 @@ body {
   outline-offset: -6px;
 }
 
+/* 再生スロット（Phase 12） */
+#slot-list {
+  margin-top: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.slot-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  padding: 3px 4px;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.04);
+}
+.slot-row.active {
+  outline: 1px solid #4da3ff;
+}
+.slot-no {
+  opacity: 0.7;
+}
+.slot-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.slot-kind {
+  opacity: 0.7;
+}
+.slot-row button {
+  padding: 2px 6px;
+  font-size: 11px;
+}
+
 #canvas {
   display: block;
   background: #000;
