@@ -2,6 +2,37 @@
 
 ---
 
+## 2026-07-18 — Phase 10.2 オフライン書き出しでの動画合成を追加
+
+### 作業内容
+`doc/plan-phase8.md` §10.2 に定めた「オフライン書き出しでの動画合成」を、同計画書の初版推奨方式（オフスクリーン `<video>` のシーク + `seeked` 待機）で実装した。
+
+#### 変更ファイル
+- `js/offline-exporter.js`:
+  - `export()` から `_renderAndEncode()` へ書き出し対象の `File` を引き渡すよう変更
+  - 対象が動画ファイル（`file.type` が `video/`）かつ `videoCompositeEnabled` かつ selfClear タイプでない場合、`_prepareCompositeVideo()` でオフスクリーン `<video>` を用意し、フレームループ内で `_seekCompositeVideo()`（`currentTime` 設定 → `seeked` 待機）→ `_drawCompositeVideoFrame()`（cover フィット + 不透明度 + 合成モード。`visualizer-core.js` の `_drawVideoComposite` と同一仕様）の順で背景合成する
+  - 頑健性: 映像を取得できないファイルは合成なしで続行、シークできないフレームはタイムアウト（2秒）で先へ進む。後片付け（objectURL の revoke）は `finally` で保証しキャンセル時も漏れない
+- `js/ui-controller.js`:
+  - `_setVideoElement()` の表示制御を `_updateVideoCompositeVisibility()` へ分離し、表示条件を「ライブ動画読込中 **または** オフライン書き出し対象が動画ファイル」に拡張（オフライン書き出しだけで動画合成を使う場合にトグルへ到達できるようにするため）
+  - オフラインファイル選択時に `_offlineFileIsVideo` を判定して表示を更新。どちらの対象もない場合は従来どおり設定を自動オフ
+
+### 検証
+- 全JS `node --check` パス
+- Chromium実ブラウザE2E（新規 `phase10-2-e2e.mjs`）: 音声トラック（440Hzトーン）付きのマゼンタ単色動画をページ内で `MediaRecorder` 生成し、オフライン書き出しのファイルとして選択 → ①動画合成セクションが表示される、②合成有効で書き出した出力動画の中央フレームをデコード・ピクセル解析するとサンプル画素の約99%がマゼンタ（背景合成が機能）、③合成無効で書き出すとマゼンタ画素0%（対照実験）、をすべて確認。コンソールエラー0
+- 既存回帰: オフライン書き出しE2E（音声のみ/4バリアント）・Phase 10.1ライブ動画合成E2E・Phase 8機能E2E・全14タイプ切替回帰、いずれもコンソールエラー0で既存と同結果（`_setVideoElement` 経路と `_renderAndEncode` 変更による影響なし）
+
+### spec.md 変更
+- version `v1.8` → `v1.9`
+- §14.8.2「オフライン書き出しでの動画合成（Phase 10.2）」を新設
+- §14.9 の「オフライン書き出しは対象外」の記述を §14.8.2 への参照に変更
+- §20 に「Phase 10.2: オフライン書き出しでの動画合成（実装済み）」を追加
+- 理由: 新機能を仕様体系に正式に組み込むため
+
+### 備考
+- 残る計画項目は Phase 9.2（AudioWorklet移行）のみ。`ScriptProcessorNode` は現状正常動作しており、置き換えにはFFT・窓関数・スムージングのworklet内自前実装が必要（`doc/plan-phase8.md` §9.2）
+
+---
+
 ## 2026-07-18 — Phase 9.1 MP4対応オフライン書き出しを追加
 
 ### 作業内容

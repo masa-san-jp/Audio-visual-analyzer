@@ -83,7 +83,7 @@ class OfflineExporter {
 
       this._setState('rendering');
       const blob = await this._renderAndEncode(analysis, settings, {
-        fps, width: res.width, height: res.height,
+        fps, width: res.width, height: res.height, file,
       });
       this.blob = blob;
       this._setState('done');
@@ -267,51 +267,72 @@ class OfflineExporter {
       }
     }
 
+    // ── 動画合成（Phase 10.2）: 書き出し対象が動画ファイルかつ動画合成が有効な場合、
+    // オフスクリーンの <video> を各フレーム時刻へシークして背景として合成する。
+    // selfClear タイプはアナライザー自身が全面を塗るため対象外（ライブ表示と同じ扱い）
+    const selfClear = !!(entry.capabilities && entry.capabilities.selfClear);
+    let compositeVideo = null;
+    let compositeUrl = null;
+    if (opts.file && settings.videoCompositeEnabled && !selfClear &&
+        opts.file.type && opts.file.type.indexOf('video/') === 0) {
+      const prepared = await this._prepareCompositeVideo(opts.file);
+      if (prepared) { compositeVideo = prepared.video; compositeUrl = prepared.url; }
+    }
+
     // ── フレーム描画 + 映像エンコード ──
     const dtMs = 1000 / fps;
     const keyframeEveryN = Math.max(1, Math.round(fps * OFFLINE_EXPORT_KEYFRAME_INTERVAL_SEC));
     let huePhase = 0;
 
-    for (let i = 0; i < totalFrames; i++) {
-      this._checkCancelled();
-      if (videoError) throw new Error('映像エンコードに失敗しました: ' + videoError.message);
+    try {
+      for (let i = 0; i < totalFrames; i++) {
+        this._checkCancelled();
+        if (videoError) throw new Error('映像エンコードに失敗しました: ' + videoError.message);
 
-      const freq = freqFrames[i];
-      const time = timeFrames[i];
-      history.push(freq);
-      const nowMs = frameTimesMs[i];
+        const freq = freqFrames[i];
+        const time = timeFrames[i];
+        history.push(freq);
+        const nowMs = frameTimesMs[i];
 
-      let effectiveHue = settings.hue;
-      if (settings.hueContinuousMode) {
-        huePhase = (huePhase + settings.hueContinuousSpeed * 0.5 * (dtMs / 16.7)) % 360;
-        effectiveHue = (settings.hue + huePhase) % 360;
+        let effectiveHue = settings.hue;
+        if (settings.hueContinuousMode) {
+          huePhase = (huePhase + settings.hueContinuousSpeed * 0.5 * (dtMs / 16.7)) % 360;
+          effectiveHue = (settings.hue + huePhase) % 360;
+        }
+
+        const frame = {
+          freq, time, history,
+          beat: beatDetector.update(freq, nowMs),
+          dtMs, nowMs,
+          getLayer: (li, count) => this._sliceLayer(freq, li, count),
+        };
+
+        if (!selfClear) {
+          this._clearFrame(ctx, canvas, settings);
+          if (compositeVideo) {
+            await this._seekCompositeVideo(compositeVideo, nowMs / 1000);
+            this._drawCompositeVideoFrame(ctx, canvas, compositeVideo, settings);
+          }
+        }
+
+        if (entry.stateful && stateful) {
+          const s = { ...settings, hue: effectiveHue };
+          stateful.render(ctx, canvas, frame, s);
+        } else {
+          this._renderStateless(ctx, canvas, entry, frame, settings, effectiveHue);
+        }
+
+        const vf = new VideoFrame(canvas, { timestamp: Math.round(nowMs * 1000), duration: Math.round(1e6 / fps) });
+        videoEncoder.encode(vf, { keyFrame: (i % keyframeEveryN) === 0 });
+        vf.close();
+
+        if (i % 4 === 0 || i === totalFrames - 1) {
+          this._setProgress(0.4 + clamp(i / totalFrames, 0, 1) * 0.5);
+          await this._yield();
+        }
       }
-
-      const frame = {
-        freq, time, history,
-        beat: beatDetector.update(freq, nowMs),
-        dtMs, nowMs,
-        getLayer: (li, count) => this._sliceLayer(freq, li, count),
-      };
-
-      const selfClear = entry.capabilities && entry.capabilities.selfClear;
-      if (!selfClear) this._clearFrame(ctx, canvas, settings);
-
-      if (entry.stateful && stateful) {
-        const s = { ...settings, hue: effectiveHue };
-        stateful.render(ctx, canvas, frame, s);
-      } else {
-        this._renderStateless(ctx, canvas, entry, frame, settings, effectiveHue);
-      }
-
-      const vf = new VideoFrame(canvas, { timestamp: Math.round(nowMs * 1000), duration: Math.round(1e6 / fps) });
-      videoEncoder.encode(vf, { keyFrame: (i % keyframeEveryN) === 0 });
-      vf.close();
-
-      if (i % 4 === 0 || i === totalFrames - 1) {
-        this._setProgress(0.4 + clamp(i / totalFrames, 0, 1) * 0.5);
-        await this._yield();
-      }
+    } finally {
+      this._releaseCompositeVideo(compositeVideo, compositeUrl);
     }
 
     await videoEncoder.flush();
@@ -467,6 +488,69 @@ class OfflineExporter {
     src.connect(ctx.destination);
     src.start(0);
     return await ctx.startRendering();
+  }
+
+  // ── 動画合成（Phase 10.2）──
+
+  // 書き出し対象の動画ファイルからオフスクリーン <video> を用意する。
+  // 映像を取得できないファイルの場合は null を返し、合成なしで書き出しを続行する
+  async _prepareCompositeVideo(file) {
+    const url = URL.createObjectURL(file);
+    const video = document.createElement('video');
+    video.muted = true;
+    video.preload = 'auto';
+    const ok = await new Promise((resolve) => {
+      const to = setTimeout(() => resolve(false), 10000);
+      video.addEventListener('loadeddata', () => { clearTimeout(to); resolve(true); }, { once: true });
+      video.addEventListener('error', () => { clearTimeout(to); resolve(false); }, { once: true });
+      video.src = url;
+    });
+    if (!ok || !video.videoWidth || !video.videoHeight) {
+      this._releaseCompositeVideo(video, url);
+      return null;
+    }
+    return { video, url };
+  }
+
+  // 指定時刻へシークしてフレームの到着を待つ。シークできないフレームがあっても
+  // タイムアウトで先へ進み、書き出し全体は停止させない
+  async _seekCompositeVideo(video, tSec) {
+    const duration = isFinite(video.duration) ? video.duration : tSec;
+    const target = clamp(tSec, 0, Math.max(0, duration - 0.001));
+    if (Math.abs(video.currentTime - target) < 0.001 && video.readyState >= 2) return;
+    await new Promise((resolve) => {
+      const to = setTimeout(resolve, 2000);
+      video.addEventListener('seeked', () => { clearTimeout(to); resolve(); }, { once: true });
+      video.currentTime = target;
+    });
+  }
+
+  // visualizer-core.js の _drawVideoComposite と同一の描画仕様
+  // （cover フィット + 不透明度 + 合成モード。実時間駆動できないため複製）
+  _drawCompositeVideoFrame(ctx, canvas, video, settings) {
+    if (video.readyState < 2) return;
+    const vw = video.videoWidth, vh = video.videoHeight;
+    if (!vw || !vh) return;
+    const canvasAspect = canvas.width / canvas.height;
+    const videoAspect = vw / vh;
+    let sx, sy, sw, sh;
+    if (videoAspect > canvasAspect) {
+      sh = vh; sw = vh * canvasAspect; sx = (vw - sw) / 2; sy = 0;
+    } else {
+      sw = vw; sh = vw / canvasAspect; sx = 0; sy = (vh - sh) / 2;
+    }
+    const prevAlpha = ctx.globalAlpha;
+    const prevOp = ctx.globalCompositeOperation;
+    ctx.globalAlpha = clamp(settings.videoCompositeOpacity, 0, 100) / 100;
+    ctx.globalCompositeOperation = settings.videoCompositeBlendMode || 'source-over';
+    ctx.drawImage(video, sx, sy, sw, sh, 0, 0, canvas.width, canvas.height);
+    ctx.globalAlpha = prevAlpha;
+    ctx.globalCompositeOperation = prevOp;
+  }
+
+  _releaseCompositeVideo(video, url) {
+    if (video) { try { video.removeAttribute('src'); video.load(); } catch (_) {} }
+    if (url) { try { URL.revokeObjectURL(url); } catch (_) {} }
   }
 
   // MP4（H.264）を優先し、非対応環境では WebM（VP9/VP8）にフォールバックする。
