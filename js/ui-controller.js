@@ -12,6 +12,7 @@ class UIController {
     this._initFile();
     this._initPlayback();
     this._initRecording();
+    this._initOfflineExport();
     this._initAspectRatio();
     this._initAnalyzer();
     this._initColorControls();
@@ -184,6 +185,111 @@ class UIController {
       statusEl.textContent = '待機中';
       statusEl.classList.remove('recording');
     }
+  }
+
+  // ── オフライン書き出し ──
+  // 音楽ファイルを解析し、再生を伴わず現在の設定に合わせて書き出す。
+  // 録画（Recorder）とは独立して動作し、再生スロットのファイルとは無関係に
+  // 専用のファイル選択を用いる。
+
+  _initOfflineExport() {
+    const statusEl = document.getElementById('offline-export-status');
+    const btnFile = document.getElementById('btn-offline-file');
+    const fileInput = document.getElementById('offline-file-input');
+    const fileNameEl = document.getElementById('offline-file-name');
+    const fpsSelect = document.getElementById('offline-fps');
+    const btnStart = document.getElementById('btn-offline-start');
+    const btnCancel = document.getElementById('btn-offline-cancel');
+    const btnSave = document.getElementById('btn-offline-save');
+    const progressWrap = document.getElementById('offline-progress-wrap');
+    const progressEl = document.getElementById('offline-progress');
+
+    this.offlineExporter = new OfflineExporter();
+    this._offlineFile = null;
+
+    const supported = OfflineExporter.isSupported();
+    if (!supported) {
+      statusEl.textContent = 'この環境ではオフライン書き出しに対応していません（Chrome/Edge推奨）';
+    }
+
+    btnFile.addEventListener('click', () => fileInput.click());
+
+    fileInput.addEventListener('change', (e) => {
+      const file = e.target.files[0];
+      fileInput.value = '';
+      if (!file) return;
+      this._offlineFile = file;
+      fileNameEl.textContent = file.name;
+      btnSave.disabled = true;
+      btnStart.disabled = !supported;
+      if (supported) statusEl.textContent = '書き出し待機中';
+    });
+
+    btnStart.addEventListener('click', async () => {
+      const busy = this.offlineExporter.state === 'analyzing' || this.offlineExporter.state === 'rendering';
+      if (!this._offlineFile || busy) return;
+
+      btnStart.disabled = true;
+      btnFile.disabled = true;
+      btnCancel.disabled = false;
+      btnSave.disabled = true;
+      progressWrap.style.display = '';
+      progressEl.value = 0;
+
+      const fps = Number(fpsSelect.value) || 30;
+      // 開始時点の設定をスナップショットし、進行中の書き出しに
+      // その後のUI操作の影響が混入しないようにする
+      const settingsSnapshot = {
+        ...this.visualizer.settings,
+        layers: this.visualizer.settings.layers.map(l => ({ ...l })),
+      };
+
+      try {
+        await this.offlineExporter.export(this._offlineFile, settingsSnapshot, { fps });
+      } catch (_) {
+        // エラー内容は onError 経由で表示済み
+      } finally {
+        btnFile.disabled = false;
+        btnCancel.disabled = true;
+        if (this.offlineExporter.state === 'done') {
+          btnStart.disabled = false;
+          btnSave.disabled = false;
+        } else {
+          btnStart.disabled = !this._offlineFile;
+        }
+      }
+    });
+
+    btnCancel.addEventListener('click', () => {
+      this.offlineExporter.cancel();
+    });
+
+    btnSave.addEventListener('click', () => {
+      this.offlineExporter.save();
+    });
+
+    this.offlineExporter.onStateChange = (state) => {
+      if (state === 'analyzing') {
+        statusEl.textContent = '解析中…';
+      } else if (state === 'rendering') {
+        statusEl.textContent = '描画・エンコード中…';
+      } else if (state === 'done') {
+        statusEl.textContent = '書き出し完了 — 保存できます';
+        progressEl.value = 100;
+      } else if (state === 'idle') {
+        statusEl.textContent = this._offlineFile ? '書き出し待機中' : '音楽ファイルを選択してください';
+        progressWrap.style.display = 'none';
+      }
+    };
+
+    this.offlineExporter.onProgress = (p) => {
+      progressEl.value = Math.round(clamp(p, 0, 1) * 100);
+    };
+
+    this.offlineExporter.onError = (message) => {
+      statusEl.textContent = 'エラー: ' + message;
+      progressWrap.style.display = 'none';
+    };
   }
 
   // ── 表示比率 ──

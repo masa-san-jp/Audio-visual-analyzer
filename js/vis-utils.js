@@ -222,11 +222,22 @@ function computeVoronoiCells(sites, width, height) {
   return cells;
 }
 
+// ── 解析帯域（50Hz〜15kHz） ──
+// ライブ再生（AudioEngine）とオフライン書き出し（OfflineExporter）の双方が
+// 同一の帯域切り出しを行うための共有ロジック。
+function computeFreqRange(sampleRate, binCount) {
+  const hzPerBin = sampleRate / (binCount * 2);
+  const startBin = Math.round(50 / hzPerBin);
+  const endBin = Math.min(binCount - 1, Math.round(15000 / hzPerBin));
+  return { startBin, endBin };
+}
+
 // Node 環境（テスト）向けエクスポート。ブラウザでは無視される。
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
     clamp, lerp, isoProject, polarToXy, makeColor, hash32, makeRng,
     ValueNoise, Spring, SpringArray, springParamsFromAmount, BeatDetector,
     generateJitteredSites, computeVoronoiCells, ISO_KX, ISO_KY,
+    computeFreqRange,
   };
 }

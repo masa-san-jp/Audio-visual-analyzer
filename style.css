@@ -235,3 +235,23 @@ select:disabled {
   color: #e04040;
   font-weight: 600;
 }
+
+/* ── Offline export progress ── */
+
+progress {
+  height: 8px;
+  border-radius: 4px;
+  overflow: hidden;
+  border: none;
+  background: #272727;
+}
+
+progress::-webkit-progress-bar {
+  background: #272727;
+  border-radius: 4px;
+}
+
+progress::-webkit-progress-value {
+  background: #4070b0;
+  border-radius: 4px;
+}

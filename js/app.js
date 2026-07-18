@@ -12,6 +12,9 @@ document.addEventListener('DOMContentLoaded', () => {
   // UI イベント登録
   ui.init();
 
+  // デバッグ・動作確認用（devtools コンソールから状態を参照できるようにする）
+  window.__app = { audioEngine, mediaManager, visualizer, recorder, ui };
+
   // 最初から黒背景を表示するためにループを開始
   visualizer.start();
 });
