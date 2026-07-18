@@ -10,12 +10,14 @@ body {
   font-family: system-ui, -apple-system, sans-serif;
   font-size: 13px;
   height: 100vh;
+  height: 100dvh; /* モバイルのアドレスバー変動に追従（非対応ブラウザは 100vh のまま） */
   overflow: hidden;
 }
 
 #app {
   display: flex;
   height: 100vh;
+  height: 100dvh;
 }
 
 /* ── Visualizer area ── */
@@ -338,4 +340,62 @@ details.control-group[open] summary {
   font-family: inherit;
   font-size: 10px;
   color: #bbb;
+}
+
+/* ── モバイル対応（Phase 13） ── */
+
+/* タップ時のダブルタップズーム遅延を無効化 */
+button, select, input[type="range"], input[type="checkbox"], input[type="color"] {
+  touch-action: manipulation;
+}
+
+/* 狭幅画面では縦積みレイアウトに切り替える */
+@media (max-width: 700px) {
+  body {
+    height: auto;
+    min-height: 100dvh;
+    overflow: auto;
+  }
+  #app {
+    flex-direction: column;
+    height: auto;
+    min-height: 100dvh;
+  }
+  #visualizer-area {
+    flex: none;
+    width: 100%;
+    height: 44dvh;
+    min-height: 220px;
+  }
+  #controls {
+    width: 100%;
+    min-width: 0;
+    flex: 1;
+    border-left: none;
+    border-top: 1px solid #2e2e2e;
+    overflow-y: visible;
+    padding-bottom: max(20px, env(safe-area-inset-bottom));
+  }
+  /* タッチターゲットの拡大 */
+  button {
+    min-height: 38px;
+    padding: 8px 12px;
+    font-size: 13px;
+  }
+  select {
+    min-height: 36px;
+    font-size: 13px;
+  }
+  input[type="range"] {
+    height: 32px;
+  }
+  input[type="checkbox"] {
+    width: 18px;
+    height: 18px;
+  }
+  .slot-row button {
+    min-height: 32px;
+    padding: 4px 10px;
+    font-size: 12px;
+  }
 }
