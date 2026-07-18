@@ -365,17 +365,19 @@ class OfflineExporter {
       }
     }
 
-    // ── 動画合成（Phase 10.2）: 書き出し対象が動画ファイルかつ動画合成が有効な場合、
-    // オフスクリーンの <video> を各フレーム時刻へシークして背景として合成する。
+    // ── 動画合成（Phase 10.2 / 14.1）: 書き出し対象が動画ファイルかつ動画合成が有効な場合、
+    // 各フレーム時刻の映像フレームを背景として合成する。
+    // WebCodecs VideoDecoder + 自前 WebM デマルチプレクサによるデコーダー方式を優先し、
+    // 非対応ファイル・非対応環境は <video> の currentTime シーク方式へフォールバックする。
     // selfClear タイプはアナライザー自身が全面を塗るため対象外（ライブ表示と同じ扱い）
     const selfClear = !!(entry.capabilities && entry.capabilities.selfClear);
-    let compositeVideo = null;
-    let compositeUrl = null;
+    let compositeSource = null;
     if (opts.file && settings.videoCompositeEnabled && !selfClear &&
         opts.file.type && opts.file.type.indexOf('video/') === 0) {
-      const prepared = await this._prepareCompositeVideo(opts.file);
-      if (prepared) { compositeVideo = prepared.video; compositeUrl = prepared.url; }
+      compositeSource = await this._createDecoderCompositeSource(opts.file);
+      if (!compositeSource) compositeSource = await this._createSeekCompositeSource(opts.file);
     }
+    this._lastCompositeSourceType = compositeSource ? compositeSource.type : null; // 診断用
 
     // ── フレーム描画 + 映像エンコード ──
     const dtMs = 1000 / fps;
@@ -407,9 +409,18 @@ class OfflineExporter {
 
         if (!selfClear) {
           this._clearFrame(ctx, canvas, settings);
-          if (compositeVideo) {
-            await this._seekCompositeVideo(compositeVideo, nowMs / 1000);
-            this._drawCompositeVideoFrame(ctx, canvas, compositeVideo, settings);
+          if (compositeSource) {
+            let drawable = null;
+            try {
+              drawable = await compositeSource.frameAt(nowMs / 1000);
+            } catch (_) {
+              // デコード途中の失敗はシーク方式へ切り替えて続行する
+              compositeSource.dispose();
+              compositeSource = await this._createSeekCompositeSource(opts.file);
+              this._lastCompositeSourceType = compositeSource ? compositeSource.type : null;
+              drawable = compositeSource ? await compositeSource.frameAt(nowMs / 1000) : null;
+            }
+            if (drawable) this._drawCompositeVideoFrame(ctx, canvas, drawable, settings);
           }
         }
 
@@ -430,7 +441,7 @@ class OfflineExporter {
         }
       }
     } finally {
-      this._releaseCompositeVideo(compositeVideo, compositeUrl);
+      if (compositeSource) compositeSource.dispose();
     }
 
     await videoEncoder.flush();
@@ -588,7 +599,115 @@ class OfflineExporter {
     return await ctx.startRendering();
   }
 
-  // ── 動画合成（Phase 10.2）──
+  // ── 動画合成（Phase 10.2 / 14.1）──
+  // フレームソースは { type, frameAt(tSec) -> drawable|null, dispose() } のインターフェースで抽象化する
+
+  // デコーダー方式（Phase 14.1）: WebM を自前デマルチプレクサで解析し、
+  // WebCodecs VideoDecoder で順次デコードする。シーク待ちが無いため高速。
+  // 非WebM・非対応コーデック・VideoDecoder 非対応環境では null を返す
+  async _createDecoderCompositeSource(file) {
+    if (typeof VideoDecoder === 'undefined' || typeof WebmDemuxer === 'undefined') return null;
+    let parsed;
+    try {
+      parsed = WebmDemuxer.parse(new Uint8Array(await file.arrayBuffer()));
+    } catch (_) {
+      return null;
+    }
+    const config = { codec: parsed.codec };
+    if (parsed.codedWidth > 0) config.codedWidth = parsed.codedWidth;
+    if (parsed.codedHeight > 0) config.codedHeight = parsed.codedHeight;
+    const support = await VideoDecoder.isConfigSupported(config).catch(() => ({ supported: false }));
+    if (!support || !support.supported) return null;
+
+    const source = {
+      type: 'decoder',
+      _chunks: parsed.chunks,
+      _next: 0,
+      _current: null,   // 表示対象の VideoFrame（tSec 以下で最新）
+      _pending: [],     // デコーダー出力待ちの VideoFrame
+      _error: null,
+      _flushed: false,
+      _wake: null,
+    };
+    const decoder = new VideoDecoder({
+      output: (frame) => {
+        source._pending.push(frame);
+        if (source._wake) { const w = source._wake; source._wake = null; w(); }
+      },
+      error: (e) => {
+        source._error = e;
+        if (source._wake) { const w = source._wake; source._wake = null; w(); }
+      },
+    });
+    decoder.configure(config);
+
+    const waitOutput = (ms) => new Promise((resolve) => {
+      const to = setTimeout(() => { source._wake = null; resolve(false); }, ms);
+      source._wake = () => { clearTimeout(to); resolve(true); };
+    });
+
+    // frameAt は単調増加の tSec で呼ばれる前提（書き出しループの構造上、常に満たされる）
+    source.frameAt = async (tSec) => {
+      const tUs = Math.round(tSec * 1e6);
+      let stall = 0;
+      while (true) {
+        if (source._error) throw source._error;
+        // 出力済みフレームのうち tUs 以下の最新を current に採用（途中フレームは即 close）
+        while (source._pending.length && source._pending[0].timestamp <= tUs) {
+          if (source._current) source._current.close();
+          source._current = source._pending.shift();
+        }
+        if (source._pending.length) break; // 先頭が tUs より未来 → current が確定
+        if (source._next < source._chunks.length) {
+          if (decoder.decodeQueueSize < 16) {
+            const c = source._chunks[source._next++];
+            decoder.decode(new EncodedVideoChunk({
+              type: c.keyframe ? 'key' : 'delta',
+              timestamp: c.timestampUs,
+              data: c.data,
+            }));
+            continue;
+          }
+          // 供給キューが深い → 出力を待つ
+          const got = await waitOutput(100);
+          if (!got && ++stall > 50) throw new Error('デコーダーが応答しません');
+        } else if (!source._flushed) {
+          source._flushed = true;
+          await decoder.flush().catch((e) => { if (!source._error) source._error = e; });
+        } else {
+          break; // 全チャンク処理済み。current が最終フレーム
+        }
+      }
+      return source._current;
+    };
+
+    source.dispose = () => {
+      if (source._current) { try { source._current.close(); } catch (_) {} source._current = null; }
+      for (const f of source._pending) { try { f.close(); } catch (_) {} }
+      source._pending.length = 0;
+      try { decoder.close(); } catch (_) {}
+    };
+
+    return source;
+  }
+
+  // シーク方式（Phase 10.2・フォールバック）: オフスクリーン <video> を
+  // 各フレーム時刻へ currentTime でシークする
+  async _createSeekCompositeSource(file) {
+    const prepared = await this._prepareCompositeVideo(file);
+    if (!prepared) return null;
+    const self = this;
+    return {
+      type: 'seek',
+      async frameAt(tSec) {
+        await self._seekCompositeVideo(prepared.video, tSec);
+        return prepared.video;
+      },
+      dispose() {
+        self._releaseCompositeVideo(prepared.video, prepared.url);
+      },
+    };
+  }
 
   // 書き出し対象の動画ファイルからオフスクリーン <video> を用意する。
   // 映像を取得できないファイルの場合は null を返し、合成なしで書き出しを続行する
@@ -624,10 +743,18 @@ class OfflineExporter {
   }
 
   // visualizer-core.js の _drawVideoComposite と同一の描画仕様
-  // （cover フィット + 不透明度 + 合成モード。実時間駆動できないため複製）
+  // （cover フィット + 不透明度 + 合成モード。実時間駆動できないため複製）。
+  // 描画対象は <video> 要素（シーク方式）と VideoFrame（デコーダー方式）の両方を受け付ける
   _drawCompositeVideoFrame(ctx, canvas, video, settings) {
-    if (video.readyState < 2) return;
-    const vw = video.videoWidth, vh = video.videoHeight;
+    let vw, vh;
+    if (typeof VideoFrame !== 'undefined' && video instanceof VideoFrame) {
+      vw = video.displayWidth;
+      vh = video.displayHeight;
+    } else {
+      if (video.readyState < 2) return;
+      vw = video.videoWidth;
+      vh = video.videoHeight;
+    }
     if (!vw || !vh) return;
     const canvasAspect = canvas.width / canvas.height;
     const videoAspect = vw / vh;
