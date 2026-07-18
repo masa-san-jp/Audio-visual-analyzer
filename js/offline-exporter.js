@@ -13,7 +13,8 @@
 //  3. 採取したフレーム列を、既存レンダラー群（renderer-registry.js）を用いて
 //     固定 dt（1/fps）で1枚ずつ Canvas に描画する。
 //  4. WebCodecs（VideoEncoder / AudioEncoder）でエンコードし、
-//     js/webm-muxer.js で WebM コンテナへ格納する。
+//     js/mp4-muxer.js（MP4優先）または js/webm-muxer.js（フォールバック）で
+//     コンテナへ格納する（recorder.js の MP4優先方針を踏襲）。
 //
 // 外部ライブラリ不使用。WebCodecs / OfflineAudioContext は Chrome/Edge が対象。
 
@@ -26,7 +27,14 @@ const OFFLINE_EXPORT_RESOLUTIONS = {
   '16:9': { width: 1920, height: 1080 },
   '1:1': { width: 1080, height: 1080 },
 };
-const OFFLINE_EXPORT_VIDEO_CODEC_CANDIDATES = ['vp09.00.10.08', 'vp8'];
+// MP4（H.264/AAC）を優先し、非対応環境は WebM（VP9/VP8 + Opus）へフォールバックする
+const OFFLINE_EXPORT_CONTAINER_CANDIDATES = [
+  { container: 'mp4', videoCodec: 'avc1.640028', audioCodec: 'mp4a.40.2' },
+  { container: 'mp4', videoCodec: 'avc1.4d401f', audioCodec: 'mp4a.40.2' },
+  { container: 'mp4', videoCodec: 'avc1.42e01e', audioCodec: 'mp4a.40.2' },
+  { container: 'webm', videoCodec: 'vp09.00.10.08', audioCodec: 'opus' },
+  { container: 'webm', videoCodec: 'vp8', audioCodec: 'opus' },
+];
 
 class _ExportCancelled extends Error {}
 
@@ -195,25 +203,33 @@ class OfflineExporter {
     const history = new FrameHistory(historyCapacity, freqLen);
     const beatDetector = new BeatDetector();
 
-    // ── 映像エンコーダ ──
-    const videoCodec = await this._selectVideoCodec(width, height, fps);
-    if (!videoCodec) throw new Error('この環境では書き出し用のビデオエンコーダーが利用できません');
+    // ── コンテナ・コーデック選択（MP4優先、非対応環境は WebM） ──
+    const containerChoice = await this._selectContainer(width, height, fps);
+    if (!containerChoice) throw new Error('この環境では書き出し用のビデオエンコーダーが利用できません');
+    const { container, videoCodec, audioCodec } = containerChoice;
 
+    // ── 映像エンコーダ ──
     const videoChunks = [];
     let videoError = null;
+    let videoDescription = null; // MP4: avcC（AVCDecoderConfigurationRecord）
     const videoEncoder = new VideoEncoder({
-      output: (chunk) => {
+      output: (chunk, metadata) => {
         const data = new Uint8Array(chunk.byteLength);
         chunk.copyTo(data);
         videoChunks.push({ data, timestampUs: chunk.timestamp, keyframe: chunk.type === 'key' });
+        if (!videoDescription && metadata && metadata.decoderConfig && metadata.decoderConfig.description) {
+          videoDescription = new Uint8Array(metadata.decoderConfig.description.slice(0));
+        }
       },
       error: (e) => { videoError = e; },
     });
-    videoEncoder.configure({
+    const videoEncoderConfig = {
       codec: videoCodec, width, height,
       bitrate: this._videoBitrate(width, height, fps),
       framerate: fps,
-    });
+    };
+    if (container === 'mp4') videoEncoderConfig.avc = { format: 'avc' };
+    videoEncoder.configure(videoEncoderConfig);
 
     // ── 音声エンコーダ ──
     const audioChunks = [];
@@ -224,14 +240,14 @@ class OfflineExporter {
     let audioEncoder = null;
 
     if (typeof AudioEncoder !== 'undefined') {
-      let audioConfig = { codec: 'opus', sampleRate: encodeSampleRate, numberOfChannels: encodeChannels, bitrate: OFFLINE_EXPORT_AUDIO_BPS };
+      let audioConfig = { codec: audioCodec, sampleRate: encodeSampleRate, numberOfChannels: encodeChannels, bitrate: OFFLINE_EXPORT_AUDIO_BPS };
       let support = await AudioEncoder.isConfigSupported(audioConfig).catch(() => ({ supported: false }));
       if (!support.supported) {
         const resampled = await this._resampleTo48k(audioBuffer);
         pcmSource = resampled;
         encodeSampleRate = resampled.sampleRate;
         encodeChannels = Math.min(2, resampled.numberOfChannels);
-        audioConfig = { codec: 'opus', sampleRate: encodeSampleRate, numberOfChannels: encodeChannels, bitrate: OFFLINE_EXPORT_AUDIO_BPS };
+        audioConfig = { codec: audioCodec, sampleRate: encodeSampleRate, numberOfChannels: encodeChannels, bitrate: OFFLINE_EXPORT_AUDIO_BPS };
         support = await AudioEncoder.isConfigSupported(audioConfig).catch(() => ({ supported: false }));
       }
       if (support.supported) {
@@ -239,7 +255,8 @@ class OfflineExporter {
           output: (chunk, metadata) => {
             const data = new Uint8Array(chunk.byteLength);
             chunk.copyTo(data);
-            audioChunks.push({ data, timestampUs: chunk.timestamp });
+            const durationUs = chunk.duration != null ? chunk.duration : Math.round((data.length ? 1024 : 0) / encodeSampleRate * 1e6);
+            audioChunks.push({ data, timestampUs: chunk.timestamp, durationUs });
             if (!audioCodecDescription && metadata && metadata.decoderConfig && metadata.decoderConfig.description) {
               audioCodecDescription = new Uint8Array(metadata.decoderConfig.description.slice(0));
             }
@@ -301,6 +318,10 @@ class OfflineExporter {
     videoEncoder.close();
     if (stateful && stateful.dispose) { try { stateful.dispose(); } catch (_) {} }
 
+    if (container === 'mp4' && (!videoDescription || videoDescription.length === 0)) {
+      throw new Error('MP4 用の映像設定情報（avcC）を取得できませんでした');
+    }
+
     this._checkCancelled();
 
     if (audioEncoder) {
@@ -311,17 +332,31 @@ class OfflineExporter {
 
     this._setProgress(0.95);
 
-    const muxer = new WebmMuxer({
-      width, height,
-      videoCodecId: videoCodec.indexOf('vp09') === 0 ? 'V_VP9' : 'V_VP8',
-      audioCodecId: audioEncoder ? 'A_OPUS' : null,
-      sampleRate: encodeSampleRate,
-      channels: encodeChannels,
-      audioCodecPrivate: audioCodecDescription,
-    });
-    for (const c of videoChunks) muxer.addVideoChunk(c.data, c.timestampUs, c.keyframe);
-    for (const c of audioChunks) muxer.addAudioChunk(c.data, c.timestampUs);
-    const blob = muxer.finalize(durationMs);
+    let blob;
+    if (container === 'mp4') {
+      const muxer = new Mp4Muxer({
+        width, height, fps,
+        sampleRate: encodeSampleRate,
+        channels: encodeChannels,
+        avcConfig: videoDescription,
+        audioSpecificConfig: audioEncoder ? audioCodecDescription : null,
+      });
+      for (const c of videoChunks) muxer.addVideoChunk(c.data, c.timestampUs, c.keyframe);
+      for (const c of audioChunks) muxer.addAudioChunk(c.data, c.timestampUs, c.durationUs);
+      blob = muxer.finalize(durationMs);
+    } else {
+      const muxer = new WebmMuxer({
+        width, height,
+        videoCodecId: videoCodec.indexOf('vp09') === 0 ? 'V_VP9' : 'V_VP8',
+        audioCodecId: audioEncoder ? 'A_OPUS' : null,
+        sampleRate: encodeSampleRate,
+        channels: encodeChannels,
+        audioCodecPrivate: audioCodecDescription,
+      });
+      for (const c of videoChunks) muxer.addVideoChunk(c.data, c.timestampUs, c.keyframe);
+      for (const c of audioChunks) muxer.addAudioChunk(c.data, c.timestampUs);
+      blob = muxer.finalize(durationMs);
+    }
 
     this._setProgress(1);
     return blob;
@@ -434,14 +469,18 @@ class OfflineExporter {
     return await ctx.startRendering();
   }
 
-  async _selectVideoCodec(width, height, fps) {
+  // MP4（H.264）を優先し、非対応環境では WebM（VP9/VP8）にフォールバックする。
+  // ここでは映像コーデックの対応可否のみで容器を確定する
+  // （音声コーデックの対応可否・サンプルレート調整は _renderAndEncode 側で扱う）。
+  async _selectContainer(width, height, fps) {
     if (typeof VideoEncoder === 'undefined') return null;
-    for (const codec of OFFLINE_EXPORT_VIDEO_CODEC_CANDIDATES) {
+    const bitrate = this._videoBitrate(width, height, fps);
+    for (const cand of OFFLINE_EXPORT_CONTAINER_CANDIDATES) {
       try {
-        const support = await VideoEncoder.isConfigSupported({
-          codec, width, height, bitrate: this._videoBitrate(width, height, fps), framerate: fps,
-        });
-        if (support && support.supported) return codec;
+        const config = { codec: cand.videoCodec, width, height, bitrate, framerate: fps };
+        if (cand.container === 'mp4') config.avc = { format: 'avc' };
+        const support = await VideoEncoder.isConfigSupported(config);
+        if (support && support.supported) return cand;
       } catch (_) { /* 次候補へ */ }
     }
     return null;
@@ -465,6 +504,8 @@ class OfflineExporter {
     const pad = (n) => String(n).padStart(2, '0');
     const ts = d.getFullYear() + pad(d.getMonth() + 1) + pad(d.getDate()) + '_' +
       pad(d.getHours()) + pad(d.getMinutes()) + pad(d.getSeconds());
-    return `visualizer_offline_${ts}.webm`;
+    const mime = this.blob ? this.blob.type : '';
+    const ext = mime.indexOf('video/mp4') === 0 ? 'mp4' : 'webm';
+    return `visualizer_offline_${ts}.${ext}`;
   }
 }

@@ -2,6 +2,49 @@
 
 ---
 
+## 2026-07-18 — Phase 9.1 MP4対応オフライン書き出しを追加
+
+### 作業内容
+`doc/plan-phase8.md` Phase 9.1 に定めた「オフライン書き出しのMP4対応」を実装した。WebCodecsが対応していればMP4（H.264+AAC）で出力し、非対応環境ではWebM（VP9→VP8 + Opus）へ自動フォールバックする。
+
+#### 新規ファイル
+- `js/mp4-muxer.js`: 自前実装の fragmented MP4（fMP4）マクサー。`Mp4Muxer` クラスと `mp4TimescaleForFps(fps)` ヘルパーを公開する
+  - `ftyp` / `moov`（`mvhd` / 映像・音声 `trak` / `mvex`）/ 映像キーフレームごとに区切った `moof`+`mdat` の断片群 / `mfra`（シーク索引）を構築する
+  - 映像サンプルエントリは `avc1`+`avcC`、音声サンプルエントリは `mp4a`+`esds`（MPEG-4記述子: `ES_Descriptor`/`DecoderConfigDescriptor`/`DecoderSpecificInfo`/`SLConfigDescriptor`）
+  - `avcC`・`AudioSpecificConfig` は手動でビットストリームを解析せず、WebCodecsの `EncodedVideoChunkMetadata.decoderConfig.description` からそのまま取得する
+  - `trun.data_offset` と `mfra`の`moof_offset` は、WebMマクサーと同様「固定幅プレースホルダを先に書いてレイアウト確定後にパッチする」方式で解決する（ISOBMFFはフィールド幅が常に4バイト固定のため、WebM側のvint可変長対応より単純）
+  - 29.97fps選択時は timescale=30000・サンプル長=1001 を正確に扱う
+
+#### 変更ファイル
+- `js/offline-exporter.js`:
+  - コーデック候補を `OFFLINE_EXPORT_CONTAINER_CANDIDATES`（MP4優先→WebMフォールバックの5候補）に置き換え、`_selectContainer()` で `VideoEncoder.isConfigSupported()` により上から順に対応可否を判定する
+  - 映像・音声それぞれのエンコーダ出力コールバックで `metadata.decoderConfig.description` を捕捉し、MP4選択時は `Mp4Muxer` へ、WebM選択時は既存の `WebmMuxer` へ渡す形に分岐
+  - MP4選択時に `avcC` を取得できなかった場合はエラーとして中断するガードを追加
+  - `_generateFilename()` を実際の出力Blobの `type` から拡張子（`.mp4`/`.webm`）を判定する方式に変更
+- `index.html`: `js/mp4-muxer.js` の `<script>` タグを `webm-muxer.js` の直後・`offline-exporter.js` の直前に追加
+
+### 検証
+- 全JS `node --check` パス（`mp4-muxer.js`・`offline-exporter.js`）
+- `js/mp4-muxer.js` 単体: 自作Node製ISOBMFFリーダーで **39アサーションすべて成功**（box構成・`mvhd`/`mdhd`のtimescale/duration・29.97fpsの正確なtimescale=30000/サンプル長=1001・`avcC`/`esds`のバイト完全一致・全`trun`サンプルの`data_offset`が`mdat`内の正しいバイト位置を指すこと・キーフレームフラグ・音声なしケースでtrak数が1になること・20秒/約20断片の長時間ケース・`mfra`の`moof_offset`全件が実際の`moof`box境界を指すこと・`mfro`の自己参照サイズ整合性を含む）
+- 既存回帰: foundation単体テスト23件・settings-io16件・webm-muxer構造テスト22件・webm-duration検証、すべて既存と同結果でパス
+- Chromium実ブラウザE2E:
+  - 既存の全14タイプ切替回帰・Phase 8機能E2E・Phase 10.1動画合成E2E・オフライン書き出しE2E（通常/4バリアント）を再実行し、いずれもコンソールエラー0で既存と同結果
+  - このサンドボックスのChromium（swiftshader）は`VideoEncoder.isConfigSupported()`でavc1系プロファイルすべてが非対応（`vp09`/`vp8`のみ対応）と判定されることを確認。実行環境がH.264エンコードに対応していない場合の実測であり、`_selectContainer()`が意図通りWebMへフォールバックしていることを実際のオフライン書き出しE2Eで確認（`blobType: "video/webm"`で正常完走）
+  - MP4分岐自体は、`VideoEncoder`/`AudioEncoder`をこのサンドボックスでも動作するモック（`isConfigSupported`でavc1/mp4a.40.2を対応と返し、ダミーの符号化データと`decoderConfig.description`を返す）に差し替えた上で実際のオフライン書き出しUIを操作するE2Eで検証した。結果、`_selectContainer`がMP4を選択し、`Mp4Muxer`が呼ばれ、出力Blobの`type`が`video/mp4`、ファイル名が`.mp4`、トップレベルboxが`ftyp`/`moov`/`moof`×2/`mdat`×2/`mfra`の順で過不足なく構成されることを確認（コンソールエラー0）。実際のH.264ビットストリームの妥当性は`Mp4Muxer`単体のNodeテストで別途保証している
+
+### spec.md 変更
+- version `v1.7` → `v1.8`
+- §14.8 を更新（コンテナ生成方式の記述をWebM限定からMP4/WebM共通の表現に変更）
+- §14.8.1「コンテナ・コーデック選定（Phase 9.1）」を新設
+- §20 に「Phase 9.1: MP4対応オフライン書き出し（実装済み）」を追加
+- 理由: 新機能を仕様体系に正式に組み込むため
+
+### 備考
+- Phase 9.2（AudioWorklet移行）・Phase 10.2（オフライン書き出しでの動画合成）は `doc/plan-phase8.md` に設計を記載済みで、次フェーズとして継続する
+- AudioWorkletへの移行を見送っている理由: `AudioWorkletProcessor`はメインスレッドの`AnalyserNode`インスタンスに直接アクセスできない（別レルム）ため、置き換えにはFFT・窓関数・スムージングを自前でworklet内に再実装する必要があり、単純なノード差し替えでは済まない。Phase 9.2で対応する
+
+---
+
 ## 2026-07-18 — Phase 10.1 ライブ動画合成表示を追加
 
 ### 作業内容
