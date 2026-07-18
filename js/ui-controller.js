@@ -125,12 +125,20 @@ class UIController {
     this._updateRecButtons();
   }
 
-  // 動画合成の対象を切り替える（動画ファイル読込時のみセクションを表示する）
+  // 動画合成の対象を切り替える
   _setVideoElement(element) {
     this.visualizer.videoElement = element;
+    this._updateVideoCompositeVisibility();
+  }
+
+  // 動画合成セクションは、ライブ再生用の動画読込中またはオフライン書き出し対象が
+  // 動画ファイルの場合に表示する（Phase 10.2: オフライン書き出しでも合成が効くため）。
+  // どちらの対象もない場合は設定を自動オフにする
+  _updateVideoCompositeVisibility() {
+    const hasTarget = !!this.visualizer.videoElement || !!this._offlineFileIsVideo;
     const section = document.getElementById('video-composite-controls');
-    if (section) section.style.display = element ? '' : 'none';
-    if (!element) {
+    if (section) section.style.display = hasTarget ? '' : 'none';
+    if (!hasTarget) {
       this.visualizer.settings.videoCompositeEnabled = false;
       const chk = document.getElementById('chk-video-composite');
       if (chk) chk.checked = false;
@@ -265,6 +273,7 @@ class UIController {
 
     this.offlineExporter = new OfflineExporter();
     this._offlineFile = null;
+    this._offlineFileIsVideo = false;
 
     const supported = OfflineExporter.isSupported();
     if (!supported) {
@@ -278,6 +287,8 @@ class UIController {
       fileInput.value = '';
       if (!file) return;
       this._offlineFile = file;
+      this._offlineFileIsVideo = !!(file.type && file.type.indexOf('video/') === 0);
+      this._updateVideoCompositeVisibility();
       fileNameEl.textContent = file.name;
       btnSave.disabled = true;
       btnStart.disabled = !supported;
