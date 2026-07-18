@@ -29,6 +29,12 @@ body {
   background: #000;
 }
 
+/* 音声/動画ファイルのドラッグ&ドロップ受け入れ中 */
+#visualizer-area.dragover {
+  outline: 2px dashed #4da3ff;
+  outline-offset: -6px;
+}
+
 #canvas {
   display: block;
   background: #000;

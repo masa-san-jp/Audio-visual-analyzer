@@ -66,6 +66,15 @@
           <button id="btn-pause" disabled>一時停止</button>
           <button id="btn-stop" disabled>停止</button>
         </div>
+        <div id="seek-wrap" style="margin-top:8px;">
+          <input type="range" id="seek-bar" min="0" max="1000" value="0" step="1" disabled style="width:100%;">
+          <div id="time-display" class="label-text">0:00 / 0:00</div>
+        </div>
+        <label style="margin-top:4px;">
+          音量
+          <input type="range" id="volume-bar" min="0" max="100" value="100" step="1">
+          <span id="val-volume">100</span>
+        </label>
       </section>
 
       <section class="control-group" id="rec-controls" style="display:none;">
@@ -77,6 +86,14 @@
             <option value="25">25fps</option>
             <option value="29.97">29.97fps</option>
             <option value="30" selected>30fps</option>
+          </select>
+        </label>
+        <label>
+          画質
+          <select id="rec-quality">
+            <option value="low">低</option>
+            <option value="standard" selected>標準</option>
+            <option value="high">高</option>
           </select>
         </label>
         <div class="btn-row">
@@ -101,6 +118,14 @@
             <option value="25">25fps</option>
             <option value="29.97">29.97fps</option>
             <option value="30" selected>30fps</option>
+          </select>
+        </label>
+        <label>
+          画質
+          <select id="offline-quality">
+            <option value="low">低</option>
+            <option value="standard" selected>標準</option>
+            <option value="high">高</option>
           </select>
         </label>
         <div id="offline-progress-wrap" style="display:none; margin-top:6px;">

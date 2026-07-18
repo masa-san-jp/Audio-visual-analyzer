@@ -15,11 +15,13 @@ const RECORDER_MIME_CANDIDATES = [
 ];
 
 // 映像ビットレートの算出パラメーター
-const RECORDER_BITS_PER_PIXEL = 0.15;      // 1ピクセル・1フレームあたりのビット数
-const RECORDER_MIN_VIDEO_BPS  = 6000000;   // 6 Mbps
-const RECORDER_MAX_VIDEO_BPS  = 24000000;  // 24 Mbps
+const RECORDER_BITS_PER_PIXEL = 0.15;      // 1ピクセル・1フレームあたりのビット数（標準画質）
+const RECORDER_MIN_VIDEO_BPS  = 6000000;   // 6 Mbps（標準画質時）
+const RECORDER_MAX_VIDEO_BPS  = 24000000;  // 24 Mbps（標準画質時）
 const RECORDER_AUDIO_BPS      = 192000;    // 192 kbps
 const RECORDER_TIMESLICE_MS   = 1000;      // チャンク回収間隔
+// 画質プリセット（bit/pixel/frame）。下限/上限も標準比の係数でスケールする
+const RECORDER_QUALITY_FACTORS = { low: 0.08, standard: 0.15, high: 0.25 };
 
 class Recorder {
   constructor(canvas, audioEngine) {
@@ -30,6 +32,7 @@ class Recorder {
     this.state = 'idle'; // 'idle' | 'recording' | 'recorded'
     this.blob = null;
     this.frameRate = 30;
+    this.quality = 'standard'; // 'low' | 'standard' | 'high'
     this._audioDest = null;
     this._resetting = false;
     this._starting = false;
@@ -180,6 +183,11 @@ class Recorder {
     this.frameRate = numericFps;
   }
 
+  setQuality(quality) {
+    if (!RECORDER_QUALITY_FACTORS[quality]) return;
+    this.quality = quality;
+  }
+
   // ── 内部処理 ──
 
   // MediaRecorder 停止後の後処理（Blob 生成・WebM の Duration 書き込み）
@@ -237,11 +245,13 @@ class Recorder {
     if (this.onStateChange) this.onStateChange(newState);
   }
 
-  // 解像度・フレームレートに応じた映像ビットレート（bps）を算出する
+  // 解像度・フレームレート・画質プリセットに応じた映像ビットレート（bps）を算出する
   _videoBitrate() {
+    const factor = RECORDER_QUALITY_FACTORS[this.quality] || RECORDER_BITS_PER_PIXEL;
+    const scale = factor / RECORDER_BITS_PER_PIXEL;
     const pixelsPerSecond = this.canvas.width * this.canvas.height * this.frameRate;
-    const bps = Math.round(pixelsPerSecond * RECORDER_BITS_PER_PIXEL);
-    return Math.min(RECORDER_MAX_VIDEO_BPS, Math.max(RECORDER_MIN_VIDEO_BPS, bps));
+    const bps = Math.round(pixelsPerSecond * factor);
+    return Math.min(RECORDER_MAX_VIDEO_BPS * scale, Math.max(RECORDER_MIN_VIDEO_BPS * scale, bps));
   }
 
   _selectMimeType() {

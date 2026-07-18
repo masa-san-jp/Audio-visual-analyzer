@@ -13,6 +13,7 @@ class UIController {
     this._initMode();
     this._initFile();
     this._initPlayback();
+    this._initDragDrop();
     this._initRecording();
     this._initOfflineExport();
     this._initPresets();
@@ -72,23 +73,7 @@ class UIController {
     fileInput.addEventListener('change', async (e) => {
       const file = e.target.files[0];
       if (!file) return;
-      // マイク入力中にファイルを選んだ場合はマイクを停止して切り替える
-      if (this.micInput.active) this._stopMic(btnMic, fileNameEl);
-      fileNameEl.textContent = '読み込み中…';
-      try {
-        const loaded = await this.mediaManager.loadFile(file);
-        fileNameEl.textContent = file.name;
-        this._lastFileName = file.name;
-        this._setPlaybackEnabled(true);
-        this._updateRecButtons();
-        this._setVideoElement(loaded.isVideo ? loaded.element : null);
-      } catch (err) {
-        fileNameEl.textContent = 'エラー: ' + err.message;
-        this._lastFileName = 'エラー: ' + err.message;
-        this._setPlaybackEnabled(false);
-        this._updateRecButtons();
-        this._setVideoElement(null);
-      }
+      await this._loadMediaFile(file);
       fileInput.value = '';
     });
 
@@ -113,6 +98,53 @@ class UIController {
         btnMic.disabled = false;
         this._updateRecButtons();
       }
+    });
+  }
+
+  // ファイル選択・ドラッグ&ドロップ共通の読込処理
+  async _loadMediaFile(file) {
+    const fileNameEl = document.getElementById('file-name');
+    const btnMic = document.getElementById('btn-mic');
+    // マイク入力中にファイルを選んだ場合はマイクを停止して切り替える
+    if (this.micInput.active) this._stopMic(btnMic, fileNameEl);
+    fileNameEl.textContent = '読み込み中…';
+    try {
+      const loaded = await this.mediaManager.loadFile(file);
+      fileNameEl.textContent = file.name;
+      this._lastFileName = file.name;
+      this._setPlaybackEnabled(true);
+      this._updateRecButtons();
+      this._setVideoElement(loaded.isVideo ? loaded.element : null);
+      this._attachMediaListeners(loaded.element);
+    } catch (err) {
+      fileNameEl.textContent = 'エラー: ' + err.message;
+      this._lastFileName = 'エラー: ' + err.message;
+      this._setPlaybackEnabled(false);
+      this._updateRecButtons();
+      this._setVideoElement(null);
+    }
+  }
+
+  // ビジュアライザー表示領域への音声/動画ファイルのドロップで読み込む
+  _initDragDrop() {
+    const area = document.getElementById('visualizer-area');
+    ['dragover', 'dragenter'].forEach((type) => {
+      area.addEventListener(type, (e) => {
+        if (!e.dataTransfer) return;
+        e.preventDefault();
+        area.classList.add('dragover');
+      });
+    });
+    area.addEventListener('dragleave', () => area.classList.remove('dragover'));
+    area.addEventListener('drop', (e) => {
+      e.preventDefault();
+      area.classList.remove('dragover');
+      const files = e.dataTransfer && e.dataTransfer.files;
+      if (!files || !files.length) return;
+      const file = Array.from(files).find(
+        (f) => f.type.indexOf('audio/') === 0 || f.type.indexOf('video/') === 0
+      );
+      if (file) this._loadMediaFile(file);
     });
   }
 
@@ -161,6 +193,62 @@ class UIController {
       this.mediaManager.stop();
       this.visualizer.stop();
     });
+
+    // ── シークバー・音量 ──
+    this._volume = 1;          // セッション内で保持し、ファイル切替時にも適用する
+    this._seekDragging = false; // ドラッグ中は timeupdate によるバー上書きを抑止
+
+    const seekBar = document.getElementById('seek-bar');
+    seekBar.addEventListener('pointerdown', () => { this._seekDragging = true; });
+    seekBar.addEventListener('pointerup', () => { this._seekDragging = false; });
+    seekBar.addEventListener('input', () => {
+      const el = this.mediaManager.mediaElement;
+      if (!el || !isFinite(el.duration) || el.duration <= 0) return;
+      el.currentTime = (Number(seekBar.value) / 1000) * el.duration;
+    });
+
+    const volumeBar = document.getElementById('volume-bar');
+    const valVolume = document.getElementById('val-volume');
+    volumeBar.addEventListener('input', () => {
+      this._volume = clamp(Number(volumeBar.value), 0, 100) / 100;
+      valVolume.textContent = volumeBar.value;
+      const el = this.mediaManager.mediaElement;
+      if (el) el.volume = this._volume;
+    });
+  }
+
+  _formatTime(sec) {
+    if (!isFinite(sec) || sec < 0) sec = 0;
+    const m = Math.floor(sec / 60);
+    const s = Math.floor(sec % 60);
+    return m + ':' + String(s).padStart(2, '0');
+  }
+
+  _updateSeekDisplay() {
+    const el = this.mediaManager.mediaElement;
+    const seekBar = document.getElementById('seek-bar');
+    const timeDisplay = document.getElementById('time-display');
+    if (!el || !isFinite(el.duration) || el.duration <= 0) {
+      seekBar.value = 0;
+      timeDisplay.textContent = '0:00 / 0:00';
+      return;
+    }
+    if (!this._seekDragging) {
+      seekBar.value = Math.round((el.currentTime / el.duration) * 1000);
+    }
+    timeDisplay.textContent = this._formatTime(el.currentTime) + ' / ' + this._formatTime(el.duration);
+  }
+
+  // メディア要素はファイル読込ごとに作り直されるため、読込成功時に毎回付け直す
+  _attachMediaListeners(el) {
+    el.volume = this._volume;
+    const update = () => {
+      if (this.mediaManager.mediaElement === el) this._updateSeekDisplay();
+    };
+    el.addEventListener('timeupdate', update);
+    el.addEventListener('durationchange', update);
+    el.addEventListener('seeked', update);
+    update();
   }
 
   // ── 録画制御 ──
@@ -175,6 +263,12 @@ class UIController {
     this.recorder.setFrameRate(recFps.value);
     recFps.addEventListener('change', () => {
       this.recorder.setFrameRate(recFps.value);
+    });
+
+    const recQuality = document.getElementById('rec-quality');
+    this.recorder.setQuality(recQuality.value);
+    recQuality.addEventListener('change', () => {
+      this.recorder.setQuality(recQuality.value);
     });
 
     // 録画開始: 録画キャプチャの開始を待ってから再生を始める（A/V同期のため）
@@ -307,6 +401,7 @@ class UIController {
       progressEl.value = 0;
 
       const fps = Number(fpsSelect.value) || 30;
+      const quality = document.getElementById('offline-quality').value;
       // 開始時点の設定をスナップショットし、進行中の書き出しに
       // その後のUI操作の影響が混入しないようにする
       const settingsSnapshot = {
@@ -315,7 +410,7 @@ class UIController {
       };
 
       try {
-        await this.offlineExporter.export(this._offlineFile, settingsSnapshot, { fps });
+        await this.offlineExporter.export(this._offlineFile, settingsSnapshot, { fps, quality });
       } catch (_) {
         // エラー内容は onError 経由で表示済み
       } finally {
@@ -938,6 +1033,8 @@ class UIController {
     document.getElementById('btn-play').disabled  = !enabled;
     document.getElementById('btn-pause').disabled = !enabled;
     document.getElementById('btn-stop').disabled  = !enabled;
+    document.getElementById('seek-bar').disabled  = !enabled;
+    if (!enabled) this._updateSeekDisplay();
   }
 
   _onEnded() {
