@@ -361,13 +361,16 @@ class OfflineExporter {
       let layerData = frame.getLayer(i, layerCount);
       if (!layerData) continue;
       if (usePhysics) layerData = this._applyPhysics(layerData, frame.dtMs, settings.physicsAmount);
-      const layer = layers[i] || { hueOffset: 0, sensitivity: 1.0 };
+      const layer = layers[i] || { hueOffset: 0, sensitivity: 1.0, blendMode: 'source-over' };
       const layerSettings = {
         ...settings,
         hue: (effectiveHue + layer.hueOffset + 360) % 360,
         sensitivity: settings.sensitivity * layer.sensitivity,
       };
+      const prevOp = ctx.globalCompositeOperation;
+      ctx.globalCompositeOperation = layer.blendMode || 'source-over';
       renderer(ctx, canvas, layerData, layerSettings);
+      ctx.globalCompositeOperation = prevOp;
     }
   }
 
