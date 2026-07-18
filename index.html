@@ -33,6 +33,32 @@
         <div id="file-name">未選択</div>
       </section>
 
+      <section class="control-group" id="video-composite-controls" style="display:none;">
+        <h2>動画合成</h2>
+        <label style="margin-bottom:8px;">
+          <span class="toggle-row">
+            <span>映像を背景に表示</span>
+            <input type="checkbox" id="chk-video-composite">
+          </span>
+        </label>
+        <label>
+          不透明度&ensp;<span id="val-video-opacity">100</span>%
+          <input type="range" id="slider-video-opacity" min="0" max="100" value="100">
+        </label>
+        <label>
+          合成モード
+          <select id="video-blend-mode">
+            <option value="source-over">通常</option>
+            <option value="lighter">加算</option>
+            <option value="multiply">乗算</option>
+            <option value="screen">スクリーン</option>
+          </select>
+        </label>
+        <div class="label-text" style="margin-top:6px;">
+          残像などで全面を塗り直すアナライザータイプ（スペクトログラム等）では表示されません。
+        </div>
+      </section>
+
       <section class="control-group">
         <h2>再生</h2>
         <div class="btn-row">

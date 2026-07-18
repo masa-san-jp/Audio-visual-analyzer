@@ -19,6 +19,8 @@ class VisualizerCore {
     this._stateful = null;         // ステートフルレンダラーインスタンス
     this._physics = null;          // SpringArray（粘性揺らぎ用）
     this._physicsLen = 0;
+    // Phase 10: 動画合成表示（動画ファイル読込時に UIController が設定する）
+    this.videoElement = null;
     // 外へ渡す frame オブジェクト（使い回してGCを避ける）
     this._frame = {
       freq: null, time: null, history: null, beat: null,
@@ -84,6 +86,36 @@ class VisualizerCore {
     this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
   }
 
+  // 動画ファイル読込中に、現在再生位置のフレームを cover フィットで描画する
+  // （doc/plan-phase8.md §Phase 10.1）。UIController が videoElement /
+  // settings.videoCompositeEnabled を設定したときのみ描画する。
+  _drawVideoComposite() {
+    const el = this.videoElement;
+    if (!el || !this.settings.videoCompositeEnabled) return;
+    if (el.readyState < 2) return; // HAVE_CURRENT_DATA 未満はフレームが無い
+    const vw = el.videoWidth, vh = el.videoHeight;
+    if (!vw || !vh) return;
+
+    const canvas = this.canvas;
+    const ctx = this.ctx;
+    const canvasAspect = canvas.width / canvas.height;
+    const videoAspect = vw / vh;
+    let sx, sy, sw, sh;
+    if (videoAspect > canvasAspect) {
+      sh = vh; sw = vh * canvasAspect; sx = (vw - sw) / 2; sy = 0;
+    } else {
+      sw = vw; sh = vw / canvasAspect; sx = 0; sy = (vh - sh) / 2;
+    }
+
+    const prevAlpha = ctx.globalAlpha;
+    const prevOp = ctx.globalCompositeOperation;
+    ctx.globalAlpha = clamp(this.settings.videoCompositeOpacity, 0, 100) / 100;
+    ctx.globalCompositeOperation = this.settings.videoCompositeBlendMode || 'source-over';
+    ctx.drawImage(el, sx, sy, sw, sh, 0, 0, canvas.width, canvas.height);
+    ctx.globalAlpha = prevAlpha;
+    ctx.globalCompositeOperation = prevOp;
+  }
+
   // 履歴バッファを（必要なら）確保・サイズ調整する
   _ensureHistory() {
     const len = this.audioEngine.freqSliceLength();
@@ -137,7 +169,12 @@ class VisualizerCore {
 
     const entry = getRendererEntry(this.settings.analyzerType);
     const selfClear = entry.capabilities && entry.capabilities.selfClear;
-    if (!selfClear) this._clearWithAfterimage();
+    if (!selfClear) {
+      this._clearWithAfterimage();
+      // 動画合成: アナライザーの下地として現在の動画フレームを描く
+      // （selfClear タイプは自分で全面を塗るため対象外）
+      this._drawVideoComposite();
+    }
 
     // 色相連続変化モード
     let effectiveHue = this.settings.hue;

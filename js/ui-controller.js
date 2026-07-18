@@ -18,6 +18,7 @@ class UIController {
     this._initPresets();
     this._initAspectRatio();
     this._initFullscreen();
+    this._initVideoComposite();
     this._initAnalyzer();
     this._initColorControls();
     this._initShapeControls();
@@ -75,16 +76,18 @@ class UIController {
       if (this.micInput.active) this._stopMic(btnMic, fileNameEl);
       fileNameEl.textContent = '読み込み中…';
       try {
-        await this.mediaManager.loadFile(file);
+        const loaded = await this.mediaManager.loadFile(file);
         fileNameEl.textContent = file.name;
         this._lastFileName = file.name;
         this._setPlaybackEnabled(true);
         this._updateRecButtons();
+        this._setVideoElement(loaded.isVideo ? loaded.element : null);
       } catch (err) {
         fileNameEl.textContent = 'エラー: ' + err.message;
         this._lastFileName = 'エラー: ' + err.message;
         this._setPlaybackEnabled(false);
         this._updateRecButtons();
+        this._setVideoElement(null);
       }
       fileInput.value = '';
     });
@@ -102,6 +105,7 @@ class UIController {
         btnMic.textContent = 'マイク入力停止';
         fileNameEl.textContent = 'マイク入力中';
         this._setPlaybackEnabled(false);
+        this._setVideoElement(null); // マイク入力中は動画合成の対象がない
         this.visualizer.start();
       } catch (err) {
         fileNameEl.textContent = 'エラー: ' + err.message;
@@ -119,6 +123,18 @@ class UIController {
     fileNameEl.textContent = this._lastFileName;
     this._setPlaybackEnabled(this.mediaManager.isLoaded);
     this._updateRecButtons();
+  }
+
+  // 動画合成の対象を切り替える（動画ファイル読込時のみセクションを表示する）
+  _setVideoElement(element) {
+    this.visualizer.videoElement = element;
+    const section = document.getElementById('video-composite-controls');
+    if (section) section.style.display = element ? '' : 'none';
+    if (!element) {
+      this.visualizer.settings.videoCompositeEnabled = false;
+      const chk = document.getElementById('chk-video-composite');
+      if (chk) chk.checked = false;
+    }
   }
 
   // ── 再生制御 ──
@@ -463,6 +479,12 @@ class UIController {
     btnBlack.classList.toggle('active', s.bgColor !== '#fff');
     btnWhite.classList.toggle('active', s.bgColor === '#fff');
 
+    const chkVideo = document.getElementById('chk-video-composite');
+    if (chkVideo) chkVideo.checked = s.videoCompositeEnabled;
+    this._setSlider('video-opacity', 'val-video-opacity', s.videoCompositeOpacity, 0);
+    const videoBlendSelect = document.getElementById('video-blend-mode');
+    if (videoBlendSelect) videoBlendSelect.value = s.videoCompositeBlendMode || 'source-over';
+
     this.visualizer.resize();
   }
 
@@ -484,6 +506,31 @@ class UIController {
     document.addEventListener('fullscreenchange', () => {
       btn.classList.toggle('active', !!document.fullscreenElement);
       this.visualizer.resize();
+    });
+  }
+
+  // ── 動画合成表示 ──
+  // 動画ファイル読込中のみ表示するセクション（_setVideoElement が表示/非表示を制御）
+
+  _initVideoComposite() {
+    const chk = document.getElementById('chk-video-composite');
+    const opacitySlider = document.getElementById('slider-video-opacity');
+    const opacityVal = document.getElementById('val-video-opacity');
+    const blendSelect = document.getElementById('video-blend-mode');
+    if (!chk || !opacitySlider || !blendSelect) return;
+
+    chk.addEventListener('change', () => {
+      this.visualizer.settings.videoCompositeEnabled = chk.checked;
+    });
+
+    opacitySlider.addEventListener('input', () => {
+      const v = parseInt(opacitySlider.value, 10);
+      this.visualizer.settings.videoCompositeOpacity = v;
+      opacityVal.textContent = v;
+    });
+
+    blendSelect.addEventListener('change', () => {
+      this.visualizer.settings.videoCompositeBlendMode = blendSelect.value;
     });
   }
 
