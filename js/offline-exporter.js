@@ -16,9 +16,11 @@
 //
 // 外部ライブラリ不使用。WebCodecs / OfflineAudioContext は Chrome/Edge が対象。
 
-const OFFLINE_EXPORT_VIDEO_BITS_PER_PIXEL = 0.15; // recorder.js と同じ算出式
+const OFFLINE_EXPORT_VIDEO_BITS_PER_PIXEL = 0.15; // recorder.js と同じ算出式（標準画質）
 const OFFLINE_EXPORT_MIN_VIDEO_BPS = 6000000;
 const OFFLINE_EXPORT_MAX_VIDEO_BPS = 24000000;
+// 画質プリセット（bit/pixel/frame）。recorder.js と同じ値
+const OFFLINE_EXPORT_QUALITY_FACTORS = { low: 0.08, standard: 0.15, high: 0.25 };
 const OFFLINE_EXPORT_AUDIO_BPS = 192000;
 const OFFLINE_EXPORT_KEYFRAME_INTERVAL_SEC = 2;
 const OFFLINE_ANALYSIS_FFT_SIZE = 2048;
@@ -46,6 +48,7 @@ class OfflineExporter {
     this.progress = 0;   // 0..1
     this.blob = null;
     this._cancelRequested = false;
+    this._quality = 'standard';
     // 粘性揺らぎ（physicsAmount）用の内部状態。VisualizerCore._applyPhysics と同一ロジック。
     this._physics = null;
     this._physicsLen = 0;
@@ -69,11 +72,12 @@ class OfflineExporter {
   }
 
   // file: 音楽/動画ファイル（File）, settings: visualizer.settings のスナップショット,
-  // opts: { fps }
+  // opts: { fps, quality }（quality: 'low' | 'standard' | 'high'）
   async export(file, settings, opts) {
     this._cancelRequested = false;
     this.blob = null;
     const fps = (opts && opts.fps) || 30;
+    this._quality = (opts && OFFLINE_EXPORT_QUALITY_FACTORS[opts.quality]) ? opts.quality : 'standard';
     const aspectRatio = settings.aspectRatio === '1:1' ? '1:1' : '16:9';
     const res = OFFLINE_EXPORT_RESOLUTIONS[aspectRatio];
 
@@ -664,9 +668,13 @@ class OfflineExporter {
     return null;
   }
 
+  // 解像度・フレームレート・画質プリセットに応じた映像ビットレート（bps）。
+  // recorder.js の _videoBitrate と同じ算出式（下限/上限も標準比の係数でスケール）
   _videoBitrate(width, height, fps) {
-    const bps = Math.round(width * height * fps * OFFLINE_EXPORT_VIDEO_BITS_PER_PIXEL);
-    return Math.min(OFFLINE_EXPORT_MAX_VIDEO_BPS, Math.max(OFFLINE_EXPORT_MIN_VIDEO_BPS, bps));
+    const factor = OFFLINE_EXPORT_QUALITY_FACTORS[this._quality] || OFFLINE_EXPORT_VIDEO_BITS_PER_PIXEL;
+    const scale = factor / OFFLINE_EXPORT_VIDEO_BITS_PER_PIXEL;
+    const bps = Math.round(width * height * fps * factor);
+    return Math.min(OFFLINE_EXPORT_MAX_VIDEO_BPS * scale, Math.max(OFFLINE_EXPORT_MIN_VIDEO_BPS * scale, bps));
   }
 
   _yield() {
