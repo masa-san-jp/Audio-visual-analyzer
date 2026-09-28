@@ -74,6 +74,12 @@ IP アドレス（Mac / Linux は `ifconfig`、Windows は `ipconfig` で確認�
 - 初回再生時はブラウザの制限によりユーザー操作が必要です。
 - 詳細仕様は `doc/spec.md` を参照してください。
 
+## 開発者向けテスト
+
+テストは Node.js 22.4 以上と Chrome / Chromium を使って実行します。依存パッケージのインストールは不要です。
+
+`node tests/run.mjs` で単体テストとブラウザテストを実行します。`--unit` または `--browser` で対象を絞り、`--filter <正規表現>` でテスト ID・名称を指定できます。Chrome の自動検出に失敗する環境では `CHROME_PATH` に実行ファイルを指定してください。
+
 ## 開発ドキュメント
 
 | 文書 | 内容 |
