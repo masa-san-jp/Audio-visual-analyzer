@@ -6,6 +6,13 @@ import { spawn } from 'node:child_process';
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
+export class BrowserEnvironmentError extends Error {
+  constructor(message, options) {
+    super(message, options);
+    this.name = 'BrowserEnvironmentError';
+  }
+}
+
 export function findChrome(env = process.env) {
   const candidates = [];
   if (env.CHROME_PATH) candidates.push(env.CHROME_PATH);
@@ -56,7 +63,7 @@ function isExecutable(candidate, env) {
 
 export async function launchChrome({ headed = false, executablePath = findChrome() } = {}) {
   if (!executablePath) {
-    throw new Error('Chrome / Chromium が見つかりません。CHROME_PATH を指定してください。');
+    throw new BrowserEnvironmentError('Chrome / Chromium が見つかりません。CHROME_PATH を指定してください。');
   }
 
   const userDataDir = await fsp.mkdtemp(path.join(os.tmpdir(), 'avz-chrome-'));
@@ -83,9 +90,12 @@ export async function launchChrome({ headed = false, executablePath = findChrome
   while (Date.now() < deadline) {
     if (spawnError) {
       await fsp.rm(userDataDir, { recursive: true, force: true });
-      throw new Error(`Chrome の起動に失敗しました: ${spawnError.message}`);
+      throw new BrowserEnvironmentError(`Chrome の起動に失敗しました: ${spawnError.message}`);
     }
-    if (child.exitCode !== null) throw new Error(`Chrome が起動コード ${child.exitCode} で終了しました。`);
+    if (child.exitCode !== null) {
+      await fsp.rm(userDataDir, { recursive: true, force: true });
+      throw new BrowserEnvironmentError(`Chrome が起動コード ${child.exitCode} で終了しました。`);
+    }
     try {
       port = Number((await fsp.readFile(activePortPath, 'utf8')).split(/\r?\n/)[0]);
       if (port > 0) break;
@@ -95,18 +105,35 @@ export async function launchChrome({ headed = false, executablePath = findChrome
   if (!port) {
     child.kill();
     await fsp.rm(userDataDir, { recursive: true, force: true });
-    throw new Error('DevToolsActivePort が10秒以内に生成されませんでした。');
+    throw new BrowserEnvironmentError('DevToolsActivePort が10秒以内に生成されませんでした。');
   }
 
-  const tabs = await fetch(`http://127.0.0.1:${port}/json`).then((r) => r.json());
+  let tabs;
+  try {
+    tabs = await fetch(`http://127.0.0.1:${port}/json`).then((r) => r.json());
+  } catch (error) {
+    child.kill();
+    await fsp.rm(userDataDir, { recursive: true, force: true });
+    throw new BrowserEnvironmentError(`Chrome DevTools へ接続できません: ${error.message}`, { cause: error });
+  }
   const page = tabs.find((tab) => tab.type === 'page' && tab.webSocketDebuggerUrl);
-  if (!page) throw new Error('Chrome の DevTools ページを取得できませんでした。');
+  if (!page) {
+    child.kill();
+    await fsp.rm(userDataDir, { recursive: true, force: true });
+    throw new BrowserEnvironmentError('Chrome の DevTools ページを取得できませんでした。');
+  }
 
   const socket = new WebSocket(page.webSocketDebuggerUrl);
-  await new Promise((resolve, reject) => {
-    socket.addEventListener('open', resolve, { once: true });
-    socket.addEventListener('error', reject, { once: true });
-  });
+  try {
+    await new Promise((resolve, reject) => {
+      socket.addEventListener('open', resolve, { once: true });
+      socket.addEventListener('error', reject, { once: true });
+    });
+  } catch (error) {
+    child.kill();
+    await fsp.rm(userDataDir, { recursive: true, force: true });
+    throw new BrowserEnvironmentError(`Chrome DevTools WebSocket に接続できません: ${error.message}`, { cause: error });
+  }
 
   let nextId = 0;
   const pending = new Map();

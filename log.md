@@ -17,14 +17,14 @@
 - node tests/run.mjs --unit --filter 'U15-00 正常系': PASS、終了コード 0
 - node tests/run.mjs --unit --filter 'U15-00 異常系': FAIL、終了コード 1（期待どおり）
 - 変更した全 JavaScript / MJS ファイルの node --check: PASS
-- B15-00: 実行環境に Chrome / Chromium がなく未実行（Chrome 検出は null）
+- B15-00: Chrome 154 を導入したが、実行環境が Unix domain socket を禁止し（socket() = EPERM）、DevTools が起動できず未実行
 
 ### spec.md 変更
 - なし（T15-01 の指定どおり）
 
 ### 備考
 - PR #32 の実装計画書に基づく初回チケット。T15-01 の前提チケットはなし
-- PR の完了条件にある全テスト実行は、Chrome を利用できる環境で再確認が必要
+- PR の完了条件にある全テスト実行は、Unix domain socket が利用できる環境で再確認が必要
 
 ---
 

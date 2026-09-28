@@ -3,7 +3,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
-import { findChrome, launchChrome } from './lib/chrome.mjs';
+import { BrowserEnvironmentError, findChrome, launchChrome } from './lib/chrome.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const OUTPUT_DIR = path.join(ROOT, 'tests/output');
@@ -111,8 +111,8 @@ if (options.browser && shouldRun('B15-00')) {
     await runBrowserSmokeTests();
   } catch (error) {
     record('B15-00', 'ブラウザー起動', 'fail', 0, error.message);
-    if (!findChrome()) {
-      console.error('実行環境エラー: Chrome / Chromium が必要です。');
+    if (!findChrome() || error instanceof BrowserEnvironmentError) {
+      console.error(`実行環境エラー: ${error.message}`);
       process.exitCode = 2;
     }
   }
