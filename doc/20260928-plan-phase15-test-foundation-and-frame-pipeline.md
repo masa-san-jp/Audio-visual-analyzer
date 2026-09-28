@@ -28,7 +28,7 @@
 
 | 課題 | 場所 | 影響 |
 |---|---|---|
-| 描画ロジックの複製 | `offline-exporter.js` の `_renderStateless` / `_applyPhysics` / `_clearFrame` / `_sliceLayer` が `visualizer-core.js` の同名処理のコピー（コメントに「実時間駆動できないため複製」と明記） | 片方だけ直すとプレビューと書き出しの見た目がずれる |
+| 描画ロジックの複製 | `offline-exporter.js` の `_renderStateless` / `_applyPhysics` / `_clearFrame` / `_sliceLayer` が、`visualizer-core.js` の対応する処理（`_renderStateless` / `_applyPhysics` / `_clearWithAfterimage` / `AudioEngine.getLayerData`）のコピー（コメントに「実時間駆動できないため複製」と明記） | 片方だけ直すとプレビューと書き出しの見た目がずれる |
 | 色相連続変化の不一致 | ライブ: `_huePhase += speed * 0.5`（1フレームごと）。オフライン: `+= speed * 0.5 * (dtMs / 16.7)` | 120Hz ディスプレイではライブの色相変化が書き出しの2倍速になる |
 | テストがリポジトリにない | `log.md` に記録されたテストスクリプト（`test-mp4-demuxer.mjs`、`phase14-e2e.mjs` 等）が存在しない | 外注実装者が回帰を確認できない |
 
@@ -67,6 +67,7 @@ tests/
 | `node tests/run.mjs --filter <正規表現>` | テスト ID または名前が一致するものだけ |
 | `node tests/run.mjs --update-golden` | ゴールデン基準値を再生成して `tests/golden/frames.json` を上書き |
 | `node tests/run.mjs --headed` | ブラウザを表示して実行（デバッグ用） |
+| `node tests/run.mjs --skip-slow` | `slow: true` 指定のテスト（数分かかる書き出し系）を飛ばす（ローカル用。CI では全件実行） |
 
 - 終了コード: 全件成功 0 / 失敗あり 1 / 実行環境エラー（Chrome が見つからない等）2
 - 結果は標準出力に一覧表示し、`tests/output/report.json` に `[{id, name, status: 'pass'|'fail'|'skip', ms, error}]` で保存
@@ -80,6 +81,7 @@ tests/
 export function loadClassic(files, globals = {}) -> { get(name), context }
 ```
 
+- コンテキストへの既定の注入: `console`、`performance`、`Blob`、`TextEncoder`、`TextDecoder`、`URL`（マルチプレクサ・設定入出力が使う）。`globals` 引数で追加・上書きできる
 - 実装: `node:vm` の `createContext` で1つのコンテキストを作り、各ファイルを `runInContext` で順に評価する。トップレベルの `class` / `const` は同一コンテキスト内の後続スクリプトから参照でき、`get(name)` は `vm.runInContext(name, context)` で取り出す（動作確認済み）
 - アプリ本体には手を入れない
 
@@ -110,7 +112,7 @@ export function loadClassic(files, globals = {}) -> { get(name), context }
 #### 3.4.2 テスト登録 API（`tests/browser/lib/avz-test.js`）
 
 ```js
-avzTest(id, name, async () => { ... }, { timeoutMs = 30000 } = {});
+avzTest(id, name, async () => { ... }, { timeoutMs = 30000, slow = false } = {});
 avzAssert.ok(cond, msg);
 avzAssert.equal(actual, expected, msg);          // ===
 avzAssert.close(actual, expected, tol, msg);     // |a-e| <= tol
@@ -125,15 +127,25 @@ window.__avzRun(filterRegexSource) -> Promise<Result[]>
 
 Node とブラウザの両方で使う classic script。すべて**シード固定の決定的出力**。戻り値は `{ sampleRate, channels: [Float32Array, ...] }`（以下 `PcmBuffer`）。
 
-| 関数 | 内容 |
+共通規則:
+- 乱数は `makeRng(seed)`（`js/vis-utils.js` と同一の実装を `signals.js` 内に複製してよい）。`rng()` は 0..1
+- 時刻 → サンプル位置は `round(秒 × sampleRate)`、音の長さも `len = round(秒 × sampleRate)`
+- 合成は加算。範囲外のサンプル位置は無視する。正規化はしない（関数ごとに振幅を明記）
+- `pan`（−1..1）は等パワー: `L += v·cos((pan+1)·π/4)·√2`、`R += v·sin((pan+1)·π/4)·√2`（`pan = 0` で両 ch に v）
+
+| 関数 | 定義 |
 |---|---|
-| `sigSine(sr, sec, freqHz, amp, {pan = 0})` | 正弦波。`pan` −1（左）〜 +1（右）、等パワーパン |
-| `sigNoise(sr, sec, amp, seed, {color: 'white'|'pink', stereo: 'same'|'independent'})` | ノイズ。ピンクは Voss-McCartney 16段 |
-| `sigClickTrack(sr, sec, bpm, {amp = 0.8, clickMs = 5, accentEvery = 0, accentGain = 2, startSec = 0})` | 拍位置に 5ms の減衰ノイズバースト（シード1）。`accentEvery=4` で4拍ごとに `accentGain` 倍 |
-| `sigDrumPattern(sr, sec, bpm, {kick, hat, snare})` | キック（60Hz→40Hz スイープ 120ms）・ハット（8kHz 以上のノイズ 30ms）・スネア（200Hz＋ノイズ 80ms）を16分グリッドに配置。引数は16要素の0/1配列 |
-| `sigChord(sr, sec, midiNotes, amp)` | 複数正弦波の和音（倍音3次まで、振幅 1, 0.5, 0.25） |
-| `sigMix(bufs, gains)` / `sigConcat(bufs)` | 合成・連結（サンプルレート一致が前提） |
+| `sigSine(sr, sec, freqHz, amp, {pan = 0})` | `v[i] = amp·sin(2π·freqHz·i/sr)` を pan で配置 |
+| `sigNoise(sr, sec, amp, seed, {color = 'white', stereo = 'same'})` | 白色: `w = rng()·2 − 1`。ピンク: Paul Kellet の簡易フィルタ `b0 = 0.99765·b0 + w·0.0990460; b1 = 0.96300·b1 + w·0.2965164; b2 = 0.57000·b2 + w·1.0526913; v = (b0 + b1 + b2 + w·0.1848)/3`（状態 0 から開始）。最後に `amp` を掛ける。`stereo = 'same'` は L = R、`'independent'` は L をシード `seed`、R をシード `seed + 1` で別に生成 |
+| `sigClickTrack(sr, sec, bpm, {amp = 0.8, accentEvery = 0, accentGain = 2})` | 拍 k（k = 0, 1, …、`k·60/bpm < sec`）の開始 `s = round(k·60/bpm·sr)` に、`len = round(0.005·sr)`、`g = (accentEvery > 0 && k mod accentEvery == 0) ? accentGain : 1`、`i ∈ [0, len)` で `v[s+i] += min(1, amp·g)·(rng()·2 − 1)·exp(−i/(len/4))`。乱数はシード 1 を拍順・サンプル順に消費。L = R |
+| `sigDrumPattern(sr, sec, bpm, {kick, hat, snare})` | 各引数は長さ16の 0/1 配列（1小節 = 16分音符 16 個。小節ごとに繰り返す）。既定値: kick = 4つ打ち（0, 4, 8, 12 番が 1）、hat = 8分（偶数番が 1）、snare = 全 0。16分音符 k（`k·15/bpm < sec`）の開始 `s = round(k·15/bpm·sr)`、`st = k mod 16` について、キック → ハット → スネアの順に生成。キック: `len = round(0.12·sr)`、`ph = 0` から `ph += 2π·(60 − 20·i/len)/sr`、`0.9·sin(ph)·exp(−i/(0.04·sr))`。ハット: `len = round(0.03·sr)`、`prev = 0` から `w = rng()·2 − 1`、`0.25·(w − prev)·exp(−i/(0.008·sr))`、`prev = w`（1階差分で高域を強調）。スネア: `len = round(0.08·sr)`、`ph = 0` から `ph += 2π·200/sr`、`(0.3·sin(ph) + 0.3·(rng()·2 − 1))·exp(−i/(0.02·sr))`。乱数はシード 3。L = R |
+| `sigChord(sr, sec, midiNotes, amp)` | `v[i] = amp·Σ_m (sin(2π·f_m·i/sr) + 0.5·sin(4π·f_m·i/sr) + 0.25·sin(6π·f_m·i/sr)) / midiNotes.length`、`f_m = 440·2^((m − 69)/12)`。L = R |
+| `sigMix(bufs, gains)` | 同じサンプルレートの PcmBuffer を `Σ gains[j]·bufs[j]` で合成（長さは最長に合わせ、短いものは 0 埋め） |
+| `sigConcat(bufs)` | 時間方向に連結 |
+| `sigScaleToLufs(buf, targetLufs)` | Phase 16 §5.8 の K 特性で全区間の平均二乗からラウドネスを測り、目標になるよう全体に定数を掛ける（Phase 16 のテスト用。T16-04 で追加） |
 | `synthFrame(i, freqLen, timeLen, outFreq, outTime)` | **音声を経由しない**描画テスト用の決定的スペクトル（下式） |
+
+Phase 16 の受け入れテストで「ピンクノイズ（振幅 0.25）を加えた」とは、`sigMix([信号, sigNoise(sr, sec, 0.25, 7, {color: 'pink'})], [1, 1])` を指す。
 
 `synthFrame` の定義（ゴールデンの再現性のため式を固定する）:
 
@@ -193,8 +205,8 @@ time[n] = clamp(round(128 + 90*(0.5 + 0.5*p)*sin(2π*n*(3 + i%7)/timeLen)), 0, 2
 
 | ドライバ | 使う時期 | 方法 |
 |---|---|---|
-| `visualizer-core` | T15-05（基準値の作成）と T15-06 の比較用 | `VisualizerCore` を生成し、`audioEngine` に**テスト用の偽オブジェクト**（`captureFrame()`・`getFreqSlice()`・`freqSliceLength()`・`getTimeDomainData()`・`getLayerData(i, count)` を `synthFrame` の結果で実装）を渡す。`window.requestAnimationFrame` を何もしない関数に、`performance.now` を `() => i * 16.7` に差し替え、`running = true` にして `_loop()` を1回ずつ呼ぶ |
-| `pipeline` | T15-06 以降 | `new FramePipeline(canvas)` に §4.2 の `input` を直接渡す |
+| `visualizer-core` | T15-05（基準値の作成）と T15-06 の比較用 | `VisualizerCore` を生成し、`audioEngine` に**テスト用の偽オブジェクト**を渡す: `captureFrame()` で `synthFrame(i, …)` を内部配列へ書き、`getFreqSlice()` はその freq、`freqSliceLength()` は 638、`getTimeDomainData()` はその time、`getLayerData(li, count)` は `sliceLayerLinear` と同じ式（`freq.subarray(floor(li·638/count), floor((li+1)·638/count))`）を返す。canvas の `width`/`height` を直接設定し **`resize()` は呼ばない**（親要素の寸法に依存するため）。描画前に `_fillBackground()` で1回全面を塗る。`window.requestAnimationFrame` を何もしない関数に、`performance.now` を `() => i * 16.7` に差し替え、`_lastFrameMs = -16.7`、`running = true` にして、各 i で `_loop()` を1回呼ぶ |
+| `pipeline` | T15-06 以降 | `new FramePipeline(canvas)` を作り、`fillBackground(settings)` の後、各 i で §4.2 の `input`（`freq`・`time` は `synthFrame` の結果、`getLayer: null`、`dtMs: 16.7`、`nowMs: i·16.7`、`historyFps: 60`、`drawBackground: null`）で `render` |
 
 T15-06 のマージ条件は「`pipeline` ドライバが T15-05 の基準値に一致すること」。一致を確認したら `visualizer-core` ドライバは削除する。
 
@@ -242,11 +254,13 @@ class FramePipeline {
 | 1 | `settings.analyzerType` が前回と違えば、ステートフルレンダラーを破棄・生成し `onResize` を呼び、履歴をクリア | `VisualizerCore._syncRenderer` |
 | 2 | `selfClear` でなければ: 残像付きクリア → `input.drawBackground` があれば呼ぶ | `_clearWithAfterimage` / `_drawVideoComposite` の呼び出し位置 |
 | 3 | 色相位相を更新（§4.4）して `effectiveHue` を求める | `_loop` 内 |
-| 4a | ステートフル: 履歴を確保（容量 = `min(240, max(2, round(clamp(historySeconds, 1, 8) * historyFps))))`）→ `freq` を push → `frame`（使い回しオブジェクト）を更新 → `beat = BeatDetector.update(freq, nowMs)` → `render(ctx, canvas, frame, {...settings, hue: effectiveHue})` | `_renderStateful` / `_ensureHistory` |
+| 4a | ステートフル: 履歴を確保（容量 = `min(240, max(2, round(clamp(historySeconds, 1, 8) * historyFps))))`、フレーム長 = `freq.length`）→ `freq` が null でなければ push（null なら push しない。現行と同じ）→ `frame`（使い回しオブジェクト）の `freq`・`time`・`history`・`beat`（= `BeatDetector.update(freq, nowMs)`。freq が null のとき BeatDetector は既定値を返す）・`dtMs`・`nowMs`・`getLayer` を更新 → `render(ctx, canvas, frame, {...settings, hue: effectiveHue})` | `_renderStateful` / `_ensureHistory` |
 | 4b | ステートレス: レイヤーごとに `getLayer` → 粘性揺らぎ → 合成モード設定 → レンダラー呼び出し | `_renderStateless` / `_applyPhysics` |
 
 - `{...settings, hue}` の毎フレーム生成は現行と同じく許容する（ガイド §9.3 の例外）
 - `sliceLayerLinear(freq, i, count)` は `frame-pipeline.js` にトップレベル関数として置く（現 `OfflineExporter._sliceLayer` と同じ式）
+- `frame.getLayer` は `bar3d`・`flower`・`metaball`・`particles`・`ring3d`・`ripple` が使う。**constructor で1回だけ作る束縛関数** `this._getLayerBound = (i, count) => this._getLayer(i, count)` を設定し、`_getLayer` は現在の `input.getLayer`（無ければ `sliceLayerLinear(現在の freq, …)`）へ委譲する（毎フレームのクロージャ生成を避ける）
+- ステートレス経路のレイヤー取得も同じ `_getLayer` を使う
 
 ### 4.4 意図的な振る舞い変更（1件のみ）
 
@@ -260,7 +274,7 @@ class FramePipeline {
 | ファイル | 残る責務 | 削除するもの |
 |---|---|---|
 | `visualizer-core.js` | rAF ループ、`resize()`（キャンバス寸法決定）、`start/stop`、`audioEngine` からの `input` 組み立て、動画要素の描画関数（`drawBackground` として渡す） | `_syncRenderer`、`_clearWithAfterimage`、`_renderStateful`、`_renderStateless`、`_applyPhysics`、`_ensureHistory`、`_huePhase` |
-| `offline-exporter.js` | 解析、エンコード、合成ソースからのフレーム取得（`await frameAt()` で先に取得し、`drawBackground` のクロージャで描く）、`input` 組み立て（`historyFps = fps`） | `_renderStateless`、`_applyPhysics`、`_clearFrame`、`_sliceLayer`、フレームループ内の色相計算 |
+| `offline-exporter.js` | 書き出しごとに `new FramePipeline(書き出し用canvas, ctx)` を作り、終了時に `dispose()`（現行は粘性揺らぎの状態 `_physics` が書き出しをまたいで残っているが、書き出しごとに初期化する形に改める）。解析、エンコード、合成ソースからのフレーム取得（`await frameAt()` で先に取得し、`drawBackground` のクロージャで描く）、`input` 組み立て（`historyFps = fps`） | `_renderStateless`、`_applyPhysics`、`_clearFrame`、`_sliceLayer`、フレームループ内の色相計算 |
 
 - `index.html` の `<script>` に `js/frame-pipeline.js` を `js/renderer-registry.js` の直後に追加
 - `VisualizerCore` の公開プロパティ（`settings`、`videoElement`、`canvas`、`resize()`、`start()`、`stop()`）と、`ui-controller.js` から呼ばれている `_fillBackground()` は名前・引数を変えない（中身は `pipeline.fillBackground(this.settings)` へ委譲）。`ui-controller.js` は変更しない
@@ -286,7 +300,7 @@ class FramePipeline {
 | T15-03 | ブラウザテストハーネス | ★2 | T15-01 | `tests/lib/harness-builder.mjs`、`tests/browser/lib/avz-test.js` | B15-00 | 不要 |
 | T15-04 | 合成信号・WAV ライブラリ | ★2 | T15-01 | `tests/shared/signals.js`、`tests/shared/wav.js` | U15-07、U15-08 | 不要 |
 | T15-05 | ゴールデン基準値の作成 | ★2 | T15-03, T15-04 | `tests/shared/golden-cases.js`、`tests/browser/golden.test.js`（`visualizer-core` ドライバ）、`tests/golden/frames.json`、`tests/lib/png.mjs` | B15-04 | 不要 |
-| T15-06 | FramePipeline への統合 | ★3 | T15-05 | `js/frame-pipeline.js`、`visualizer-core.js`・`offline-exporter.js`・`index.html` の変更、ゴールデンを `pipeline` ドライバへ切替 | B15-04、B15-05、B15-02、B15-03 | 要（§4.4） |
+| T15-06 | FramePipeline への統合 | ★3 | T15-05, T15-07 | `js/frame-pipeline.js`、`visualizer-core.js`・`offline-exporter.js`・`index.html` の変更、ゴールデンを `pipeline` ドライバへ切替 | B15-04、B15-05、B15-02、B15-03 | 要（§4.4） |
 | T15-07 | 既存機能の回帰テスト | ★2 | T15-03, T15-04 | `tests/browser/regression.test.js` | B15-01〜B15-03 | 不要 |
 | T15-08 | デバッグ表示 | ★1 | T15-06 | `js/debug-overlay.js`、`index.html`、`visualizer-core.js` | B15-06 | 要（README に `?debug=1` を追記） |
 | T15-09 | CI・PR テンプレート | ★1 | T15-02, T15-07 | `.github/workflows/test.yml`、`.github/pull_request_template.md` | CI 上で全テストが成功すること | 不要 |
@@ -306,7 +320,7 @@ class FramePipeline {
 | U15-01 | `settings-io.js` | `serializeSettings` → `deserializeSettings` の往復で `createDefaultSettings()` と深い一致。不正入力（`null`、`{}`、型違い、未知キー、`layers` 欠損）で例外を出さず既定値へフォールバック |
 | U15-02 | `history-buffer.js` | push / get(age) / 容量超過時の上書き / `setFrameLength` でのクリア / 範囲外 `null` |
 | U15-03 | `vis-utils.js` | `makeRng(1)` の先頭5値が2回の生成で一致。`computeFreqRange(48000, 1024)` = `{startBin: 2, endBin: 640}`、`computeFreqRange(44100, 1024)` = `{startBin: 2, endBin: 697}` |
-| U15-04 | `fft.js` | `SpectrumAnalyzer(256, 0, -100, -30)` の出力が、同じ手順（Blackman 窓→素朴な DFT→1/N→dB→byte）で計算した参照値とバイト単位で一致（シード固定の乱数入力5種） |
+| U15-04 | `fft.js` | `SpectrumAnalyzer(256, 0, -100, -30)` の出力と、同じ手順（Blackman 窓→素朴な DFT→1/N→dB→byte）を倍精度で計算した参照値の差が全ビンで ±1 以内、かつ 99% 以上のビンで完全一致（シード固定の乱数入力5種。SpectrumAnalyzer は内部が Float32 のため切り捨て境界で1ずれうる） |
 | U15-05 | WebM | `WebmMuxer` に合成チャンク（映像30・キーフレーム間隔10・音声あり）を入れた出力を `WebmDemuxer.parse` で読み戻し、映像チャンクのバイト列・タイムスタンプ・キーフレームフラグが完全一致 |
 | U15-06 | MP4 | `Mp4Muxer` → `Mp4Demuxer` で U15-05 と同等の往復一致（pts 誤差 ±1μs） |
 | U15-07 | `signals.js` | 同じ引数で2回生成した出力がビット単位で一致。`sigClickTrack(48000, 4, 120)` のクリック開始サンプルが 0, 24000, 48000, … |

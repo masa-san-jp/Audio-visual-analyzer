@@ -111,7 +111,21 @@ Phase 16 の定数（`MFS_CONST`・`mfsDerived`）もそのまま使う（`fr`�
 
 ### 4.2 手順（`buildSongMap(rows, { sampleRate, durationSec })`）
 
-記法: L = 行数（ホップ数）、`z(a)` は母標準偏差による標準化（標準偏差 ≤ `EPS` なら全 0）、`cos(a, b)` はコサイン類似度（どちらかのノルム ≤ `EPS` なら 0）、`pct(a, p)` は昇順ソート後の要素 `a[round(p·(n−1))]`。
+`rows` は `Float32Array(L·49)`（§3 の行を連結）。最初に `durationSec < MIN_DURATION_SEC` なら `'too-short'`、`> MAX_DURATION_SEC` なら `'too-long'` を投げる（`SongMapService` も解析前に同じ判定をして無駄な処理を避ける）。各段階は次の関数に分け、テストから個別に呼べるようにする（すべて `module.exports` に含める）。
+
+| 段階 | 関数 |
+|---|---|
+| ① | `songOdf(rows, L, fr) -> { o, oL }`（Float64Array） |
+| ② | `songGlobalTempo(o, fr) -> { bpm, conf, P }` |
+| ③ | `songDpBeats(o, P) -> number[]`（ホップ番号） |
+| ④ | `songGridBeats(o, P, dpBeats) -> { beatHops, beatSource }` |
+| ⑤ | `songDownbeats(beatHops, oL, rows, L) -> number[]`（downbeatIndices） |
+| ⑥ | `songBars(beatHops, beats, downbeatIndices, rows, L, durationSec) -> { bars, v, E }` |
+| ⑦ | `songBoundaries(v, E, bpm) -> number[]`（小節番号。先頭 0・末尾 nbar を含む） |
+| ⑧⑨ | `songSections(boundaries, bars, v, E, bpm) -> sections` |
+
+
+記法: L = 行数（ホップ数）。本節の平均・標準偏差はすべて**母集団**（n で割る）。`z(a)` は母標準偏差による標準化（標準偏差 ≤ `EPS` なら全 0）、`cos(a, b)` はコサイン類似度（どちらかのノルム ≤ `EPS` なら 0）、`pct(a, p)` は昇順ソート後の要素 `a[round(p·(n−1))]`。
 
 **① ODF**
 
@@ -142,10 +156,10 @@ dpBeats = tEnd から back をたどって −1 まで（昇順に並べ直す�
 oi(t) = o の線形補間（t < 0 または t ≥ L−1 なら 0）
 for q in −GRID_PERIOD_STEPS..GRID_PERIOD_STEPS（昇順）:
     PP = P·(1 + q·GRID_PERIOD_STEP)
-    for ph = 0, GRID_PHASE_STEP_HOPS, … （ph < PP）:
-        score = Σ_{t = ph, ph+PP, …, t < L} oi(t)
+    for m = 0, 1, …（ph = m·GRID_PHASE_STEP_HOPS < PP）:
+        score = Σ_{k = 0, 1, …} oi(ph + k·PP)（ph + k·PP < L の範囲。t は累積加算でなく乗算で求める）
         score が今までの最大より大きければ（等しい場合は更新しない）(gP, gPh) = (PP, ph)
-grid = [gPh, gPh + gP, …]（< L）
+grid = [gPh + k·gP]（k = 0, 1, …、< L）
 near = |{ h ∈ dpBeats : |h − (gPh + round((h − gPh)/gP)·gP)| ≤ GRID_TOL·gP }| / |dpBeats|
 beatHops   = near ≥ GRID_MIN_FRAC ? grid : dpBeats
 beatSource = near ≥ GRID_MIN_FRAC ? 'grid' : 'dp'
@@ -237,7 +251,9 @@ songMapTempoAt(map, tSec, prevTSec, view)   // view: MfsFrameView。tempo 関連
 ```
 
 ```
-i = beats[i] ≤ tSec < beats[i+1] を満たす i（無ければ locked = 0 で終了）
+i = beats[i] ≤ tSec < beats[i+1] を満たす i
+無ければ（最初の拍より前・最後の拍以降）: BPM = map.bpm、TEMPO_CONF = map.tempoConfidence、TEMPO_LOCKED = 0、
+  BEAT_PHASE = BAR_PHASE = BEAT_IN_BAR = 0、BEAT_FLAG = DOWNBEAT_FLAG = 0 を書いて終了
 BPM = map.bpm, TEMPO_CONF = map.tempoConfidence, TEMPO_LOCKED = 1
 BEAT_PHASE = (tSec − beats[i]) / (beats[i+1] − beats[i])
 d0 = downbeatIndices[0];  BEAT_IN_BAR = ((i − d0) mod 4 + 4) mod 4
@@ -306,7 +322,13 @@ class SongMapService {
 
 ### 6.3 シーンカタログ（`js/director-scenes.js`）
 
-内蔵シーンは全14タイプを系統に割り当てる。`patch` のうち、そのタイプの `capabilities` が対応しない項目は適用しない（例: `methods` に無い `expressionMethod`）。空欄は「ユーザー設定のまま」。
+内蔵シーンは全14タイプを系統に割り当てる。空欄は「ユーザー設定のまま」。`patch` の適用規則（プリセット由来も同じ。`applyScenePatch(settings, patch)` として `director-scenes.js` に置く）:
+
+- `analyzerType` は常に適用し、以降の判定は適用後のタイプの `capabilities` で行う
+- `expressionMethod`: `capabilities.methods` に含まれる場合のみ
+- `barDisplayMode`: `capabilities.barDisplayMode === true` の場合のみ
+- `layerCount`: `capabilities.layers === true` の場合のみ
+- `motionSpeed`・`particleAmount`・`afterimageIntensity`: 常に適用（対応しないタイプでは描画に影響しないだけ）
 
 | ID | 系統 | analyzerType | expressionMethod | barDisplayMode | layerCount | motionSpeed | particleAmount | afterimageIntensity |
 |---|---|---|---|---|---|---|---|---|
@@ -327,7 +349,7 @@ class SongMapService {
 
 「マイプリセット」を選んだ場合（`directorPool = 'presets'`）:
 - 各プリセットの系統は、そのプリセットの `analyzerType` を上表で引いて決める
-- `patch` はプリセットの全設定から `DIRECTOR_PRESERVED_KEYS` を除いたもの: `bgColor`, `aspectRatio`, `videoCompositeEnabled`, `videoCompositeOpacity`, `videoCompositeBlendMode`, `autoGain`, `layerSplit`, `smoothing`, `directorEnabled`, `directorIntensity`, `directorPool`, `directorFlash`, `directorSeedOffset`
+- `patch` はプリセットの設定のうち `DIRECTOR_MANAGED_KEYS`（§6.1。`hue` は除く）に含まれるキーだけを取り出したもの。色・感度・レイヤー個別設定・背景・動画合成・解析設定などはプリセットの値を使わず、ユーザーの現在の設定のまま（§6.1 の方針どおり）
 - ある系統にプリセットが1つも無い場合、その系統は内蔵シーンを使う
 - シーン ID は `preset:<プリセット名>`
 
@@ -456,8 +478,8 @@ class DirectorController {
 
 | 経路 | 変更 |
 |---|---|
-| ライブ（`visualizer-core.js`） | `settings.directorEnabled && director.isReady()` かつ再生対象がメディア要素のとき、`FramePipeline.render` の代わりに `director.render(input, settings, mediaElement.currentTime)` を呼ぶ。それ以外は従来どおり |
-| 書き出し（`offline-exporter.js`） | `settings.directorEnabled` なら、書き出し開始時に `SongMapService` からソングマップを取得（無ければ解析）し、ライブと**同じ引数**でタイムラインをコンパイルし、書き出し用 `DirectorController` で `t = i / fps` として描く |
+| ライブ（`visualizer-core.js`） | `VisualizerCore` に `mediaElement`（再生中のメディア要素。音声・動画とも）と `director`（`DirectorController`）のプロパティを追加する。`mediaElement` は `UIController` が `_applyActiveSlot()`・`_loadMediaFile()` の後に `mediaManager.mediaElement` を設定し、マイク入力中は `null` にする。`settings.directorEnabled && director.isReady() && mediaElement` のとき、`FramePipeline.render` の代わりに `director.render(input, settings, mediaElement.currentTime)` を呼ぶ。それ以外は従来どおり |
+| 書き出し（`offline-exporter.js`） | `export(file, settings, opts)` の `opts` に `songMapService`（`SongMapService`）と `presets`（`[{name, settings}]`、名前の昇順）を追加する（`UIController` が渡す。演出オプションは `settings` の `director*` から作る）。`settings.directorEnabled` なら、書き出し開始時に `opts.songMapService.request(file)` でソングマップを得て、ライブと**同じ引数**でタイムラインをコンパイルし、書き出し用 `DirectorController` で `t = i / fps` として描く。ソングマップ取得に失敗した場合は自動演出なしで書き出す |
 | 再コンパイルの契機 | 自動演出の ON、アクティブスロットのソングマップ確定、スロット切替、`directorIntensity`・`directorPool`・`directorFlash`・`directorSeedOffset` の変更、プリセットの保存・削除 |
 
 - タイムラインは色などのユーザー設定を含まない（毎フレーム `baseSettings` に重ねる）。したがってユーザーが色を変えても再コンパイルは不要で、即座に反映される
@@ -553,8 +575,8 @@ truth = { boundariesBars: [0, 8, 16, 32, 40, 56, 64], kinds: [intro, build, drop
 | U18-02 | ③ DP 拍 | 120BPM 相当のインパルス列 ODF（L = 3000 ホップ、48kHz）で、DP 拍がインパルス位置と ±1 ホップで全一致 |
 | U18-03 | ④ 格子 | U18-02 の入力で `beatSource = 'grid'`。インパルス列の後半のテンポを 5% 変えた入力で `'dp'` |
 | U18-04 | ⑤ 小節頭 | 4拍ごと（位相 1）にだけ強い low 値を持つ合成行で `downbeatIndices[0] mod 4 = 1` |
-| U18-05 | ⑦ 境界 | 8小節ずつ4種の小節ベクトル（A, B, A, C、各次元に標準偏差 0.1 の乱数、シード固定）で境界が [0, 8, 16, 24, 32] |
-| U18-06 | ⑦ 最小長 | 2小節だけ異なるベクトルを挟んでも、その前後に境界が立たない（`MINS` の確認） |
+| U18-05 | ⑦ 境界 | `bpm = 120`（K = 4、MINS = 4、NB = 2）で、8小節ずつ4種の小節ベクトル（A, B, A, C、各次元に標準偏差 0.1 の乱数、シード固定）で境界が [0, 8, 16, 24, 32] |
+| U18-06 | ⑦ 最小長 | `bpm = 120` で、2小節だけ異なるベクトルを挟んでも、その前後に境界が立たない（`MINS` の確認） |
 | U18-07 | ⑨ 種類 | §4.2 ⑨ の表の各行を満たす E・傾きの組を与え、期待どおりの kind（表駆動テスト、各行 2 例以上） |
 | U18-08 | 楽曲（主要テンポ） | `synthSong` を bpm ∈ {100, 128, 140} × sampleRate ∈ {48000, 44100}: bpm が真値 ±1%、拍 F 値（±70ms）≥ 0.95、`downbeatIndices` が指す拍の 90% 以上が真の小節頭 ±70ms、境界が 5 個で各真値（秒）と ±(1小節 + 70ms) 以内、kind が `[intro, build, drop, break, drop, outro]`、ラベルが「3番目 = 5番目 ≠ 1番目」、`validateSongMap` が ok |
 | U18-09 | 楽曲（半分への折り返し） | `synthSong` bpm = 174（両サンプルレート）: bpm = 87 ± 1%、拍 F 値 ≥ 0.95（真の拍の偶数番目または奇数番目のうち良い方）、境界は ±(解析上の1小節 = 4·60/87 秒 + 70ms)、kind・ラベルは U18-08 と同じ。小節頭は評価しない（半拍子の位相は原理的に決まらない） |
@@ -574,10 +596,10 @@ truth = { boundariesBars: [0, 8, 16, 32, 40, 56, 64], kinds: [intro, build, drop
 
 | ID | ページ | 内容 | 合格基準 |
 |---|---|---|---|
-| B18-01 | ハーネス | `synthSong(48000, {bpm: 128})` を WAV にして `SongMapService.request` | 結果が U18-08 と同じ基準に合格。同じ PCM から Node の `MfsExtractor` で作った行による `buildSongMap` の結果と、`beats`（±1e-6 秒）・`sections` が一致 |
+| B18-01 | ハーネス | `synthSong(48000, {bpm: 128})` を WAV にして `SongMapService.request`（`timeoutMs: 120000`） | 結果が U18-08 と同じ基準に合格。同じ PCM から Node の `MfsExtractor` で作った行による `buildSongMap` の結果と、`beats`（±1e-6 秒）・`sections` が一致 |
 | B18-02 | アプリ | 同 WAV をスロット1に読み込み、自動演出 ON で再生 | 解析完了後に状態が「準備完了」、`section-strip` にセクションが6個、コンソールエラー 0 |
 | B18-03 | アプリ | B18-02 の状態で、ライブの `DirectorController` のタイムラインと、書き出しで生成されるタイムライン | 深く一致 |
-| B18-04 | アプリ | 同 WAV を自動演出 ON で書き出し（30fps） | 完了。デコードした映像で、2つ目のセクション境界（ビルド→ドロップ）の直前と直後のフレームの平均絶対差が、同一セクション内で隣り合うフレームの平均絶対差の 3 倍以上（場面転換が境界で起きている） |
+| B18-04 | アプリ | 同 WAV を自動演出 ON で書き出し（30fps。`{ slow: true, timeoutMs: 900000 }`） | 完了。デコードした映像で、2つ目のセクション境界（ビルド→ドロップ）の直前と直後のフレームの平均絶対差が、同一セクション内で隣り合うフレームの平均絶対差の 3 倍以上（場面転換が境界で起きている） |
 | B18-05 | アプリ | 再生中に最初のドロップの中央へシーク | 次のフレームの `primary.sceneId` が、タイムライン上のそのセグメントのシーン ID と一致 |
 | B18-06 | アプリ | マイク入力（フェイクデバイス: 起動引数 `--use-fake-device-for-media-stream --use-fake-ui-for-media-stream`）で自動演出 ON | 状態表示が「マイク入力では利用できません」、通常描画が続く、コンソールエラー 0 |
 | B18-07 | アプリ | `window.__avzForceMfsFailure = true` で起動 | 自動演出の状態が「この環境では利用できません」、コンソールエラー 0 |
@@ -599,15 +621,16 @@ truth = { boundariesBars: [0, 8, 16, 32, 40, 56, 64], kinds: [intro, build, drop
 | T18-01 | テスト用合成楽曲・行データ生成 | ★2 | Phase 16 | `tests/shared/song-synth.js`、`tests/lib/songmap-rows.mjs` | 生成の決定性（2回生成でビット一致）、`truth` の値 | 不要 |
 | T18-02 | ワークレット songmap モード | ★2 | Phase 16 | `mfs-worklet.js`、`mfs-const.js`（`SONGMAP_ROW`） | B18-01 の行データ部分、行数 = ホップ数 | 不要 |
 | T18-03 | 拍・格子・小節頭（①〜⑤） | ★3 | T18-01 | `songmap-analysis.js`（前半） | U18-01〜U18-04、U18-10 | 不要 |
-| T18-04 | 小節・境界・ラベル・種類・出力（⑥〜⑨、§4.3） | ★3 | T18-03 | `songmap-analysis.js`（後半） | U18-05〜U18-09、U18-11 | 不要 |
+| T18-04 | 小節・境界・ラベル・種類・出力（⑥〜⑨、§4.3） | ★3 | T18-03 | `songmap-analysis.js`（後半）、`tests/fixtures/songmap-128.json` | U18-05〜U18-09、U18-11 | 不要 |
 | T18-05 | SongMapService | ★2 | T18-02, T18-04 | `songmap-service.js`、`ui-controller.js`（読込後の request・差し替え時の cancel） | B18-01 | 不要 |
-| T18-06 | 拍情報の置き換え | ★1 | T18-04 | `songmap-analysis.js`（`songMapTempoAt`）、`visualizer-core.js`・`offline-exporter.js` の呼び出し | U18-12 | 要（§11） |
+| T18-06 | 拍情報の置き換え（関数のみ） | ★1 | T18-04 | `songmap-analysis.js`（`songMapTempoAt`）。ライブ・書き出しからの呼び出しは T18-09・T18-10 で行う | U18-12 | 不要 |
 | T18-07 | シーンカタログとコンパイル | ★2 | T18-04 | `director-scenes.js`、`director-timeline.js`（`compileDirectorTimeline`・`fnv1a32`） | U18-13〜U18-16、U18-19 | 不要 |
 | T18-08 | 状態の評価と描画 | ★3 | T18-07 | `director-timeline.js`（`directorStateAt`）、`director-renderer.js` | U18-17、U18-18、U18-20 | 不要 |
-| T18-09 | ライブへの組み込みと UI | ★2 | T18-05, T18-08 | `director-controller.js`、`visualizer-core.js`、`ui-controller.js`、`settings.js`、`index.html`、`style.css` | B18-02、B18-05〜B18-08 | 要 |
-| T18-10 | 書き出しへの組み込み | ★2 | T18-09 | `offline-exporter.js` | B18-03、B18-04 | 要 |
+| T18-09 | ライブへの組み込み（`songMapTempoAt` の呼び出しを含む）と UI | ★2 | T18-05, T18-06, T18-08 | `director-controller.js`、`visualizer-core.js`、`ui-controller.js`、`settings.js`、`index.html`、`style.css` | B18-02、B18-05〜B18-08 | 要 |
+| T18-10 | 書き出しへの組み込み（`songMapTempoAt` の呼び出しを含む） | ★2 | T18-09 | `offline-exporter.js` | B18-03、B18-04 | 要 |
 
-- T18-03 と T18-07 は並行可（T18-07 は U18-08 の出力を JSON で固定したフィクスチャ `tests/fixtures/songmap-128.json` を使えば T18-04 を待たずに進められる。フィクスチャは T18-04 のマージ時に再生成する）
+- T18-07 の単体テストは、T18-04 で生成した U18-08（128BPM・48kHz）のソングマップを JSON に保存したフィクスチャ `tests/fixtures/songmap-128.json` を使う（T18-04 の成果物に含める）
+- `visualizer-core.js` を編集するのは T18-09 のみ、`offline-exporter.js` は T18-10 のみ（並行作業での衝突を避けるため）
 
 ---
 
@@ -636,7 +659,7 @@ truth = { boundariesBars: [0, 8, 16, 32, 40, 56, 64], kinds: [intro, build, drop
 
 | 節 | 内容 | チケット |
 |---|---|---|
-| §9（音声解析） | 「9.8 ソングマップ（Phase 18）」を新設: 読込後に曲全体を解析して拍・小節・セクションを求めること、ソングマップがある場合は拍情報をそれで置き換えること | T18-06 |
+| §9（音声解析） | 「9.7 ソングマップ（Phase 18）」を新設: 読込後に曲全体を解析して拍・小節・セクションを求めること、ソングマップがある場合は拍情報をそれで置き換えること | T18-06 |
 | §13（再生モード） | 「13.4 自動演出」を新設: 目的、設定項目（§7.1）、変更される設定と変更されない設定（§6.1）、ライブと書き出しで同一であること、フラッシュの頻度上限 | T18-09 |
 | §14.8（オフライン書き出し） | 自動演出 ON の場合の挙動 | T18-10 |
 | §15.1（必須 UI 要素） | 自動演出の UI、セクション帯 | T18-09 |

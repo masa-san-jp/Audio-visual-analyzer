@@ -214,6 +214,20 @@ function buildMfsWorkletSource() {
 
 記法: `A[k]` は振幅スペクトル、`P[k] = A[k]²`、`clamp(x, a, b)`、`α(T)`・`frames(T)` は §3.1。無音（除数 < `EPS`）の場合の値は各節に明記した値にし、**NaN / Infinity を出力しない**。
 
+### 5.0 クラスの API（担当者間の結合点。名前・引数を変えないこと）
+
+| クラス / 関数 | API | 説明 |
+|---|---|---|
+| `mfsDerived(sampleRate)` | → `{ fr, hopSec, alpha(T), frames(T), eventLatencySec, binHz, binOf(hz) }` | §3.1 |
+| `mfsWindowHann(n)` | → `Float32Array(n)` | §5.3 の Hann 窓 |
+| `MfsFft` | `constructor(n)`、`transform(re, im)`（Float64Array を in-place で前方 FFT。1/N 正規化なし） | 基数2 |
+| `MfsMelBank` | `constructor(sampleRate, fftSize)`、`apply(P, out)`（P: Float64Array(N/2) のパワー、out: Float32Array(32) に E_b を書く） | §5.3 |
+| `MfsBiquad` | `static kWeighting(sampleRate)` → `[stage1, stage2]`、`constructor(b0, b1, b2, a1, a2)`、`process(x)` → y、`reset()` | §5.8 |
+| `MfsOnset` | `constructor(sampleRate, fftSize)`、`process(A, tSec)` → フラグ（0..15）、`reset()`。公開: `flux`（Float32Array(4)）、`env`（Float32Array(4)）、`odf`、`odfLow` | §5.4 |
+| `MfsTempo` | `constructor(sampleRate)`、`process(odf, odfLow, onsetFlags, envFull, tSec)`、`reset()`。公開: `bpm`、`conf`、`phase`、`barPhase`、`beatInBar`、`beatFlag`、`downbeatFlag`、`locked` | §5.5 |
+| `MfsExtractor` | `constructor(sampleRate, { smoothing })`、`pushSamples(L, R, count)`（R が null なら L を使う）、`setSmoothing(v)`、`reset()`、`onHop`（コールバック。`(extractor) => void`、ホップ完了ごとに同期呼び出し） | §5.1〜§5.9 |
+| `MfsExtractor` の公開フィールド | `hopIndex`（完了ホップ番号 h）、`hopEndSample`（(h+1)·H）、`packed`（Float32Array(104)）、`freqBytes`（Uint8Array(1024)）、`timeBytes`（Uint8Array(2048)）、`flux`、`hopEnergy` | `onHop` 内でのみ有効。次のホップで上書きされる |
+
 ### 5.1 ホップ分割（入力の扱い）
 
 - 入力は L/R の2チャンネル。1チャンネルしか来ない場合は R = L とする
@@ -273,17 +287,17 @@ onset_g = above && !prevAbove_g && (tSec - lastOnset_g ≥ ONSET_REFRACTORY_SEC)
 if onset_g: lastOnset_g = tSec, ONSET_FLAGS |= (1 << g)
 prevAbove_g = above
 
-// 統計更新
+// 統計更新（μold = 更新前の μ_g を先に保存しておく）
 μ_g += α(ONSET_STAT_SEC)·(F_g - μ_g)
-d_g += α(ONSET_STAT_SEC)·(|F_g - μ_g| - d_g)
+d_g += α(ONSET_STAT_SEC)·(|F_g - μ_g| - d_g)     // d は更新後の μ を使う
 
-// 強度と包絡
-peak_g = max(F_g - μ_g, peak_g·exp(-hopSec/ONSET_PEAK_RELEASE_SEC))
-s_g    = peak_g > EPS ? clamp((F_g - μ_g)/peak_g, 0, 1) : 0
+// 強度と包絡（μold を使う）
+peak_g = max(F_g - μold, peak_g·exp(-hopSec/ONSET_PEAK_RELEASE_SEC))
+s_g    = peak_g > EPS ? clamp((F_g - μold)/peak_g, 0, 1) : 0
 env_g  = max(s_g, env_g·exp(-hopSec/ONSET_ENV_DECAY_SEC))   → ONSET_ENV[g]
 ```
 
-- `lastOnset_g` の初期値は `-Infinity`
+- 初期値: `μ_g = d_g = peak_g = env_g = 0`、`prevAbove_g = false`、`lastOnset_g = -Infinity`、前ホップの `C` は全 0。§5.9 の `reset()` でもこの値に戻す
 - テンポ推定へ渡す値: `odf = max(0, F_3 - μ_3)`、`odfLow = max(0, F_0 - μ_0)`（**μ は更新前の値**）
 - `MfsExtractor` は最新ホップの `F_g`（4要素）を公開フィールド `flux`（Float32Array(4)）に保持する（Phase 18 のソングマップ解析が使う）
 
@@ -448,6 +462,28 @@ function applyAutoGain(freqIn, agcDb, out) {   // js/mfs-view.js
 }
 ```
 
+### 5.9 1ホップの処理手順（この順序を厳守）
+
+```
+ホップ h 完了時（tSec = (h+1)·H/sampleRate）:
+ 1. chronoL/chronoR/mono を作る（§5.1）
+ 2. 従来互換 byte（§5.2）→ freqBytes, timeBytes
+ 3. FFT・A/AL/AR/P（§5.3）→ BANDS, BANDS_SMOOTH
+ 4. オンセット（§5.4）→ ONSET_ENV, ONSET_FLAGS（このホップ分のみ）, flux, odf, odfLow
+ 5. テンポ（MfsTempo.process）:
+    a. odf・odfLow をリングへ格納（格納してから推定する）
+    b. sinceUpdate += 1。sinceUpdate ≥ frames(TEMPO_UPDATE_SEC) かつ 蓄積 ≥ frames(TEMPO_MIN_FILL_SEC) なら
+       推定（§5.5.1）→ 確定・更新（§5.5.2）を行い sinceUpdate = 0
+    c. locked なら（このホップでロックした場合も含む）位相の進行と補正（§5.5.4）、小節（§5.5.5）
+    d. BPM・TEMPO_CONF・BEAT_PHASE・BAR_PHASE・BEAT_IN_BAR・BEAT_FLAG・DOWNBEAT_FLAG・TEMPO_LOCKED を書く
+       （BEAT_FLAG・DOWNBEAT_FLAG はこのホップで発行した場合のみ 1）
+ 6. ステレオ（§5.6）、音色・クロマ・RMS・PEAK（§5.7）
+ 7. K 特性の二乗和はサンプル投入時に逐次計算済み。z_hop を確定し、ラウドネス・AGC（§5.8）
+ 8. hopEnergy = z_hop、onHop(this) を呼ぶ
+```
+
+初期値（`reset()` 後も同じ）: テンポ系 `bpm = 0, locked = 0, phase = 0, pending = 0, pendingCount = 0, sinceUpdate = 0, lastBeatSec = -Infinity, beatCount = 0, acc = [0,0,0,0], barStart = 0`、平滑系 `bandsSmooth = 0, agcDb = 0`、K 特性フィルタ状態 0、ラウドネス履歴は空、リングバッファは 0、`hopIndex = -1`（最初の完了で 0）。
+
 ---
 
 ## 6. AudioWorklet と各経路
@@ -515,17 +551,22 @@ target = (ts && ts.contextTime > 0 && ts.performanceTime > 0)
          ? ts.contextTime + (nowPerfMs - ts.performanceTime)/1000
          : ctx.currentTime - (ctx.baseLatency || 0) - (ctx.outputLatency || 0)
 selected = ring 内で t ≤ target を満たす最新の件（無ければ前回の選択を維持。初回なら null）
-フラグの集約: 前回選択した hop（リセット直後は -1）より大きく selected.hop 以下の全件について
-  ONSET_FLAGS はビット OR、BEAT_FLAG・DOWNBEAT_FLAG は OR を取り、selected の packed に上書きしたものを返す
+MfsFrameView へ selected.packed をコピー（setPacked）してから、フラグをビュー側で集約する:
+  対象 = hop が「前回描画時に選択した hop（リセット直後は -1）」より大きく selected.hop 以下のリング内の全件
+  ONSET_FLAGS = 対象全件のビット OR、BEAT_FLAG・DOWNBEAT_FLAG = 対象全件の OR
+  対象が空（前回と同じ件を使う場合を含む）ならフラグはすべて 0
+  リング内の packed は書き換えない
+前回描画時に選択した hop = selected.hop に更新
 ```
 
 - この選択により「今スピーカーから出ている音」を解析した結果で描画する（出力遅延の補正）
-- `getFreqSlice()` / `getTimeDomainData()` は `'active'` なら選択した件の `freq`（`computeFreqRange` のスライス）/ `time`、それ以外は従来どおり AnalyserNode
+- `getFreqSlice()` / `getTimeDomainData()` は `'active'` なら選択した件の `freq`（`computeFreqRange` のスライス）/ `time`。`'active'` でまだ1件も選択していない場合は、全 0 のスライス / 全 128 の波形（どちらも事前確保した配列）。`'active'` 以外は従来どおり AnalyserNode
+- `getMfsDebugInfo()` → `{ status, lastHop, hopsPerSec }`（`lastHop` は最後に受信した hop 番号、`hopsPerSec` は直近1秒の受信数。デバッグ表示とテストが使う）
 - `getFeatures()` は `'active'` かつ選択済みなら `MfsFrameView`、それ以外は `null`
 - `resetAnalysis()`: ワークレットへ `reset` を送り、リングと前回選択 hop をクリア
 - `setSmoothing(v)`: AnalyserNode と、ワークレットへの `smoothing` メッセージの両方
 
-`resetAnalysis()` を呼ぶ箇所（`js/ui-controller.js`）: シークバーの `input` ハンドラ、停止ボタン（`currentTime = 0` の直後）、`_applyActiveSlot()`、`_loadMediaFile()` の読込完了後。`connectMedia` / `connectStream` 内でも呼ぶ（上記）。
+`resetAnalysis()` を呼ぶ箇所（`js/ui-controller.js`）: シークバーの `input` ハンドラ、停止ボタンのハンドラ（`this.mediaManager.stop()` の直後。`currentTime = 0` は `MediaManager.stop()` 内で行われる）、`_applyActiveSlot()`、`_loadMediaFile()` の読込完了後。`connectMedia` / `connectStream` 内でも呼ぶ（上記）。
 
 ### 6.3 オフライン経路（`js/offline-exporter.js` の変更）
 
@@ -570,18 +611,21 @@ view.rms / view.peak
 ### 6.5 レイヤー分割（`computeLayerRange`、`js/mfs-view.js`）
 
 ```js
-// 戻り値: [start, end)（freq スライス内の添字）
-function computeLayerRange(i, count, sliceLen, startBin, sampleRate, fftSize, mode) -> [start, end]
+// out: 長さ2の Int32Array（呼び出し側が1回だけ確保）。[start, end)（freq スライス内の添字）を書き込んで out を返す
+function computeLayerRange(i, count, sliceLen, sampleRate, fftSize, mode, out) -> out
+// startBin は内部で computeFreqRange(sampleRate, fftSize / 2).startBin から求める
 ```
 
-- `mode === 'linear'`: 現行と同じ `[floor(i·sliceLen/count), floor((i+1)·sliceLen/count))`
+- `mode` が `'mel'` 以外（`undefined` を含む）: 現行と同じ `[floor(i·sliceLen/count), floor((i+1)·sliceLen/count))`
 - `mode === 'mel'`: `mel(FREQ_MIN_HZ)`〜`mel(FREQ_MAX_HZ)` を count 等分した境界周波数 f をビン番号 `round(f·fftSize/sampleRate) - startBin` に変換し、`[0, sliceLen]` にクランプ。各レイヤーは最低1ビンを持つ（`end ≤ start` なら `end = start + 1`、以降の開始を繰り下げる）
 - `FramePipeline` の既定 `getLayer` をこの関数で置き換える（`input.sampleRate`・`input.fftSize` を追加。ライブは `ctx.sampleRate` と 2048、オフラインは音声のサンプルレートと 2048）
+- **T16-08 以降、ライブ（`VisualizerCore`）もオフラインも `input.getLayer` を渡さない**（`null`）。レイヤーは常に `FramePipeline` 内で、音量自動補正後の `freq` から `computeLayerRange` で切り出す（`AudioEngine.getLayerData` は使わなくなるが、互換のため残す）
 
 ### 6.6 `FramePipeline` とレンダラー契約の変更
 
 - `input` に `features`（`MfsFrameView | null`）、`sampleRate`、`fftSize` を追加
 - `render` の手順 4a/4b の前に: `settings.autoGain && input.features` なら `applyAutoGain(input.freq, features.loudness.agcDb, 内部バッファ)` を `freq` として使う（レイヤー切り出しも補正後の値から）
+- 実際に描画へ使った freq（補正後）を読み取り専用プロパティ `FramePipeline.lastFreq` で参照できるようにする（テスト・デバッグ用）
 - ステートフルレンダラーへ渡す `frame` に `features` を追加（`null` あり）。`frame.beat`（従来の `BeatDetector`）は**変更しない**（既存レンダラーの見た目を保つため）
 - `doc/renderer-contract.md` の frame 表に `frame.features` 行を追加し、「null の場合を必ずガードする」を必須ルールに追記
 
@@ -615,11 +659,11 @@ function computeLayerRange(i, count, sliceLen, startBin, sampleRate, fftSize, mo
 | T16-07 | ライブ経路の統合 | ★3 | T16-05, T16-06 | `audio-engine.js`、`visualizer-core.js`、`ui-controller.js`（`resetAnalysis` 呼び出し）、`index.html` | B16-02〜B16-04 | 要（§1.1） |
 | T16-08 | FramePipeline・レンダラー契約 v2 | ★1 | T16-06 | `frame-pipeline.js`、`doc/renderer-contract.md` | B16-05、B15-04（ゴールデン不変） | 不要 |
 | T16-09 | オフライン経路の統合 | ★2 | T16-05, T16-08 | `offline-exporter.js` | B16-06、B15-02 | 要（§1.1） |
-| T16-10 | 設定・UI（音量自動補正・レイヤー分割） | ★1 | T16-08 | `settings.js`、`ui-controller.js`、`index.html` | B16-07、B16-09 | 要 |
+| T16-10 | 設定・UI（音量自動補正・レイヤー分割） | ★1 | T16-07, T16-08 | `settings.js`、`ui-controller.js`、`index.html` | B16-07、B16-09 | 要 |
 | T16-11 | デバッグ表示の MFS 項目 | ★1 | T16-07 | `debug-overlay.js`、`visualizer-core.js` | B16-10 | 不要 |
 
-- T16-01・T16-06 は並行可。T16-03 と T16-04 は、T16-04 側でテンポ部分を `MfsTempo` の空実装（常に `locked = 0`）で先行実装し、T16-03 のマージ後に結合してよい
-- T16-04 の「校正の確認」: U16-06 の実測で拍イベントの**平均誤差（符号付き）**が 0〜+8ms（ホップ境界で発行するため +hopSec/2 程度の遅れは正常）から外れる場合、`EVENT_LATENCY_FFT_FRACTION` を `現在値 + (平均誤差 - 0.004)·sampleRate/N` に更新する本書の修正 PR を先に出す。他の校正対象の定数も、受け入れテスト不合格の原因がその定数にあると示せる場合に限り同じ手続きで変更できる
+- T16-01・T16-06 は並行可。T16-07 と T16-10 は同じファイル（`ui-controller.js`・`index.html`）を編集するため、T16-10 は T16-07 のマージ後に着手する。T16-03 と T16-04 は、T16-04 側でテンポ部分を `MfsTempo` の空実装（常に `locked = 0`）で先行実装し、T16-03 のマージ後に結合してよい
+- T16-04 の「校正の確認」: U16-06 の実測で拍イベントの**平均誤差（符号付き）**が 0〜+8ms（ホップ境界で発行するため +hopSec/2 程度の遅れは正常）から外れる場合、`EVENT_LATENCY_FFT_FRACTION` を `現在値 + (m − 4) / 1000 × 48000 / 2048`（m = 48kHz での符号付き平均誤差 [ms]）に更新する本書の修正 PR を先に出す。他の校正対象の定数も、受け入れテスト不合格の原因がその定数にあると示せる場合に限り同じ手続きで変更できる
 
 ---
 
@@ -659,10 +703,10 @@ function computeLayerRange(i, count, sliceLen, startBin, sampleRate, fftSize, mo
 | B16-01 | ハーネス | 同じ合成信号（ドラム 10 秒）を `OfflineAudioContext` 上の MFS ワークレット（offline、30fps）と、Node と同じ `MfsExtractor` をページ内で直接駆動した結果で比較 | 全フレームで packed の最大絶対差 ≤ 1e-6、freq/time はバイト一致 |
 | B16-02 | アプリ | 120BPM ドラムの WAV を読み込み再生（実時間 12 秒） | `mfsStatus === 'active'`、10 秒以降の `getFeatures().tempo.bpm` が 120 ± 1.5%、コンソールエラー 0 |
 | B16-03 | アプリ | `window.__avzForceMfsFailure = true` で起動して再生 | `mfsStatus === 'fallback'`、`getFeatures()` が null、全14タイプで描画してコンソールエラー 0 |
-| B16-04 | アプリ | 再生中にシーク・スロット切替・停止を行う | 各操作後、ワークレットの hop 番号が 0 から再開している（`reset` が届いている）、コンソールエラー 0 |
+| B16-04 | アプリ | 再生中にシーク・スロット切替・停止を行う | 各操作の 200ms 後の `getMfsDebugInfo().lastHop` が、操作直前の値より小さく 30 以下（ワークレットが 0 から数え直している）、コンソールエラー 0 |
 | B16-05 | ハーネス | `features` あり・なし両方の `input` で全14タイプを描画 | 例外 0。`autoGain = false` ではゴールデン（B15-04）が不変 |
 | B16-06 | アプリ | ドラム 5 秒を書き出し（30fps） | 状態 `done`、`featureFrames.length === freqFrames.length`（151）、フレーム 0 の packed が全 0、書き出し中の `FramePipeline.render` に渡った `features` が非 null |
-| B16-07 | アプリ | 「音量自動補正」を ON/OFF して、-30 LUFS と -10 LUFS の同一ドラムを各 10 秒再生 | 10 秒時点の freq スライス平均値の差が、OFF 時に比べ ON 時で 70% 以上縮小 |
+| B16-07 | アプリ | 「音量自動補正」を ON/OFF して、-30 LUFS と -10 LUFS の同一ドラムを各 10 秒再生 | 10 秒時点の `visualizer` の `FramePipeline.lastFreq` の平均値の差が、OFF 時に比べ ON 時で 70% 以上縮小 |
 | B16-08 | ハーネス | ワークレット単体: offline モードで fps = 30・`totalSamples` = 48000×2 | 送信フレーム数 = 61、index が 0..60 の連番、hop が §6.3 の規則どおり、最後に `done` |
 | B16-09 | アプリ | 設定の往復 | `autoGain`・`layerSplit` がプリセット保存/読込・JSON 書き出し/読込で保持される。旧形式 JSON（2項目なし）で既定値になる |
 | B16-10 | アプリ | `?debug=1` で再生 | MFS 行・BPM 行・LUFS 行が表示され、再生 10 秒後に BPM 行が数値 |
