@@ -86,6 +86,7 @@ IP アドレス（Mac / Linux は `ifconfig`、Windows は `ipconfig` で確認�
 | `doc/plan-phase11.md` | Phase 11 開発計画書（画質指定・再生操作性の向上） |
 | `doc/plan-phase12.md` | Phase 12 開発計画書（3スロット再生キュー） |
 | `doc/plan-phase14.md` | Phase 14 開発計画書（オフライン書き出しの動画デコード高速化） |
+| `doc/20260928-evolution-concept-music-understanding-visual-engine.md` | 超進化構想書（Phase 15 以降の方向性・オーナー判断事項。未実装） |
 | `log.md` | 開発ログ |
 
 ## 現在の実装内容
