@@ -1,6 +1,3 @@
-Warning: truncated output (original token count: 19483)
-Total output lines: 889
-
 # 開発ログ
 
 ---
@@ -287,7 +284,172 @@ Phase 8〜10 の全項目完了を受け、新たに `doc/plan-phase11.md` を�
 
 ### 検証
 - 全JS `node --check` パス（`mp4-muxer.js`・`offline-exporter.js`）
-- `js/mp4-muxer.js` 単体: 自作Node製ISOBMFFリーダーで **39アサーションすべて成功**（box構成・`mvhd`/`mdhd`のtimescale/duration・29.97fpsの正確なtimescale=30000/サンプル長=1001・`avcC`/`esds`のバイト完全一致・全`trun`サンプルの`data_offset`が`mdat`内の正しいバイト位置を指すこと・キーフレームフラグ・音声なしケースでtrak数が1にな…4483 tokens truncated…
+- `js/mp4-muxer.js` 単体: 自作Node製ISOBMFFリーダーで **39アサーションすべて成功**（box構成・`mvhd`/`mdhd`のtimescale/duration・29.97fpsの正確なtimescale=30000/サンプル長=1001・`avcC`/`esds`のバイト完全一致・全`trun`サンプルの`data_offset`が`mdat`内の正しいバイト位置を指すこと・キーフレームフラグ・音声なしケースでtrak数が1になること・20秒/約20断片の長時間ケース・`mfra`の`moof_offset`全件が実際の`moof`box境界を指すこと・`mfro`の自己参照サイズ整合性を含む）
+- 既存回帰: foundation単体テスト23件・settings-io16件・webm-muxer構造テスト22件・webm-duration検証、すべて既存と同結果でパス
+- Chromium実ブラウザE2E:
+  - 既存の全14タイプ切替回帰・Phase 8機能E2E・Phase 10.1動画合成E2E・オフライン書き出しE2E（通常/4バリアント）を再実行し、いずれもコンソールエラー0で既存と同結果
+  - このサンドボックスのChromium（swiftshader）は`VideoEncoder.isConfigSupported()`でavc1系プロファイルすべてが非対応（`vp09`/`vp8`のみ対応）と判定されることを確認。実行環境がH.264エンコードに対応していない場合の実測であり、`_selectContainer()`が意図通りWebMへフォールバックしていることを実際のオフライン書き出しE2Eで確認（`blobType: "video/webm"`で正常完走）
+  - MP4分岐自体は、`VideoEncoder`/`AudioEncoder`をこのサンドボックスでも動作するモック（`isConfigSupported`でavc1/mp4a.40.2を対応と返し、ダミーの符号化データと`decoderConfig.description`を返す）に差し替えた上で実際のオフライン書き出しUIを操作するE2Eで検証した。結果、`_selectContainer`がMP4を選択し、`Mp4Muxer`が呼ばれ、出力Blobの`type`が`video/mp4`、ファイル名が`.mp4`、トップレベルboxが`ftyp`/`moov`/`moof`×2/`mdat`×2/`mfra`の順で過不足なく構成されることを確認（コンソールエラー0）。実際のH.264ビットストリームの妥当性は`Mp4Muxer`単体のNodeテストで別途保証している
+
+### spec.md 変更
+- version `v1.7` → `v1.8`
+- §14.8 を更新（コンテナ生成方式の記述をWebM限定からMP4/WebM共通の表現に変更）
+- §14.8.1「コンテナ・コーデック選定（Phase 9.1）」を新設
+- §20 に「Phase 9.1: MP4対応オフライン書き出し（実装済み）」を追加
+- 理由: 新機能を仕様体系に正式に組み込むため
+
+### 備考
+- Phase 9.2（AudioWorklet移行）・Phase 10.2（オフライン書き出しでの動画合成）は `doc/plan-phase8.md` に設計を記載済みで、次フェーズとして継続する
+- AudioWorkletへの移行を見送っている理由: `AudioWorkletProcessor`はメインスレッドの`AnalyserNode`インスタンスに直接アクセスできない（別レルム）ため、置き換えにはFFT・窓関数・スムージングを自前でworklet内に再実装する必要があり、単純なノード差し替えでは済まない。Phase 9.2で対応する
+
+---
+
+## 2026-07-18 — Phase 10.1 ライブ動画合成表示を追加
+
+### 作業内容
+`doc/plan-phase8.md` §4 Phase 10.1 に定めた「動画ファイルの映像フレームをビジュアライザーの背景として合成表示する」機能を実装した。
+
+#### 変更ファイル
+- `js/settings.js`: `videoCompositeEnabled`(既定false) / `videoCompositeOpacity`(0〜100) / `videoCompositeBlendMode` を追加
+- `js/visualizer-core.js`: `videoElement` プロパティを追加。`_drawVideoComposite()` を新設し、`_loop()` の背景クリア直後（selfClearタイプは対象外）に、cover フィット（アスペクト比差は中央基準トリミング）で動画フレームを描画。不透明度・合成モードは `ctx.globalAlpha`/`ctx.globalCompositeOperation` で適用し、描画後に必ず復元する
+- `js/ui-controller.js`:
+  - `_initFile()`: `loadFile()` の戻り値から `isVideo` を判定し `_setVideoElement()` で反映。読込失敗時・マイク入力開始時はクリア
+  - `_setVideoElement(element)`: 動画合成セクションの表示/非表示、要素なし時のトグル自動オフを行う
+  - `_initVideoComposite()`: トグル・不透明度・合成モードの各コントロールを配線
+  - `_syncControlsFromSettings()`: プリセット/JSON読込時に動画合成の各コントロールも同期するよう拡張
+- `index.html`: 「動画合成」セクション（既定非表示、動画ファイル読込時のみ表示）を追加
+
+### 検証
+- 全JS `node --check` パス
+- 既存回帰: foundation単体テスト23件・煙テスト168ケース・webm-muxer構造テスト22件・settings-io16件、いずれも既存と同結果
+- Chromium実ブラウザE2E: `MediaRecorder` で合成した短い動画ファイルを実際にファイル入力へ投入し、①動画読込時にセクションが表示される、②トグルで `settings.videoCompositeEnabled` が反映される、③再生中にキャンバスへ動画由来のピクセルが描画される、④マイク入力へ切替時にセクションが非表示・設定が自動オフになる、をすべて確認。コンソールエラー0
+- 既存の全14タイプ切替＋ランダマイズ回帰、Phase 8機能のE2E、オフライン書き出しE2Eも再実行しすべて0エラー（`_loop()` 変更による cross-feature 影響がないことを確認）
+
+### spec.md 変更
+- version `v1.6` → `v1.7`
+- §13.3 を更新（動画映像の合成表示が可能になった旨）
+- §14.9「動画合成表示（Phase 10.1）」を新設
+- §20 に「Phase 10.1: ライブ動画合成表示（実装済み）」を追加
+- 理由: 新機能を仕様体系に正式に組み込むため
+
+### 備考
+- オフライン書き出しでの動画合成（Phase 10.2）・MP4オフライン対応とAudioWorklet移行（Phase 9）は `doc/plan-phase8.md` に設計を記載済みで、次フェーズとして継続する
+
+---
+
+## 2026-07-18 — Phase 8 ユーザー向け機能拡張・計画書（Phase 8〜10）を追加
+
+### 作業内容
+`doc/spec.md` §23「今後の検討項目」の候補を整理し、`doc/plan-phase8.md`（Phase 8〜10 開発計画書）を作成。Phase 8「ユーザー向け機能拡張」5項目を実装した。
+
+#### 新規ファイル
+- `doc/plan-phase8.md`: Phase 8（ユーザー向け機能拡張）/ Phase 9（書き出し品質強化: MP4オフライン対応・AudioWorklet移行）/ Phase 10（動画合成表示）の設計・優先順位・依存関係を整理
+- `js/settings-io.js`: 設定シリアライズ基盤。`serializeSettings`/`deserializeSettings`（不正値は既定値へ安全にフォールバック）、プリセットの保存/読込/削除/一覧（`localStorage`, キー `avz.presets.v1`）、JSON書き出し/読み込み
+- `js/mic-input.js`: `MicInputManager`。`getUserMedia` でマイク入力を取得し `AudioEngine.connectStream()` で解析グラフへ接続。停止時に `track.stop()` でリソース解放
+
+#### 変更ファイル
+- `js/audio-engine.js`: `connectStream(stream)` を追加（`createMediaStreamSource` を使用。既存 `connectMedia` と同様に旧ソースを切断してから接続）
+- `js/settings.js`: 各レイヤーに `blendMode`（既定 `'source-over'`）を追加
+- `js/visualizer-core.js` / `js/offline-exporter.js`: `_renderStateless` でレイヤーごとに `ctx.globalCompositeOperation` を `layer.blendMode` に設定して描画するよう変更（両ファイルで同一ロジックを維持）
+- `js/ui-controller.js`: `_initPresets`（プリセット/JSON入出力UI・`_syncControlsFromSettings` によるUI同期）、`_initFullscreen`、`_initKeyboardShortcuts` を追加。`_initFile` にマイク入力トグルを追加し、マイク入力中はファイル再生ボタンを無効化。`_initRecording`/`_updateRecButtons` をマイク入力対応に拡張（マイク入力中は録画開始時に `mediaManager.play()` を呼ばない）。`_renderLayerSettings` にレイヤーごとのブレンドモード選択を追加
+- `js/app.js`: `MicInputManager` を生成し `UIController` へ渡す。`window.__app` に `micInput` を追加
+- `index.html`: 「プリセット」セクション、ファイルセクションへの「マイク入力」ボタン、「表示比率」セクションへの「フルスクリーン」ボタン、キーボードショートカット凡例（`<details>`）を追加。`settings-io.js`/`mic-input.js` のスクリプトタグを追加
+- `style.css`: `<progress>`・ショートカット凡例（`<details>`/`<kbd>`）のスタイルを追加
+
+### 検証
+- 全JS `node --check` パス
+- 既存回帰: foundation単体テスト23件・煙テスト168ケース・webm-muxer構造テスト22件、すべて既存と同結果（blendMode対応による回帰なし）
+- `settings-io.js` Node単体テスト16件（ラウンドトリップ、不正値/NaN/Infinityの安全な既定値フォールバック、プリセットCRUD）全通過
+- Chromium実ブラウザE2E（Playwright、`--use-fake-device-for-media-stream`でマイクも実機能検証）: プリセット保存/読込/削除、JSON入出力、フルスクリーンボタン存在、キーボードショートカット（テキスト入力中の無効化を含む）、マイク入力の開始/停止と再生ボタン無効化、レイヤーブレンドモードのUI反映、いずれも正常動作・コンソールエラー0
+- 既存の全14タイプ切替＋表現方法巡回＋ランダマイズ30連打の回帰チェックも0エラー
+
+### spec.md 変更
+- version `v1.5` → `v1.6`、Date を `2026-07-18` に更新
+- §20 に「Phase 8: ユーザー向け機能拡張（実装済み）」を追加。Phase 9/10 は `doc/plan-phase8.md` に設計を記載し、順次実装する旨を明記
+- 理由: 新機能を仕様体系に正式に組み込むため
+
+### 備考
+- Phase 9（MP4オフライン書き出し・AudioWorklet移行）・Phase 10（動画合成表示）は計画書のみ作成済み。実装は次のフェーズとして継続する
+
+---
+
+## 2026-07-12 — Phase 7 オフライン書き出し機能を追加
+
+### 作業内容
+音楽ファイルの信号を再生を伴わず解析し、現在のビジュアライザー設定に合わせて動画ファイルへ書き出す「オフライン書き出し」を実装した。通常録画（Recorder/MediaRecorder）とは独立した機能。
+
+#### 新規ファイル
+- `js/webm-muxer.js`: ゼロから EBML/WebM コンテナを構築するマクサー（`WebmMuxer`）。映像（VP9/VP8）・音声（Opus）のエンコード済みチャンクから、Duration に加えて **Cues（シーク索引）** を含む WebM を生成する。`js/webm-duration.js`（既存録画の Duration 後付けパッチ）とは別物で、より高機能。
+- `js/offline-exporter.js`: オフライン書き出しの本体（`OfflineExporter`）。
+  1. `AudioContext.decodeAudioData()` でファイル全体をデコード
+  2. `OfflineAudioContext` 上で `AnalyserNode` → `ScriptProcessorNode` を通し、各出力フレーム時刻の周波数/時間波形スナップショットを決定的に採取（実時間より高速）
+  3. 採取したフレーム列を既存レンダラー群（renderer-registry.js）で固定 dt(1/FPS) 描画
+  4. `VideoEncoder`/`AudioEncoder`（WebCodecs）でエンコードし `WebmMuxer` でコンテナ化
+
+#### 変更ファイル
+- `js/vis-utils.js`: `computeFreqRange(sampleRate, binCount)` を追加。50Hz〜15kHz 帯域切り出しをライブ（AudioEngine）とオフライン（OfflineExporter）で共有するため。
+- `js/audio-engine.js`: `_freqRange()` を `computeFreqRange` へ委譲するようリファクタ（挙動は完全に同一）。
+- `index.html`: スクリプト読込順を変更（`vis-utils.js`/`history-buffer.js` を `audio-engine.js` より前に移動）。`webm-muxer.js`/`offline-exporter.js` を追加。「オフライン書き出し」セクション（音楽ファイル選択・FPS選択・進捗バー・開始/キャンセル/保存）を追加。
+- `js/ui-controller.js`: `_initOfflineExport()` を追加。書き出し開始時点の `visualizer.settings` をスナップショットして使用し、進行中の UI 操作の影響を受けないようにした。
+- `js/app.js`: `window.__app` にインスタンス一式を公開（devtools からの動作確認・デバッグ用）。
+
+### 検証
+- 全 JS `node --check` パス、foundation 単体テスト 23 アサーション・既存煙テスト 168 ケース・webm-duration 相当の回帰確認、いずれも既存と同結果（audio-engine.js のリファクタに回帰なし）。
+- `webm-muxer.js` の Node 構造テスト（22 アサーション）: EBML ヘッダー/Segment/Info/Duration/Tracks/Cues の構造、**Cues の各 CueClusterPosition が実際に Cluster 要素を指しているか**（独立実装の EBML リーダーで検証）、SimpleBlock の構造、映像+音声/映像のみ/長時間（多数クラスタ）の各ケースを確認し全通過。
+- Chromium 実ブラウザでの E2E テスト（Playwright）: 合成 WAV ファイル（3秒サイン波）を実際の書き出しUIに投入し、生成された WebM を `<video>` 要素に読み込ませてブラウザ自身のデマクサーで検証。`loadedmetadata`（長さ・解像度が期待通り）・**シーク成功**（Cues が実際に機能）・再生成功をすべて確認、コンソール/ページエラー0。
+- 追加で、ステートフルタイプ（履歴・ビート検出を使う `terrain`）、レイヤー機能（`particles`/`radial` の複数レイヤー）、粘性揺らぎ（`physicsAmount>0`）の各経路も同様に書き出し→検証し、いずれも正常動作・エラー0を確認。
+
+### spec.md 変更
+- version `v1.4` → `v1.5`、Date を `2026-07-12` に更新。
+- §14.8「オフライン書き出し（Phase 7）」を新設。処理方式・出力仕様・操作を記述。
+- §20 に「Phase 7: オフライン書き出し（実装済み）」を追加。
+- 理由: 新機能を仕様体系に正式に組み込むため。
+
+### 備考
+- 対応ブラウザは Chrome/Edge（`OfflineAudioContext` + WebCodecs API 対応環境）。非対応環境では書き出し開始前にメッセージを表示する。
+- `ScriptProcessorNode` は非推奨 API だが、`OfflineAudioContext` 上で `AnalyserNode` のスナップショットを取得できる現状もっとも確実な標準手段のため採用した（将来的に `AudioWorklet` ベースへの置き換えを検討の余地あり）。
+- API化・他アプリへの部品組み込み（当初検討した選択肢の一つ）は今回スコープ外（ユーザー判断によりスキップ）。
+
+---
+
+## 2026-07-12 — Phase 6.1 表現調整（実機レビュー反映）
+
+### 作業内容
+実機レビューのフィードバックを受け、Phase 6 の全アナライザータイプを調整した。基盤（レジストリ・ステートフル機構・履歴・ビート検出）は変更なし。
+
+- **円形スペクトログラム（T2）を削除**（可読性が低いため）。`spectrogram.js` からクラス除去、レジストリからエントリ除去。
+- **スペクトログラム（滝）**: 縦解像度向上・対数強度＋隣接ビン平均＋γ補正で微弱成分を繊細化、横送りを1〜2pxに抑制。
+- **3D地形**: 基準を画面底辺に変更し `baseOffset` で上へ持ち上げる方式に。**奥行き角度**パラメーター（`depthAngle`）を追加。
+- **トンネル**: 16:9で画面横幅いっぱいに広がるよう半径基準を対角基準へ。
+- **擬似3Dバー**: 奥行きを増やし棒グラフとの立体差を明確化。
+- **回転3Dリング**: 環半径・高さ・画面占有を拡大。
+- **パーティクル**: 加算グロー化。点＝光球／線＝速度方向ストリークで描き分け。
+- **波紋**: 全体エネルギーの立ち上がりでも発生させサウンド追従を明確化、線幅・輝度を音量連動。
+- **ノイズフロー**: 点＝光点／線＝流線で描き分け（従来は常に線）。
+- **メタボール**: 中心をノイズ徘徊させ形状ランダム性を強化、融合（blur/contrast）を改善。
+- **オシロスコープ**: `baseOffset` を中心からの距離（広がり）制御に変更。
+- **極座標フラワー**: **花弁数**の専用パラメーター（`petalCount`）を追加。
+- **ボロノイ脈動**: サイトをノイズで動的移動＋音量で移動量増幅し、形状が常に変化・音追従（毎フレーム再計算）。`motionSpeed` 対応。
+- 追加設定 `depthAngle` / `petalCount`、UIスライダー（奥行き角度・花弁の数）とケイパビリティ `angle`/`petals` を追加。
+
+### 検証
+- 全JS `node --check` パス、foundation 単体テスト 23 アサーション全通過。
+- ヘッドレス煙テスト: 全ステートフルタイプ×表現方法×4パターン×2アスペクト = 168 render-cases、例外0。
+- Chromium 実ブラウザ: 型14種（円形スペクトログラム無し）確認、全型切替＋表現方法巡回＋ランダマイズ30連打でコンソール/ページエラー0。ケイパビリティ連動（3D地形→奥行き角度、フラワー→花弁数）を確認。
+
+### spec.md 変更
+- §11.3・§20 Phase6: タイプ数を 15→14、13→12 に更新。Phase 6.1（表現調整）注記を追加。
+- `doc/spec-phase6.md` を v1.1 に更新: T2 削除表記、改訂履歴（§11）に全項目の変更を記録、受け入れ条件のタイプ数更新。
+
+### 備考
+- `doc/plan-phase6.md` は当初計画のスナップショットのため T2 の記述はそのまま残置。
+
+---
+
+## 2026-07-12 — Phase 6 拡張表現 実装
+
+### 作業内容
+- Phase 6「拡張表現」を実装。アナライザータイプを 13 種追加し計 15 種にした。
 - **基盤**
   - `js/vis-utils.js` 新規: 純ロジック集（clamp/lerp/isoProject/polarToXy、makeColor、ValueNoise、Spring/SpringArray、springParamsFromAmount、BeatDetector、Voronoi分割、makeRng）
   - `js/history-buffer.js` 新規: `FrameHistory`（事前確保リングバッファ）

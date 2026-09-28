@@ -29,12 +29,12 @@ export function findChrome(env = process.env) {
   }
 
   for (const candidate of candidates) {
-    if (isExecutable(candidate)) return candidate;
+    if (isExecutable(candidate, env)) return candidate;
   }
   return null;
 }
 
-function isExecutable(candidate) {
+function isExecutable(candidate, env) {
   if (candidate.includes(path.sep) || path.isAbsolute(candidate)) {
     try {
       fs.accessSync(candidate, fs.constants.X_OK);
