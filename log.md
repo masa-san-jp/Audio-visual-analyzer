@@ -2,6 +2,28 @@
 
 ---
 
+## 2026-09-29 — [T15-02] Node 単体テストの整備
+
+### 作業内容
+- tests/unit/settings-io.test.mjs: 設定シリアライズ往復と不正入力の既定値フォールバックを追加
+- tests/unit/history-buffer.test.mjs: push / get(age) / 容量超過 / setFrameLength / 範囲外取得を追加
+- tests/unit/vis-utils.test.mjs: 固定乱数列と computeFreqRange の受け入れテストを追加
+- tests/unit/fft.test.mjs: シード固定5入力と倍精度の素朴な DFT 参照値の比較を追加
+- tests/unit/webm-roundtrip.test.mjs: 映像30チャンク・キーフレーム・音声を含む WebM 往復テストを追加
+- tests/unit/mp4-roundtrip.test.mjs: 映像30チャンク・キーフレーム・音声を含む MP4 往復テストを追加
+
+### 検証
+- node tests/run.mjs --unit: 12 成功 / 0 失敗 / 1 スキップ（U15-00 異常系 SKIP）
+- 全 .js / .mjs 45 ファイルの node --check: PASS
+- Chrome ブラウザテスト: サンドボックスでは実行せず
+
+### spec.md 変更
+- なし（T15-02 の指定どおり）
+
+### 備考
+- 計画書 §7.1 の U15-01〜U15-06 のみを実装。js/ と index.html は変更していない
+
+
 ## 2026-09-28 — [T15-01] テストランナー骨格
 
 ### 作業内容
