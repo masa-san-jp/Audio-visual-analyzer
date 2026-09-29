@@ -18,6 +18,7 @@
 - node tests/run.mjs --unit --filter 'U15-00 異常系': FAIL、終了コード 1（期待どおり）
 - 変更した全 JavaScript / MJS ファイルの node --check: PASS
 - B15-00: Chrome 154 を導入したが、実行環境が Unix domain socket を禁止し（socket() = EPERM）、DevTools が起動できず未実行
+- macOS（Chrome 154 / Node 26）で node tests/run.mjs を3回実行: U15-00 異常系は SKIP、B15-00 は DevToolsActivePort 未生成の実行環境制約で各回失敗（終了コード 2）
 
 ### spec.md 変更
 - なし（T15-01 の指定どおり）

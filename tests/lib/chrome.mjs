@@ -6,6 +6,48 @@ import { spawn } from 'node:child_process';
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
+function isRunning(child) {
+  return child.exitCode === null && child.signalCode === null;
+}
+
+function waitForExit(child, timeoutMs = 0) {
+  if (!isRunning(child)) return Promise.resolve(true);
+  return new Promise((resolve) => {
+    let timer;
+    const onExit = () => {
+      clearTimeout(timer);
+      resolve(true);
+    };
+    child.once('exit', onExit);
+    if (timeoutMs > 0) {
+      timer = setTimeout(() => {
+        child.off('exit', onExit);
+        resolve(false);
+      }, timeoutMs);
+    }
+    if (!isRunning(child)) {
+      child.off('exit', onExit);
+      clearTimeout(timer);
+      resolve(true);
+    }
+  });
+}
+
+async function shutdown(child, userDataDir) {
+  if (isRunning(child)) {
+    try { child.kill('SIGTERM'); } catch {}
+    if (!await waitForExit(child, 3_000) && isRunning(child)) {
+      try { child.kill('SIGKILL'); } catch {}
+      await waitForExit(child);
+    }
+  }
+  try {
+    await fsp.rm(userDataDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+  } catch (error) {
+    console.warn(`Chrome の一時プロファイル削除に失敗しました: ${error.message}`);
+  }
+}
+
 export class BrowserEnvironmentError extends Error {
   constructor(message, options) {
     super(message, options);
@@ -89,11 +131,11 @@ export async function launchChrome({ headed = false, executablePath = findChrome
   const deadline = Date.now() + 10_000;
   while (Date.now() < deadline) {
     if (spawnError) {
-      await fsp.rm(userDataDir, { recursive: true, force: true });
+      await shutdown(child, userDataDir);
       throw new BrowserEnvironmentError(`Chrome の起動に失敗しました: ${spawnError.message}`);
     }
     if (child.exitCode !== null) {
-      await fsp.rm(userDataDir, { recursive: true, force: true });
+      await shutdown(child, userDataDir);
       throw new BrowserEnvironmentError(`Chrome が起動コード ${child.exitCode} で終了しました。`);
     }
     try {
@@ -103,8 +145,7 @@ export async function launchChrome({ headed = false, executablePath = findChrome
     await sleep(100);
   }
   if (!port) {
-    child.kill();
-    await fsp.rm(userDataDir, { recursive: true, force: true });
+    await shutdown(child, userDataDir);
     throw new BrowserEnvironmentError('DevToolsActivePort が10秒以内に生成されませんでした。');
   }
 
@@ -112,14 +153,12 @@ export async function launchChrome({ headed = false, executablePath = findChrome
   try {
     tabs = await fetch(`http://127.0.0.1:${port}/json`).then((r) => r.json());
   } catch (error) {
-    child.kill();
-    await fsp.rm(userDataDir, { recursive: true, force: true });
+    await shutdown(child, userDataDir);
     throw new BrowserEnvironmentError(`Chrome DevTools へ接続できません: ${error.message}`, { cause: error });
   }
   const page = tabs.find((tab) => tab.type === 'page' && tab.webSocketDebuggerUrl);
   if (!page) {
-    child.kill();
-    await fsp.rm(userDataDir, { recursive: true, force: true });
+    await shutdown(child, userDataDir);
     throw new BrowserEnvironmentError('Chrome の DevTools ページを取得できませんでした。');
   }
 
@@ -130,8 +169,7 @@ export async function launchChrome({ headed = false, executablePath = findChrome
       socket.addEventListener('error', reject, { once: true });
     });
   } catch (error) {
-    child.kill();
-    await fsp.rm(userDataDir, { recursive: true, force: true });
+    await shutdown(child, userDataDir);
     throw new BrowserEnvironmentError(`Chrome DevTools WebSocket に接続できません: ${error.message}`, { cause: error });
   }
 
@@ -207,8 +245,7 @@ export async function launchChrome({ headed = false, executablePath = findChrome
       if (closed) return;
       closed = true;
       try { socket.close(); } catch {}
-      child.kill();
-      await fsp.rm(userDataDir, { recursive: true, force: true });
+      await shutdown(child, userDataDir);
     }
   };
 }
