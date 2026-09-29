@@ -1,5 +1,29 @@
 # 開発ログ
 
+## 2026-09-29 — [T15-03] ブラウザテストハーネス
+
+### 作業内容
+- `tests/lib/harness-builder.mjs`: `index.html` の script src を出現順に抽出し、`js/app.js` を除いた生成ハーネスを `tests/.generated/harness.html` に出力する機能を追加
+- `tests/browser/lib/avz-test.js`: ブラウザテスト登録、アサーション、タイムアウト、console.error / 未捕捉例外の失敗判定、成果物保存情報、期待失敗の opt-in を追加
+- `tests/browser/b15-00.test.js`: B15-00 の成功・意図的失敗・console.error の3テストを追加
+- `tests/run.mjs`: `tests/browser/*.test.js` のページ種別検出、ハーネス/app の実行、結果集計、`--skip-slow`、期待失敗 opt-in を追加。従来のハードコード smoke test を置換
+- `tests/unit/harness-builder.test.mjs`: ハーネスの script 順・相対パス・`app.js` 除外を検証する単体テストを追加
+- `README.md`: ブラウザテストの検出方法、生成ハーネス、B15-00 の期待失敗確認コマンドを追記
+
+### 検証
+- U15-03: PASS（`node tests/run.mjs --unit`。U15-00 正常系 PASS / 意図的失敗系 SKIP）
+- harness-builder の生成 HTML を確認: `index.html` の script 順、`js/app.js` 除外、補助スクリプトとテストの追加を確認
+- avz-test の Node VM 検証: 通常時 `pass/skip/skip`、期待失敗 opt-in 時 `pass/fail/fail`
+- 変更ファイルの `node --check`: PASS
+- ブラウザ実行: 未実行。Chrome 起動時に `DevToolsActivePort` が10秒以内に生成されず、サンドボックスの環境エラーで停止
+
+### spec.md 変更
+- なし（T15-03 の指定どおり）
+
+### 備考
+- 意図的失敗は通常の全件実行を失敗させないため、`expectedFailure` を付けたテストを通常は skip し、環境変数または B15-00 フィルタで opt-in した場合だけ実行する
+- `js/` および `index.html` は変更していない
+
 ---
 
 ## 2026-09-28 — [T15-01] テストランナー骨格
