@@ -1,5 +1,31 @@
 # 開発ログ
 
+## 2026-09-29 — [T15-03] ブラウザテストハーネス
+
+### 作業内容
+- `tests/lib/harness-builder.mjs`: `index.html` の script src を出現順に抽出し、`js/app.js` を除いた生成ハーネスを `tests/.generated/harness.html` に出力する機能を追加
+- `tests/browser/lib/avz-test.js`: ブラウザテスト登録、アサーション、タイムアウト、console.error / 未捕捉例外の失敗判定、成果物保存情報、意図的な失敗ケースの判定（通常は反転判定、`B15-00` 指定時は生の判定）を追加
+- `tests/browser/b15-00.test.js`: B15-00 の成功・意図的失敗・console.error の3テストを追加
+- `tests/run.mjs`: `tests/browser/*.test.js` のページ種別検出、ハーネス/app の実行、結果集計、`--skip-slow`、意図的な失敗ケースの切り替えを追加。従来のハードコード smoke test を置換
+- `tests/unit/harness-builder.test.mjs`: ハーネスの script 順・相対パス・`app.js` 除外を検証する単体テストを追加
+- `README.md`: ブラウザテストの検出方法、生成ハーネス、B15-00 の生の判定を確認するコマンドを追記
+
+### 検証
+- 実装環境（サンドボックス）: `node tests/run.mjs --unit` PASS、`node --check` PASS。Chrome が起動できずブラウザ実行は未実施
+- 2026-09-30 レビュアーが macOS（Chrome 154 / Node 26）で実行
+  - `node tests/run.mjs`: ブラウザの B15-00 は、正常系 PASS、意図的な失敗2件が「期待どおり失敗」で PASS。全体で 0 失敗
+  - `node tests/run.mjs --browser --filter 'B15-00'`: pass / fail / fail（計画書 §7.2 どおり）
+
+### spec.md 変更
+- なし（T15-03 の指定どおり）
+
+### 備考
+- `expectedFailure` を付けたテストは、通常実行でも毎回走らせて判定を反転する（失敗を検知できれば pass）。こうすると CI でも失敗検知の仕組みを毎回確かめられる。`--filter` の文字列に `B15-00` を含めるか `AVZ_RUNNER_INCLUDE_EXPECTED_FAILURE=1` を指定したときは、反転せず生の判定を出す
+- 実装は Codex、レビュー・修正・push・PR は Claude が担当。レビューで3点を修正した（ハーネステストの ID を誤った U15-03 から B15-00 に変更、意図的な失敗ケースを skip から反転判定に変更、フィルターによる有効化を `B15-00` の明示指定に限定）
+- `js/` および `index.html` は変更していない
+
+---
+
 ## 2026-09-29 — [T15-02] Node 単体テストの整備
 
 ### 作業内容
