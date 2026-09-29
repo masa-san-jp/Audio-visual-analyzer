@@ -2,6 +2,33 @@
 
 ---
 
+## 2026-09-28 — [T15-01] テストランナー骨格
+
+### 作業内容
+- tests/run.mjs: Node 標準のテストランナーとブラウザテスト実行の入口、フィルター、レポート出力を追加
+- tests/lib/load-classic.mjs: classic script を Node VM コンテキストで順に読み込む機能を追加
+- tests/lib/chrome.mjs: Chrome / Chromium の検出、CDP 接続、評価、ページ遷移、ブラウザーエラー収集を追加
+- tests/unit/runner.test.mjs: ランナーの正常系・意図的失敗系を追加
+- .gitignore: 生成ハーネスとテスト出力を除外
+- README.md: 開発者向けのテスト実行方法を追加
+
+### 検証
+- node tests/run.mjs --unit: 正常系 PASS、意図的失敗系 SKIP、終了コード 0
+- node tests/run.mjs --unit --filter 'U15-00 正常系': PASS、終了コード 0
+- node tests/run.mjs --unit --filter 'U15-00 異常系': FAIL、終了コード 1（期待どおり）
+- 変更した全 JavaScript / MJS ファイルの node --check: PASS
+- 初回実装環境（サンドボックス）では Unix domain socket 禁止により Chrome が起動できず B15-00 未実行
+- 2026-09-29 macOS（Chrome 154 / Node 26）: 終了処理で ENOTEMPTY（Chrome 終了前にプロファイル削除）を検出し修正。修正後 node tests/run.mjs を3回実行し、いずれも 0 失敗・終了コード 0（U15-00 異常系は SKIP）
+
+### spec.md 変更
+- なし（T15-01 の指定どおり）
+
+### 備考
+- PR #32 の実装計画書に基づく初回チケット。T15-01 の前提チケットはなし
+- 実装は Codex、レビュー・ブラウザ検証は Claude が担当
+
+---
+
 ## 2026-09-28 — 実装計画書（Phase 15・16・18）の作成（実装なし）
 
 ### 作業内容
