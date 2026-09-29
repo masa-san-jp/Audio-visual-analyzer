@@ -1,5 +1,25 @@
 # 開発ログ
 
+## 2026-09-30 — [T15-07] 既存機能の回帰テスト
+
+### 作業内容
+- `tests/browser/b15-01.test.js`: `OfflineAudioContext` 上の決定的な合成音を使い、AnalyserNode と `SpectrumAnalyzer` の周波数データを2048サンプル境界で比較する B15-01 を追加
+- `tests/browser/regression.test.js`: `sigDrumPattern` のWAVを `OfflineExporter.export` へ渡し、完了状態・Blob・自前デマルチプレクサの映像フレーム数を確認する B15-02、およびアプリのWAV読込・再生中に全14タイプをUIから切り替える B15-03 を追加
+
+### 検証
+- `node tests/run.mjs --unit`: 18件成功 / 0件失敗 / 1件スキップ（U15-00 異常系）
+- `node --check`（全 `.js` / `.mjs`）: 55ファイル PASS
+- 実装環境（サンドボックス）では Chrome が起動できずブラウザテスト未実施
+- レビュアーが macOS（Chrome 154 / Node 26）で `node tests/run.mjs --browser` を実行: B15-01 / B15-02 / B15-03 すべて PASS（B15-02 は約1.4秒、B15-03 は約7秒）
+
+### spec.md 変更
+- なし（T15-07 の指定どおり）。計画書 Phase 15 §6 の T15-07 成果物欄を分割後のファイル名に更新
+
+### 備考
+- 計画書 §6 の成果物 regression.test.js を、ページ種別に合わせて b15-01.test.js（harness）と regression.test.js（app）に分割（アーキテクト承認）
+- `js/` および `index.html` は変更していない
+- 実装は Codex、レビュー・ブラウザ検証・コミット・PR は Claude が担当
+
 ## 2026-09-29 — [T15-03] ブラウザテストハーネス
 
 ### 作業内容
