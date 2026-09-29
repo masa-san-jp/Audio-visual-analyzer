@@ -4,25 +4,72 @@
 
 ### 作業内容
 - `tests/lib/harness-builder.mjs`: `index.html` の script src を出現順に抽出し、`js/app.js` を除いた生成ハーネスを `tests/.generated/harness.html` に出力する機能を追加
-- `tests/browser/lib/avz-test.js`: ブラウザテスト登録、アサーション、タイムアウト、console.error / 未捕捉例外の失敗判定、成果物保存情報、期待失敗の opt-in を追加
+- `tests/browser/lib/avz-test.js`: ブラウザテスト登録、アサーション、タイムアウト、console.error / 未捕捉例外の失敗判定、成果物保存情報、意図的な失敗ケースの判定（通常は反転判定、`B15-00` 指定時は生の判定）を追加
 - `tests/browser/b15-00.test.js`: B15-00 の成功・意図的失敗・console.error の3テストを追加
-- `tests/run.mjs`: `tests/browser/*.test.js` のページ種別検出、ハーネス/app の実行、結果集計、`--skip-slow`、期待失敗 opt-in を追加。従来のハードコード smoke test を置換
+- `tests/run.mjs`: `tests/browser/*.test.js` のページ種別検出、ハーネス/app の実行、結果集計、`--skip-slow`、意図的な失敗ケースの切り替えを追加。従来のハードコード smoke test を置換
 - `tests/unit/harness-builder.test.mjs`: ハーネスの script 順・相対パス・`app.js` 除外を検証する単体テストを追加
-- `README.md`: ブラウザテストの検出方法、生成ハーネス、B15-00 の期待失敗確認コマンドを追記
+- `README.md`: ブラウザテストの検出方法、生成ハーネス、B15-00 の生の判定を確認するコマンドを追記
 
 ### 検証
-- U15-03: PASS（`node tests/run.mjs --unit`。U15-00 正常系 PASS / 意図的失敗系 SKIP）
-- harness-builder の生成 HTML を確認: `index.html` の script 順、`js/app.js` 除外、補助スクリプトとテストの追加を確認
-- avz-test の Node VM 検証: 通常時 `pass/skip/skip`、期待失敗 opt-in 時 `pass/fail/fail`
-- 変更ファイルの `node --check`: PASS
-- ブラウザ実行: 未実行。Chrome 起動時に `DevToolsActivePort` が10秒以内に生成されず、サンドボックスの環境エラーで停止
+- 実装環境（サンドボックス）: `node tests/run.mjs --unit` PASS、`node --check` PASS。Chrome が起動できずブラウザ実行は未実施
+- 2026-09-30 レビュアーが macOS（Chrome 154 / Node 26）で実行
+  - `node tests/run.mjs`: ブラウザの B15-00 は、正常系 PASS、意図的な失敗2件が「期待どおり失敗」で PASS。全体で 0 失敗
+  - `node tests/run.mjs --browser --filter 'B15-00'`: pass / fail / fail（計画書 §7.2 どおり）
 
 ### spec.md 変更
 - なし（T15-03 の指定どおり）
 
 ### 備考
-- 意図的失敗は通常の全件実行を失敗させないため、`expectedFailure` を付けたテストを通常は skip し、環境変数または B15-00 フィルタで opt-in した場合だけ実行する
+- `expectedFailure` を付けたテストは、通常実行でも毎回走らせて判定を反転する（失敗を検知できれば pass）。こうすると CI でも失敗検知の仕組みを毎回確かめられる。`--filter` の文字列に `B15-00` を含めるか `AVZ_RUNNER_INCLUDE_EXPECTED_FAILURE=1` を指定したときは、反転せず生の判定を出す
+- 実装は Codex、レビュー・修正・push・PR は Claude が担当。レビューで3点を修正した（ハーネステストの ID を誤った U15-03 から B15-00 に変更、意図的な失敗ケースを skip から反転判定に変更、フィルターによる有効化を `B15-00` の明示指定に限定）
 - `js/` および `index.html` は変更していない
+
+---
+
+## 2026-09-29 — [T15-02] Node 単体テストの整備
+
+### 作業内容
+- tests/unit/settings-io.test.mjs: 設定シリアライズ往復と不正入力の既定値フォールバックを追加
+- tests/unit/history-buffer.test.mjs: push / get(age) / 容量超過 / setFrameLength / 範囲外取得を追加
+- tests/unit/vis-utils.test.mjs: 固定乱数列と computeFreqRange の受け入れテストを追加
+- tests/unit/fft.test.mjs: シード固定5入力と倍精度の素朴な DFT 参照値の比較を追加
+- tests/unit/webm-roundtrip.test.mjs: 映像30チャンク・キーフレーム・音声を含む WebM 往復テストを追加
+- tests/unit/mp4-roundtrip.test.mjs: 映像30チャンク・キーフレーム・音声を含む MP4 往復テストを追加
+
+### 検証
+- node tests/run.mjs --unit: 12 成功 / 0 失敗 / 1 スキップ（U15-00 異常系 SKIP）
+- 全 .js / .mjs 45 ファイルの node --check: PASS
+- Chrome ブラウザテスト: 実装環境のサンドボックスでは実行せず
+- レビュアーが macOS（Chrome 154 / Node 26）で `node tests/run.mjs` を全件実行（T15-04 取り込み後）: 20 PASS / 0 FAIL / 1 SKIP（U15-00 異常系）
+
+### spec.md 変更
+- なし（T15-02 の指定どおり）
+
+### 備考
+- 計画書 §7.1 の U15-01〜U15-06 のみを実装。js/ と index.html は変更していない
+- 実装は Codex、レビュー・push・PR は Claude が担当
+
+---
+
+## 2026-09-29 — [T15-04] 合成信号・WAV ライブラリ
+
+### 作業内容
+- tests/shared/signals.js: Phase 15 §3.5 の決定的な正弦波、ノイズ、クリック、ドラム、和音、ミックス、連結、描画フレーム合成を追加（`sigScaleToLufs` は計画書どおり T16-04 で追加）
+- tests/shared/wav.js: PcmBuffer を RIFF/WAVE PCM 16bit little-endian にエンコードする機能を追加
+- tests/unit/signals.test.mjs: U15-07 の決定性、クリック位置、パンなしステレオを追加
+- tests/unit/wav.test.mjs: U15-08 の44バイトヘッダーと±32767クランプを追加
+
+### 検証
+- `node tests/run.mjs --unit`: U15-00 異常系 SKIP、その他6件 PASS、失敗0件
+- `node --check`（変更した全 JS / MJS）: PASS
+- レビュアーが macOS（Chrome 154 / Node 26）で `node tests/run.mjs` を全件実行: 9 PASS / 0 FAIL / 1 SKIP（U15-00 異常系）
+
+### spec.md 変更
+- なし（T15-04 の指定どおり）
+
+### 備考
+- 実装は Phase 15 §3.5 および後続計画書が参照する関数名・引数に従った
+- 実装は Codex、レビュー・コミットは Claude が担当。レビューで T16-04 範囲の `sigScaleToLufs` を削除し、U15-07 に「クリック開始1サンプル前は無音」の確認を追加
 
 ---
 
