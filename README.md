@@ -92,6 +92,11 @@ IP アドレス（Mac / Linux は `ifconfig`、Windows は `ipconfig` で確認�
 | `doc/plan-phase11.md` | Phase 11 開発計画書（画質指定・再生操作性の向上） |
 | `doc/plan-phase12.md` | Phase 12 開発計画書（3スロット再生キュー） |
 | `doc/plan-phase14.md` | Phase 14 開発計画書（オフライン書き出しの動画デコード高速化） |
+| `doc/20260928-evolution-concept-music-understanding-visual-engine.md` | 超進化構想書（Phase 15 以降の方向性。2026-09-28 承認） |
+| `doc/20260928-implementation-guide-for-contractors.md` | 実装者ガイド（外注実装者向けの作業ルール・規約・完了の定義） |
+| `doc/20260928-plan-phase15-test-foundation-and-frame-pipeline.md` | Phase 15 実装計画書（テスト基盤・描画パイプライン共通化） |
+| `doc/20260928-plan-phase16-music-feature-stream.md` | Phase 16 実装計画書（音楽特徴ストリーム） |
+| `doc/20260928-plan-phase18-song-map-and-auto-director.md` | Phase 18 実装計画書（ソングマップと自動演出） |
 | `log.md` | 開発ログ |
 
 ## 現在の実装内容
