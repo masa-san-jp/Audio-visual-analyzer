@@ -1,5 +1,25 @@
 # 開発ログ
 
+## 2026-09-29 — [T15-04] 合成信号・WAV ライブラリ
+
+### 作業内容
+- tests/shared/signals.js: Phase 15 §3.5 の決定的な正弦波、ノイズ、クリック、ドラム、和音、ミックス、連結、描画フレーム合成を追加（`sigScaleToLufs` は計画書どおり T16-04 で追加）
+- tests/shared/wav.js: PcmBuffer を RIFF/WAVE PCM 16bit little-endian にエンコードする機能を追加
+- tests/unit/signals.test.mjs: U15-07 の決定性、クリック位置、パンなしステレオを追加
+- tests/unit/wav.test.mjs: U15-08 の44バイトヘッダーと±32767クランプを追加
+
+### 検証
+- `node tests/run.mjs --unit`: U15-00 異常系 SKIP、その他6件 PASS、失敗0件
+- `node --check`（変更した全 JS / MJS）: PASS
+- レビュアーが macOS（Chrome 154 / Node 26）で `node tests/run.mjs` を全件実行: 9 PASS / 0 FAIL / 1 SKIP（U15-00 異常系）
+
+### spec.md 変更
+- なし（T15-04 の指定どおり）
+
+### 備考
+- 実装は Phase 15 §3.5 および後続計画書が参照する関数名・引数に従った
+- 実装は Codex、レビュー・コミットは Claude が担当。レビューで T16-04 範囲の `sigScaleToLufs` を削除し、U15-07 に「クリック開始1サンプル前は無音」の確認を追加
+
 ---
 
 ## 2026-09-28 — [T15-01] テストランナー骨格
