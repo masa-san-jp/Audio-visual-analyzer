@@ -301,7 +301,7 @@ class FramePipeline {
 | T15-04 | 合成信号・WAV ライブラリ | ★2 | T15-01 | `tests/shared/signals.js`、`tests/shared/wav.js` | U15-07、U15-08 | 不要 |
 | T15-05 | ゴールデン基準値の作成 | ★2 | T15-03, T15-04 | `tests/shared/golden-cases.js`、`tests/browser/golden.test.js`（`visualizer-core` ドライバ）、`tests/golden/frames.json`、`tests/lib/png.mjs` | B15-04 | 不要 |
 | T15-06 | FramePipeline への統合 | ★3 | T15-05, T15-07 | `js/frame-pipeline.js`、`visualizer-core.js`・`offline-exporter.js`・`index.html` の変更、ゴールデンを `pipeline` ドライバへ切替 | B15-04、B15-05、B15-02、B15-03 | 要（§4.4） |
-| T15-07 | 既存機能の回帰テスト | ★2 | T15-03, T15-04 | `tests/browser/regression.test.js` | B15-01〜B15-03 | 不要 |
+| T15-07 | 既存機能の回帰テスト | ★2 | T15-03, T15-04 | `tests/browser/b15-01.test.js`（`@page harness`）、`tests/browser/regression.test.js`（`@page app`） | B15-01〜B15-03 | 不要 |
 | T15-08 | デバッグ表示 | ★1 | T15-06 | `js/debug-overlay.js`、`index.html`、`visualizer-core.js` | B15-06 | 要（README に `?debug=1` を追記） |
 | T15-09 | CI・PR テンプレート | ★1 | T15-02, T15-07 | `.github/workflows/test.yml`、`.github/pull_request_template.md` | CI 上で全テストが成功すること | 不要 |
 
