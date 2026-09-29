@@ -1,5 +1,28 @@
 # 開発ログ
 
+## 2026-09-30 — [T15-10] 白背景での加算合成の修正
+
+### 作業内容
+- `js/renderers/particles.js`: `ParticlesRenderer` と `FlowRenderer` が白背景で `multiply`、それ以外で `lighter` を使うよう変更
+- `js/renderers/ripple.js`: `RippleRenderer` が白背景で `multiply`、それ以外で `lighter` を使うよう変更
+- `tests/browser/b15-07.test.js`: 320×180・60フレームの VisualizerCore 描画で、白背景の非空判定と黒背景の `lighter` 維持を検証する B15-07 を追加
+
+### 検証
+- `node tests/run.mjs --unit`: 18件成功 / 0件失敗 / 1件スキップ（U15-00 異常系）
+- `node --check`（変更した全 `.js` / `.mjs`）: 3ファイル PASS
+- 実装環境（サンドボックス）では Chrome が起動できずブラウザテスト未実施
+- レビュアーが macOS（Chrome 154 / Node 26）で実行: `node tests/run.mjs` 25 PASS / 0 FAIL / 1 SKIP（B15-07 含む）。`index.html` を `file://` で開きコンソールエラー 0
+
+### spec.md 変更
+- `doc/spec.md` §11.1 に白背景では粒子・ノイズフロー・波紋を `multiply` で描画する記述を追加（v2.7）。T15-05 のゴールデン基準作成中に白背景で表示されない不具合が判明し、Phase 15 内で修正する owner 決定による
+- 計画書に T15-10 を追加し、T15-05 の前提に T15-10 を追加。非空判定の閾値を owner 決定で `1.0` から `0.1` に変更
+
+### 備考
+- `js/offline-exporter.js` に対象3タイプの重複した合成ロジックはなかった
+- README.md は黒/白背景の動作を説明していないため変更していない
+- 実装は Codex、spec・計画書の変更とレビュー・検証・コミット・PR は Claude が担当
+
+
 ## 2026-09-30 — [T15-07] 既存機能の回帰テスト
 
 ### 作業内容

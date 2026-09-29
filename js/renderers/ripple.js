@@ -149,7 +149,7 @@ class RippleRenderer {
     const baseW = Math.max(1, settings.barWidth || 2);
     ctx.lineCap = 'round';
     const prevOp = ctx.globalCompositeOperation;
-    ctx.globalCompositeOperation = 'lighter'; // 干渉部が明るく重なる
+    ctx.globalCompositeOperation = settings && settings.bgColor === '#fff' ? 'multiply' : 'lighter'; // 干渉部が明るく重なる
     for (let i = 0; i < this.MAX_WAVES; i++) {
       const w = this.waves[i];
       if (!w.active) continue;
