@@ -1,51 +1,19 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { loadClassic } from '../lib/load-classic.mjs';
+import { MFS_CONST, MfsOnset, forEachHop, sig } from '../lib/mfs-drive.mjs';
 
-const { get } = loadClassic([
-  'js/mfs-const.js', 'js/mfs-dsp.js', 'js/mfs-onset.js', 'tests/shared/signals.js'
-]);
-const MFS_CONST = get('MFS_CONST');
-const mfsDerived = get('mfsDerived');
-const mfsWindowHann = get('mfsWindowHann');
-const MfsFft = get('MfsFft');
-const MfsOnset = get('MfsOnset');
-const sigClickTrack = get('sigClickTrack');
-const sigNoise = get('sigNoise');
-const sigMix = get('sigMix');
+const { sigClickTrack, sigNoise, sigMix } = sig;
 
 const SAMPLE_RATES = [48000, 44100];
 const N = MFS_CONST.FFT_SIZE;
 const H = MFS_CONST.HOP_SIZE;
 
-// MfsExtractor 未実装のため、計画書 §5.1 / §5.3 どおりにホップ分割と振幅スペクトル A を作って MfsOnset を駆動する。
+// MfsExtractor 未実装のため、tests/lib/mfs-drive.mjs（計画書 §5.1 / §5.3 どおりのホップ分割・FFT）で MfsOnset を駆動する。
 // 戻り値: 群ごとのオンセット時刻の配列（tSec = ホップ完了時刻）
 function runOnsets(signal) {
-  const sr = signal.sampleRate;
-  const [L, R] = signal.channels;
-  const w = mfsWindowHann(N);
-  const fft = new MfsFft(N);
-  const reL = new Float64Array(N), imL = new Float64Array(N);
-  const reR = new Float64Array(N), imR = new Float64Array(N);
-  const A = new Float64Array(N / 2);
-  const scale = 2 / (N / 2);
-  const onset = new MfsOnset(sr, N);
+  const onset = new MfsOnset(signal.sampleRate, N);
   const times = [[], [], [], []];
-  const hops = Math.floor(L.length / H);
-  for (let h = 0; h < hops; h++) {
-    const end = (h + 1) * H;
-    for (let n = 0; n < N; n++) {
-      const idx = end - N + n;
-      const l = idx >= 0 ? L[idx] : 0, r = idx >= 0 ? R[idx] : 0;
-      reL[n] = l * w[n]; imL[n] = 0;
-      reR[n] = r * w[n]; imR[n] = 0;
-    }
-    fft.transform(reL, imL);
-    fft.transform(reR, imR);
-    for (let k = 0; k < N / 2; k++) {
-      A[k] = Math.hypot(reL[k] + reR[k], imL[k] + imR[k]) * scale / 2;
-    }
-    const tSec = end / sr;
+  forEachHop(signal, (A, tSec) => {
     const flags = onset.process(A, tSec);
     assert.ok(flags >= 0 && flags <= 15);
     for (let g = 0; g < 4; g++) if (flags & (1 << g)) times[g].push(tSec);
@@ -53,7 +21,7 @@ function runOnsets(signal) {
       assert.ok(Number.isFinite(onset.flux[g]) && Number.isFinite(onset.env[g]));
       assert.ok(onset.env[g] >= 0 && onset.env[g] <= 1);
     }
-  }
+  });
   return times;
 }
 
