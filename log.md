@@ -1,5 +1,35 @@
 # 開発ログ
 
+## 2026-10-01 — [T15-06] FramePipeline への統合
+
+### 作業内容
+- `js/frame-pipeline.js`（新規）: `FramePipeline`（`resize` / `reset` / `dispose` / `fillBackground` / `render`）と `sliceLayerLinear` を追加。処理順は計画書 §4.3（タイプ同期 → 残像付きクリア＋動画合成 → 色相 → ステートフル/ステートレス描画）で、旧 `VisualizerCore` / `OfflineExporter` の順序を保持。`frame.getLayer` は constructor で作る束縛関数1つを使い回し、`frame` オブジェクトも使い回す
+- `js/visualizer-core.js`: rAF ループ・`resize()`・`start/stop`・`input` 組み立て・動画要素の描画関数（`drawBackground`）のみ残し、`_syncRenderer` / `_clearWithAfterimage` / `_renderStateful` / `_renderStateless` / `_applyPhysics` / `_ensureHistory` / `_huePhase` を削除。`_fillBackground()` は `pipeline.fillBackground(this.settings)` へ委譲（名前・引数は不変）。`_activeType` は B15-03 が参照するため pipeline の値を返す読み取り専用 getter として残した
+- `js/offline-exporter.js`: 書き出しごとに `new FramePipeline(canvas, ctx)` を作り、`finally` で `dispose()`（中断・失敗時も破棄）。`_renderStateless` / `_applyPhysics` / `_clearFrame` / `_sliceLayer` とフレームループ内の色相計算・履歴・BeatDetector を削除。`frameAt()` を先に `await` して `drawBackground` のクロージャで描く。粘性揺らぎ状態は書き出しごとに初期化される（従来は書き出しをまたいで残っていた）
+- `index.html`: `js/frame-pipeline.js` を `js/renderer-registry.js` の直後に追加
+- `tests/browser/golden.test.js`: `pipeline` ドライバ（計画書 §3.6.4）へ切替え、`visualizer-core` ドライバと rAF / `performance.now` の差し替えを削除。`tests/golden/frames.json` は未変更
+- `tests/browser/b15-05.test.js`（新規）: B15-05
+- 意図的な振る舞い変更（計画書 §4.4 の1件のみ）: 色相連続変化を `huePhase += speed * 0.5 * (dtMs / 16.7)` の経過時間基準に統一
+
+### 検証
+- `node tests/run.mjs`: 30 件 / 29 成功 / 0 失敗 / 1 スキップ（U15-00 異常系）
+- B15-04: `pipeline` ドライバが既存 `tests/golden/frames.json`（再生成なし）と全66ケースで一致。比較しきい値を一時的に 0（平均差 0・最大差 0）へ締めても合格＝ビット一致（確認後に元へ戻した）
+- B15-05: `FramePipeline.prototype.render` の呼び出し回数 = 書き出し映像フレーム数、旧メソッドが `OfflineExporter` に残っていないことを確認 — 合格
+- B15-02 / B15-03 / B15-07 / B15-01: 合格
+- 全 `.js` / `.mjs` に `node --check`: 成功
+- `index.html` を `file://` で開いたコンソールエラー: 0（headless Chrome 154）
+- 手動確認 §7.3（自動化できた範囲）: PR 本文に記載
+
+### spec.md 変更
+- v2.7 → v2.8（2026-10-01）。§12.1: 色相連続変化の速度は表示のリフレッシュレートに依存せず、ライブと書き出しで同じ。§16.3: 描画処理はライブ・書き出しで共通の `FramePipeline` を通る。README の色相連続変化の記述も更新
+
+### 備考
+- 実装: Sonnet サブエージェント（レビュー・マージはアーキテクト）
+- `_ensureHistory` の履歴フレーム長は `freq.length`（旧ライブは `audioEngine.freqSliceLength()`）。`freq` が null のときは新規確保せず既存履歴を返す（旧ライブで長さ 0 のとき null を返したのと同等）
+- 旧オフラインのみあった `settings.historySeconds` 未定義時の既定 4 秒と `afterimageIntensity || 0` を共通化（ライブ側は未定義にならないため見た目は不変）
+
+---
+
 ## 2026-09-30 — [T15-05] ゴールデン基準値の作成
 
 ### 作業内容
