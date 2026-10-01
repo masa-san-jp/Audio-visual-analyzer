@@ -1,5 +1,25 @@
 # 開発ログ
 
+## 2026-10-01 — [T16-02] オンセット検出
+
+### 作業内容
+- `js/mfs-onset.js`: `MfsOnset`（計画書 §5.4 の擬似コードどおり。`constructor(sampleRate, fftSize)` / `process(A, tSec)` → フラグ 0..15 / `reset()`、公開 `flux` / `env`（Float32Array(4)）/ `odf` / `odfLow`）。`MFS_CONST` と `mfsDerived` のみ参照する自己完結実装。`process()` 内で配列・オブジェクトを生成しない
+- `tests/unit/mfs-onset.test.mjs`: U16-04。`MfsExtractor` 未実装のため、テスト内で §5.1 / §5.3 どおりにホップ分割・Hann 窓・FFT・モノラル振幅 A を作って駆動する
+- `index.html`・ワークレットは未変更
+
+### 検証
+- U16-04（クリック 120BPM 16 秒）: 48kHz クリック 32 / 命中 32 / 取りこぼし 0 / 範囲外 0、遅れ 5.3〜16.0ms。44.1kHz 同 32/32/0/0、遅れ 6.2〜17.1ms（基準 0〜25ms）
+- U16-04（無音 10 秒）: 全群で発生 0（両サンプルレート）
+- 参考（基準なし）: ピンクノイズ 0.25 重畳で 27/32 検出、誤検出 1（両サンプルレート）
+- `node tests/run.mjs`: 42 件中 41 成功 / 0 失敗 / 1 スキップ（U15-00 異常系は想定どおり）。`node --check` PASS
+
+### spec.md 変更
+- なし
+
+### 備考
+- 実装: Sonnet サブエージェント
+- 時刻は `tSec`（ホップ完了時刻）を使用。`eventLatencySec` による補正はしていない（計画書に従う）
+
 ## 2026-10-01 — [T16-01] 定数・データ配置・DSP 部品
 
 ### 作業内容
