@@ -49,10 +49,6 @@ class OfflineExporter {
     this.blob = null;
     this._cancelRequested = false;
     this._quality = 'standard';
-    // 粘性揺らぎ（physicsAmount）用の内部状態。VisualizerCore._applyPhysics と同一ロジック。
-    this._physics = null;
-    this._physicsLen = 0;
-    this._physicsOut = null;
     // コールバック
     this.onStateChange = null;
     this.onProgress = null;
@@ -293,13 +289,8 @@ class OfflineExporter {
     const ctx = canvas.getContext('2d', { alpha: false });
 
     const entry = getRendererEntry(settings.analyzerType);
-    const stateful = entry.stateful ? entry.create(canvas) : null;
-    if (stateful && stateful.onResize) stateful.onResize(canvas);
-
-    const capacitySec = clamp(settings.historySeconds != null ? settings.historySeconds : 4, 1, 8);
-    const historyCapacity = Math.min(240, Math.max(2, Math.round(capacitySec * fps)));
-    const history = new FrameHistory(historyCapacity, freqLen);
-    const beatDetector = new BeatDetector();
+    // 描画本体はライブ表示と共通の FramePipeline（書き出しごとに新規作成し、終了時に dispose する）
+    const pipeline = new FramePipeline(canvas, ctx);
 
     // ── コンテナ・コーデック選択（MP4優先、非対応環境は WebM） ──
     const containerChoice = await this._selectContainer(width, height, fps);
@@ -382,54 +373,43 @@ class OfflineExporter {
     // ── フレーム描画 + 映像エンコード ──
     const dtMs = 1000 / fps;
     const keyframeEveryN = Math.max(1, Math.round(fps * OFFLINE_EXPORT_KEYFRAME_INTERVAL_SEC));
-    let huePhase = 0;
+    // 動画合成: frameAt() で先に取得した drawable を drawBackground で描く（FramePipeline から呼ばれる）
+    let compositeDrawable = null;
+    const drawBackground = (bgCtx, bgCanvas) => {
+      if (compositeDrawable) this._drawCompositeVideoFrame(bgCtx, bgCanvas, compositeDrawable, settings);
+    };
+    // pipeline.render へ渡す input（毎フレーム使い回して値だけ更新する）
+    const input = {
+      freq: null, time: null, getLayer: null,
+      dtMs, nowMs: 0, historyFps: fps,
+      drawBackground: compositeSource ? drawBackground : null,
+    };
 
     try {
       for (let i = 0; i < totalFrames; i++) {
         this._checkCancelled();
         if (videoError) throw new Error('映像エンコードに失敗しました: ' + videoError.message);
 
-        const freq = freqFrames[i];
-        const time = timeFrames[i];
-        history.push(freq);
         const nowMs = frameTimesMs[i];
 
-        let effectiveHue = settings.hue;
-        if (settings.hueContinuousMode) {
-          huePhase = (huePhase + settings.hueContinuousSpeed * 0.5 * (dtMs / 16.7)) % 360;
-          effectiveHue = (settings.hue + huePhase) % 360;
-        }
-
-        const frame = {
-          freq, time, history,
-          beat: beatDetector.update(freq, nowMs),
-          dtMs, nowMs,
-          getLayer: (li, count) => this._sliceLayer(freq, li, count),
-        };
-
-        if (!selfClear) {
-          this._clearFrame(ctx, canvas, settings);
-          if (compositeSource) {
-            let drawable = null;
-            try {
-              drawable = await compositeSource.frameAt(nowMs / 1000);
-            } catch (_) {
-              // デコード途中の失敗はシーク方式へ切り替えて続行する
-              compositeSource.dispose();
-              compositeSource = await this._createSeekCompositeSource(opts.file);
-              this._lastCompositeSourceType = compositeSource ? compositeSource.type : null;
-              drawable = compositeSource ? await compositeSource.frameAt(nowMs / 1000) : null;
-            }
-            if (drawable) this._drawCompositeVideoFrame(ctx, canvas, drawable, settings);
+        compositeDrawable = null;
+        if (!selfClear && compositeSource) {
+          try {
+            compositeDrawable = await compositeSource.frameAt(nowMs / 1000);
+          } catch (_) {
+            // デコード途中の失敗はシーク方式へ切り替えて続行する
+            compositeSource.dispose();
+            compositeSource = await this._createSeekCompositeSource(opts.file);
+            this._lastCompositeSourceType = compositeSource ? compositeSource.type : null;
+            compositeDrawable = compositeSource ? await compositeSource.frameAt(nowMs / 1000) : null;
           }
         }
 
-        if (entry.stateful && stateful) {
-          const s = { ...settings, hue: effectiveHue };
-          stateful.render(ctx, canvas, frame, s);
-        } else {
-          this._renderStateless(ctx, canvas, entry, frame, settings, effectiveHue);
-        }
+        input.freq = freqFrames[i];
+        input.time = timeFrames[i];
+        input.nowMs = nowMs;
+        input.drawBackground = compositeSource ? drawBackground : null;
+        pipeline.render(input, settings);
 
         const vf = new VideoFrame(canvas, { timestamp: Math.round(nowMs * 1000), duration: Math.round(1e6 / fps) });
         videoEncoder.encode(vf, { keyFrame: (i % keyframeEveryN) === 0 });
@@ -442,11 +422,11 @@ class OfflineExporter {
       }
     } finally {
       if (compositeSource) compositeSource.dispose();
+      pipeline.dispose(); // 中断・失敗時もステートフルレンダラーを確実に破棄する
     }
 
     await videoEncoder.flush();
     videoEncoder.close();
-    if (stateful && stateful.dispose) { try { stateful.dispose(); } catch (_) {} }
 
     if (container === 'mp4' && (!videoDescription || videoDescription.length === 0)) {
       throw new Error('MP4 用の映像設定情報（avcC）を取得できませんでした');
@@ -490,71 +470,6 @@ class OfflineExporter {
 
     this._setProgress(1);
     return blob;
-  }
-
-  _sliceLayer(freq, layerIndex, layerCount) {
-    const len = freq.length;
-    const start = Math.floor(layerIndex * len / layerCount);
-    const end = Math.floor((layerIndex + 1) * len / layerCount);
-    return freq.subarray(start, end);
-  }
-
-  _clearFrame(ctx, canvas, settings) {
-    const intensity = settings.afterimageIntensity || 0;
-    if (intensity <= 0) {
-      ctx.fillStyle = settings.bgColor;
-      ctx.fillRect(0, 0, canvas.width, canvas.height);
-      return;
-    }
-    const fadeAlpha = Math.pow(0.7, intensity);
-    const isWhite = settings.bgColor === '#fff';
-    const rgb = isWhite ? '255,255,255' : '0,0,0';
-    ctx.fillStyle = `rgba(${rgb},${fadeAlpha})`;
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
-  }
-
-  // visualizer-core.js の _renderStateless と同一ロジック（実時間駆動できないため複製）
-  _renderStateless(ctx, canvas, entry, frame, settings, effectiveHue) {
-    const { layerCount, layers, expressionMethod } = settings;
-    const rendererMap = entry.methods;
-    const renderer = rendererMap[expressionMethod] || rendererMap.bar;
-    const usePhysics = settings.physicsAmount > 0 &&
-      (expressionMethod === 'line' || expressionMethod === 'dot') &&
-      entry.capabilities && entry.capabilities.physics;
-
-    for (let i = 0; i < layerCount; i++) {
-      let layerData = frame.getLayer(i, layerCount);
-      if (!layerData) continue;
-      if (usePhysics) layerData = this._applyPhysics(layerData, frame.dtMs, settings.physicsAmount);
-      const layer = layers[i] || { hueOffset: 0, sensitivity: 1.0, blendMode: 'source-over' };
-      const layerSettings = {
-        ...settings,
-        hue: (effectiveHue + layer.hueOffset + 360) % 360,
-        sensitivity: settings.sensitivity * layer.sensitivity,
-      };
-      const prevOp = ctx.globalCompositeOperation;
-      ctx.globalCompositeOperation = layer.blendMode || 'source-over';
-      renderer(ctx, canvas, layerData, layerSettings);
-      ctx.globalCompositeOperation = prevOp;
-    }
-  }
-
-  // visualizer-core.js の _applyPhysics と同一ロジック（実時間駆動できないため複製）
-  _applyPhysics(layerData, dtMs, physicsAmount) {
-    const n = layerData.length;
-    const params = springParamsFromAmount(physicsAmount);
-    if (!this._physics || this._physicsLen !== n) {
-      this._physics = new SpringArray(n, params);
-      this._physics.value.set(layerData);
-      this._physicsLen = n;
-    } else {
-      this._physics.configure(params);
-    }
-    for (let i = 0; i < n; i++) this._physics.setTarget(i, layerData[i]);
-    this._physics.update(dtMs);
-    if (!this._physicsOut || this._physicsOut.length !== n) this._physicsOut = new Uint8Array(n);
-    for (let i = 0; i < n; i++) this._physicsOut[i] = clamp(this._physics.value[i], 0, 255);
-    return this._physicsOut;
   }
 
   async _encodeAudio(audioEncoder, audioBuffer, sampleRate, channels) {

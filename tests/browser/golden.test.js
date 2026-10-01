@@ -1,4 +1,4 @@
-// 目的 — 現行 VisualizerCore の描画を66ケースで固定し、ゴールデンと比較する（計画書 §3.6）。
+// 目的 — FramePipeline の描画を66ケースで固定し、ゴールデン基準値と比較する（計画書 §3.6・§3.6.4 pipeline ドライバ）。
 // @page harness
 
 (function (global) {
@@ -83,48 +83,36 @@
     return Math.sqrt(variance / bytes.length);
   }
 
-  function createTestAudioEngine(frameIndex) {
-    var freq = new Uint8Array(FREQ_LENGTH);
-    var time = new Uint8Array(TIME_LENGTH);
-    return {
-      captureFrame: function () {
-        synthFrame(frameIndex.value, FREQ_LENGTH, TIME_LENGTH, freq, time);
-      },
-      getFreqSlice: function () { return freq; },
-      freqSliceLength: function () { return FREQ_LENGTH; },
-      getTimeDomainData: function () { return time; },
-      getLayerData: function (layerIndex, layerCount) {
-        var start = Math.floor(layerIndex * FREQ_LENGTH / layerCount);
-        var end = Math.floor((layerIndex + 1) * FREQ_LENGTH / layerCount);
-        return freq.subarray(start, end);
-      },
-    };
-  }
-
-  // T15-06 では、この関数だけを FramePipeline ドライバへ差し替える。
-  function drawCaseWithVisualizerCore(goldenCase, clock) {
+  // 計画書 §3.6.4 の pipeline ドライバ: FramePipeline を直接呼び、1フレームずつ描画する。
+  function drawCaseWithPipeline(goldenCase) {
     var canvas = document.createElement('canvas');
     canvas.width = goldenCase.width;
     canvas.height = goldenCase.height;
-    var frameIndex = { value: 0 };
-    var core = new VisualizerCore(canvas, createTestAudioEngine(frameIndex));
-    core.settings = goldenCase.settings;
-    core._fillBackground();
-    core._lastFrameMs = -16.7;
-    core.running = true;
+    var ctx = canvas.getContext('2d');
+    var pipeline = new FramePipeline(canvas, ctx);
+    var freq = new Uint8Array(FREQ_LENGTH);
+    var time = new Uint8Array(TIME_LENGTH);
+    var input = {
+      freq: freq, time: time, getLayer: null,
+      dtMs: 16.7, nowMs: 0, historyFps: 60, drawBackground: null,
+    };
     var samples = {};
-    for (var i = 0; i < FRAME_COUNT; i += 1) {
-      clock.frame = i;
-      frameIndex.value = i;
-      core._loop();
-      if (SAMPLE_FRAMES.indexOf(i) !== -1) {
-        var imageData = core.ctx.getImageData(0, 0, canvas.width, canvas.height);
-        var thumbnail = takeThumbnail(imageData, canvas.width, canvas.height);
-        samples[i] = {
-          thumbnail: thumbnail,
-          fullRgba: imageData.data,
-        };
+    try {
+      pipeline.fillBackground(goldenCase.settings);
+      for (var i = 0; i < FRAME_COUNT; i += 1) {
+        synthFrame(i, FREQ_LENGTH, TIME_LENGTH, freq, time);
+        input.nowMs = i * 16.7;
+        pipeline.render(input, goldenCase.settings);
+        if (SAMPLE_FRAMES.indexOf(i) !== -1) {
+          var imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+          samples[i] = {
+            thumbnail: takeThumbnail(imageData, canvas.width, canvas.height),
+            fullRgba: imageData.data,
+          };
+        }
       }
+    } finally {
+      pipeline.dispose();
     }
     return { samples: samples, width: canvas.width, height: canvas.height };
   }
@@ -180,37 +168,20 @@
     return frames;
   }
 
-  avzTest('B15-04', 'ゴールデン全66ケースが現行描画と一致する', async function () {
+  avzTest('B15-04', 'ゴールデン全66ケースが基準値と一致する', async function () {
     var renderedCases = {};
     var allFailures = [];
     var diffs = [];
-    var originalRequestAnimationFrame = global.requestAnimationFrame;
-    var originalPerformanceNow = global.performance.now;
-    var clock = { frame: 0 };
-    global.requestAnimationFrame = function () {};
-    Object.defineProperty(global.performance, 'now', {
-      configurable: true,
-      value: function () { return clock.frame * 16.7; },
-    });
-    try {
-      for (var i = 0; i < goldenCases.length; i += 1) {
-        clock.frame = 0;
-        var rendered = drawCaseWithVisualizerCore(goldenCases[i], clock);
-        renderedCases[goldenCases[i].id] = rendered;
-        if (!global.__avzUpdateGolden) {
-          allFailures.push.apply(allFailures, verifyCase(
-            goldenCases[i], rendered, global.__avzGoldenExpectedFrames, diffs));
-        }
+    for (var i = 0; i < goldenCases.length; i += 1) {
+      var rendered = drawCaseWithPipeline(goldenCases[i]);
+      renderedCases[goldenCases[i].id] = rendered;
+      if (!global.__avzUpdateGolden) {
+        allFailures.push.apply(allFailures, verifyCase(
+          goldenCases[i], rendered, global.__avzGoldenExpectedFrames, diffs));
       }
-      global.__avzGoldenFrames = collectGoldenFrames(renderedCases);
-      global.__avzGoldenDiffs = diffs;
-    } finally {
-      global.requestAnimationFrame = originalRequestAnimationFrame;
-      Object.defineProperty(global.performance, 'now', {
-        configurable: true,
-        value: originalPerformanceNow,
-      });
     }
+    global.__avzGoldenFrames = collectGoldenFrames(renderedCases);
+    global.__avzGoldenDiffs = diffs;
     if (allFailures.length) throw new Error(allFailures.slice(0, 12).join('; '));
   }, { timeoutMs: 120000 });
 })(window);
