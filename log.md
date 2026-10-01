@@ -1,5 +1,23 @@
 # 開発ログ
 
+## 2026-10-02 — [T18-03] 拍・格子・小節頭（①〜⑤）
+
+### 作業内容
+- `js/songmap-analysis.js`（新規・前半）: `SONG_CONST`（計画書 §4.1 の全定数）、`SongMapError`、共通ヘルパ `songZ` / `songCos` / `songPct`、段階関数 `songOdf`（①）・`songGlobalTempo`（②）・`songDpBeats`（③）・`songGridBeats`（④）・`songDownbeats`（⑤）、①〜⑤ の結果を返す `buildSongMap` の骨格（長さ判定 `too-short` / `too-long`、`no-rhythm`）。⑥〜⑨ と `validateSongMap` は T18-04 でファイル末尾の「後半」位置に追記する。`index.html` への読み込み追加は T18-05 以降（本チケットではアプリの挙動を変えない）
+- `tests/unit/songmap-beats.test.mjs`（新規）: U18-01〜U18-04、U18-10（＋ ⑤ のクロマ経路と `buildSongMap` 骨格の確認）
+
+### 検証
+- `node --test tests/unit/songmap-beats.test.mjs`: 8 件成功、約 11.7 秒（うち U18-10 の 48kHz・60 秒の行生成が約 11.5 秒）
+- U18-10: bpm 119.75、beatSource = dp、拍 F 値 1.0000（±70ms）
+- 参考（テスト外の確認。synthSong の ①〜⑤ を 8 条件で実行）: 100/128/140BPM × 48k/44.1k は全て beatSource = grid、拍 F 値 0.998〜1.000、小節頭 98.5〜100%。174BPM は bpm = 87.00、拍 F 値 1.000（偶数/奇数の良い方）。解析時間（特徴抽出後）143〜380ms
+
+### spec.md 変更（あれば）
+- なし
+
+### 備考
+- 実装: Sonnet サブエージェント
+- 計画書にない追加: `songGridBeats` の第 4 引数 `sampleRate`（任意）。渡すと秒への換算と「beats < 0 の拍を beatHops / beats の両方から除く」処理まで行い `beats` を返す（④ の署名が sampleRate を持たないため）。省略時は `{ beatHops, beatSource, near }`
+
 ## 2026-10-01 — [T18-01] テスト用合成楽曲・行データ生成
 
 ### 作業内容
