@@ -1,5 +1,32 @@
 # 開発ログ
 
+## 2026-09-30 — [T15-05] ゴールデン基準値の作成
+
+### 作業内容
+- `tests/shared/golden-cases.js`: 全14タイプ、背景2種、解像度2種の基本56ケースと追加10ケースを定義
+- `tests/browser/golden.test.js`: `visualizer-core` ドライバで60フレームを描画し、19・39・59フレームの10pxブロック平均サムネイルを比較する B15-04 を追加
+- `tests/lib/png.mjs` / `tests/unit/png.test.mjs`: Node 標準 `node:zlib` のみで RGBA PNG を生成する機能と単体テストを追加
+- `tests/run.mjs`: `--update-golden` による `tests/golden/frames.json` の生成、ゴールデン差分画像の `tests/output/golden/` への出力を追加
+
+### 検証
+- `node tests/run.mjs --unit`: 20 成功 / 0 失敗 / 1 スキップ（U15-00 異常系）
+- 全 `.js` / `.mjs` に `node --check`: 成功
+- 実装環境（サンドボックス）では Chrome が起動できずブラウザ実行は未実施
+- レビュアーが macOS（Chrome 154 / Node 26）で T15-10 の取り込み後に実行
+  - `--update-golden` を2回実行し、`tests/golden/frames.json` がバイト単位で一致（決定的）
+  - `node tests/run.mjs`: 28 PASS / 0 FAIL / 1 SKIP。B15-04 は全66ケースで一致・非空とも合格
+  - 基準値を意図的に壊すと B15-04 が失敗し、`tests/output/golden/` に expected / actual / full の PNG が出力されることを確認
+
+### spec.md 変更
+- なし（T15-05 の指定どおり）。非空判定のしきい値は T15-10 で計画書を 0.1 に変更済み
+
+### 備考
+- ゴールデン生成と比較の詳細は計画書 §3.6.2〜§3.6.4 に従い、T15-06 でドライバだけを `pipeline` に差し替えられる構造にした
+- 初回の基準値作成で、白背景の粒子・ノイズフロー・波紋が描画されない不具合と、疎らな描画が非空判定 1.0 に届かない問題が判明。オーナー決定により、T15-10 で不具合を修正し、しきい値を 0.1 にしてから基準値を作成した
+- 実装は Codex。レビュアーが2点を修正した（パッチが途中までしか当たっておらず `--update-golden` を受け付けなかった問題、非空判定のしきい値の定数化）。基準値の生成・コミット・PR は Claude が担当
+
+---
+
 ## 2026-09-30 — [T15-10] 白背景での加算合成の修正
 
 ### 作業内容
