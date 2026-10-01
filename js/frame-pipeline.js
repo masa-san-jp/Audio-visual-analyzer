@@ -1,5 +1,7 @@
 // 目的 — ライブ表示とオフライン書き出しで共通の1フレーム描画処理（背景クリア→動画合成→色相→レンダラー）を一箇所に集約する — doc/20260928-plan-phase15-test-foundation-and-frame-pipeline.md §4
 // 時刻・音声取得・エンコードは知らない。呼び出し側が render() の input で渡す。
+// v2（Phase 16 T16-08）: input.features / sampleRate / fftSize を受け取り、音量自動補正とレイヤー分割（均等/聴感）を担う — doc/20260928-plan-phase16-music-feature-stream.md §6.5 / §6.6
+// 依存グローバル: applyAutoGain / computeLayerRange（js/mfs-view.js）、MFS_CONST（js/mfs-const.js）。
 
 // freq を layerCount 等分したレイヤー帯域スライスを返す（AudioEngine.getLayerData と同じ線形分割）。
 // freq が無ければ null。
@@ -24,15 +26,24 @@ class FramePipeline {
     this._physicsLen = 0;
     this._physicsOut = null;
     this._input = null;            // 描画中の input（_getLayer が参照する）
+    this._settings = null;         // 描画中の settings（layerSplit の参照用）
+    this._freq = null;             // 実際に描画へ使う freq（音量自動補正後。lastFreq の実体）
+    this._agcBuf = null;           // 音量自動補正の出力バッファ（freq 長が変わったときだけ作り直す）
+    this._autoGained = false;      // このフレームで補正を適用したか
+    this._layerRange = new Int32Array(2);   // computeLayerRange の出力（使い回す）
+    this._layerViews = [];         // レイヤー別の subarray キャッシュ（同一範囲なら再利用）
     // 毎フレームのクロージャ生成を避けるため、束縛関数は1回だけ作る
     this._getLayerBound = (i, count) => this._getLayer(i, count);
     // レンダラーへ渡す frame オブジェクト（使い回す）
     this._frame = {
-      freq: null, time: null, history: null, beat: null,
+      freq: null, time: null, history: null, beat: null, features: null,
       dtMs: 16.7, nowMs: 0,
       getLayer: this._getLayerBound,
     };
   }
+
+  // 実際に描画へ使った freq（音量自動補正後）。読み取り専用（テスト・デバッグ用）。未描画なら null
+  get lastFreq() { return this._freq; }
 
   // キャンバスサイズ変更後に呼ぶ。ステートフルレンダラーへ通知する
   resize() {
@@ -69,6 +80,10 @@ class FramePipeline {
   // 1フレーム描画（処理順は計画書 §4.3。現行コードと同一の順序）
   render(input, settings) {
     this._input = input;
+    this._settings = settings;
+
+    // 0. 音量自動補正（§6.6）。補正後の freq を以降のすべて（履歴・レイヤー切り出し・レンダラー）で使う
+    this._freq = this._resolveFreq(input, settings);
 
     // 1. タイプ切替に応じてステートフルレンダラーを生成/破棄
     this._syncRenderer(settings.analyzerType);
@@ -97,12 +112,44 @@ class FramePipeline {
     }
   }
 
-  // freq から現在の input のレイヤー帯域を得る。input.getLayer があればそれを優先する
+  // settings.autoGain && input.features なら補正後の freq（内部バッファ）、そうでなければ input.freq
+  _resolveFreq(input, settings) {
+    const freq = input.freq;
+    this._autoGained = false;
+    const features = input.features;
+    if (!settings.autoGain || !features || !freq) return freq;
+    if (!this._agcBuf || this._agcBuf.length !== freq.length) this._agcBuf = new Uint8Array(freq.length);
+    applyAutoGain(freq, features.loudness.agcDb, this._agcBuf);
+    this._autoGained = true;
+    return this._agcBuf;
+  }
+
+  // レイヤー帯域を得る。補正を適用したフレームは（input.getLayer が補正前の値を返すため）常に自前で切り出す。
+  // それ以外で input.getLayer があればそれを優先（T16-07/09 以降のライブ/オフラインは null を渡す）
   _getLayer(i, count) {
     const input = this._input;
     if (!input) return null;
-    if (input.getLayer) return input.getLayer(i, count);
-    return sliceLayerLinear(input.freq, i, count);
+    if (input.getLayer && !this._autoGained) return input.getLayer(i, count);
+    const freq = this._freq;
+    if (!freq) return null;
+    // sampleRate / fftSize が無い入力では聴感分割できないため均等分割にする
+    const hasRate = input.sampleRate > 0 && input.fftSize > 0;
+    const mode = hasRate ? this._settings.layerSplit : 'linear';
+    const r = computeLayerRange(i, count, freq.length, hasRate ? input.sampleRate : 0,
+      hasRate ? input.fftSize : 0, mode, this._layerRange);
+    return this._layerView(freq, i, r[0], r[1]);
+  }
+
+  // freq.subarray(start, end) をレイヤー別にキャッシュして返す（同一範囲・同一バッファなら新規生成しない）
+  _layerView(freq, i, start, end) {
+    const v = this._layerViews[i];
+    if (v && v.buffer === freq.buffer &&
+        v.byteOffset === freq.byteOffset + start * freq.BYTES_PER_ELEMENT && v.length === end - start) {
+      return v;
+    }
+    const nv = freq.subarray(start, end);
+    this._layerViews[i] = nv;
+    return nv;
   }
 
   _syncRenderer(type) {
@@ -154,7 +201,7 @@ class FramePipeline {
 
   // ── ステートフル描画 ──
   _renderStateful(input, settings, effectiveHue) {
-    const freq = input.freq;
+    const freq = this._freq;
     const history = this._ensureHistory(freq, settings, input.historyFps);
     if (history && freq) history.push(freq);
 
@@ -162,7 +209,9 @@ class FramePipeline {
     frame.freq = freq;
     frame.time = input.time;
     frame.history = history;
-    frame.beat = this._beat.update(freq, input.nowMs);
+    // 従来の BeatDetector は補正前の freq で動かす（既存レンダラーの見た目を保つ。§6.6）
+    frame.beat = this._beat.update(input.freq, input.nowMs);
+    frame.features = input.features || null;
     frame.dtMs = input.dtMs;
     frame.nowMs = input.nowMs;
     frame.getLayer = this._getLayerBound;

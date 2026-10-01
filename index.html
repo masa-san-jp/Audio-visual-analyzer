@@ -384,6 +384,9 @@
   <script src="js/renderers/voronoi.js"></script>
   <!-- レジストリ（全レンダラー読み込み後・コアより前） -->
   <script src="js/renderer-registry.js"></script>
+  <!-- MFS: FramePipeline が音量自動補正・レイヤー分割（js/mfs-view.js）を使うため先に読み込む -->
+  <script src="js/mfs-const.js"></script>
+  <script src="js/mfs-view.js"></script>
   <script src="js/frame-pipeline.js"></script>
   <script src="js/debug-overlay.js"></script>
   <script src="js/visualizer-core.js"></script>
