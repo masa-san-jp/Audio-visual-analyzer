@@ -14,6 +14,8 @@ class VisualizerCore {
     this.pipeline = new FramePipeline(canvas, this.ctx);
     // Phase 10: 動画合成表示（動画ファイル読込時に UIController が設定する）
     this.videoElement = null;
+    // `?debug=1` のときだけ start() で生成される（無効時は null のまま）— 計画書 §5
+    this.debugOverlay = null;
     // pipeline.render へ渡す input（毎フレーム使い回して値だけ更新する）
     this._input = {
       freq: null, time: null,
@@ -53,6 +55,9 @@ class VisualizerCore {
   start() {
     if (this.running) return;
     this.running = true;
+    if (!this.debugOverlay && typeof DebugOverlay !== 'undefined') {
+      this.debugOverlay = DebugOverlay.create(this.canvas.parentElement);
+    }
     this._lastFrameMs = performance.now();
     this._loop();
   }
@@ -116,6 +121,15 @@ class VisualizerCore {
     input.time = this.audioEngine.getTimeDomainData();
     input.dtMs = dtMs;
     input.nowMs = now;
-    this.pipeline.render(input, this.settings);
+    const overlay = this.debugOverlay;
+    if (overlay) {
+      // デバッグ表示時のみ描画時間を計測する（ガイド §9.1 の時刻規則の例外、計画書 §5）
+      const t0 = performance.now();
+      this.pipeline.render(input, this.settings);
+      overlay.setField('type', this.settings.analyzerType);
+      overlay.recordFrame(performance.now() - t0, now);
+    } else {
+      this.pipeline.render(input, this.settings);
+    }
   }
 }

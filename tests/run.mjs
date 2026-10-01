@@ -94,7 +94,9 @@ async function discoverBrowserTests() {
     if (page !== 'harness' && page !== 'app') {
       throw new Error(`${name}: @page は harness または app を指定してください。`);
     }
-    files.push({ filePath, source, page });
+    // app ページ用の任意宣言: `// @query debug=1` で index.html?debug=1 を開く（未指定は従来どおり）
+    const query = source.match(/^\s*\/\/\s*@query\s+(\S+)/m)?.[1] || '';
+    files.push({ filePath, source, page, query });
   }
   return files;
 }
@@ -213,11 +215,15 @@ async function runBrowserTests() {
       await chrome.close();
     }
   }
-  if (appFiles.length) {
+  // app ページは @query ごとにページを開き直して実行する（既定の '' は従来と同じ index.html）
+  const appQueries = [...new Set(appFiles.map((file) => file.query))];
+  for (const query of appQueries) {
+    const group = appFiles.filter((file) => file.query === query);
     const chrome = await launchChrome({ headed: options.headed });
     try {
-      await chrome.navigate(pathToFileURL(path.join(ROOT, 'index.html')).href);
-      await runBrowserPage(chrome, 'app', appFiles, includeExpectedFailure);
+      const url = pathToFileURL(path.join(ROOT, 'index.html')).href + (query ? `?${query.replace(/^\?/, '')}` : '');
+      await chrome.navigate(url);
+      await runBrowserPage(chrome, 'app', group, includeExpectedFailure);
     } finally {
       await chrome.close();
     }

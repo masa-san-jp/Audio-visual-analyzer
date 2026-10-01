@@ -103,7 +103,23 @@ function isExecutable(candidate, env) {
   });
 }
 
-export async function launchChrome({ headed = false, executablePath = findChrome() } = {}) {
+// CI の Chrome は起動が遅く DevToolsActivePort の生成待ちで時間切れになることがあるため、
+// 起動時の環境エラーに限り最大 3 回まで試行する
+export async function launchChrome(options = {}) {
+  let lastError;
+  for (let attempt = 1; attempt <= 3; attempt += 1) {
+    try {
+      return await launchChromeOnce(options);
+    } catch (error) {
+      if (!(error instanceof BrowserEnvironmentError)) throw error;
+      lastError = error;
+      console.error(`Chrome の起動に失敗しました（${attempt}/3）: ${error.message}`);
+    }
+  }
+  throw lastError;
+}
+
+async function launchChromeOnce({ headed = false, executablePath = findChrome() } = {}) {
   if (!executablePath) {
     throw new BrowserEnvironmentError('Chrome / Chromium が見つかりません。CHROME_PATH を指定してください。');
   }
@@ -128,7 +144,7 @@ export async function launchChrome({ headed = false, executablePath = findChrome
   let closed = false;
   const activePortPath = path.join(userDataDir, 'DevToolsActivePort');
   let port;
-  const deadline = Date.now() + 10_000;
+  const deadline = Date.now() + 30_000;
   while (Date.now() < deadline) {
     if (spawnError) {
       await shutdown(child, userDataDir);
@@ -146,7 +162,7 @@ export async function launchChrome({ headed = false, executablePath = findChrome
   }
   if (!port) {
     await shutdown(child, userDataDir);
-    throw new BrowserEnvironmentError('DevToolsActivePort が10秒以内に生成されませんでした。');
+    throw new BrowserEnvironmentError('DevToolsActivePort が30秒以内に生成されませんでした。');
   }
 
   let tabs;
