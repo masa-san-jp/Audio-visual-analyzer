@@ -1,5 +1,28 @@
 # 開発ログ
 
+## 2026-09-30 — [T15-09] CI・PR テンプレート
+
+### 作業内容
+- `.github/workflows/test.yml`: GitHub Actionsで `pull_request` と `main` への push 時に Node.js 22 と Chrome を使い、`node tests/run.mjs` を実行するCIを追加。失敗時の `tests/output/` アーティファクト保存を設定
+- `.github/pull_request_template.md`: チケット・変更内容・検証の記入欄、「完了の定義」はガイド §7 を貼るよう1行で案内（計画書 §3.7 どおり、チェックリスト本文は複製しない）
+- `README.md`: 開発者向けテスト節にCIの実行条件を追記
+
+### 検証
+- YAML構文チェック（Node.jsの簡易パーサー）: PASS
+- `node tests/run.mjs --unit`: PASS
+- `node --check`（全 `.js` / `.mjs`）: PASS
+- 実装環境（サンドボックス）では Chrome が起動できずブラウザテスト未実施
+- CI 上での全件実行は、この PR 自体のワークフロー実行で確認（PR 参照）
+
+### spec.md 変更
+- なし（T15-09の指定どおり）
+
+### 備考
+- `.gitignore` は既に `tests/output/` と `tests/.generated/` を含むため変更していない
+- 実装は Codex。レビューで PR テンプレートを計画書 §3.7 に合わせて修正（チェックリスト本文の複製をやめ、ガイドを参照する1行の案内に変更）。コミット・PR は Claude が担当
+
+---
+
 ## 2026-09-30 — [T15-05] ゴールデン基準値の作成
 
 ### 作業内容

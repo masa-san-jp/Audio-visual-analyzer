@@ -80,6 +80,8 @@ IP アドレス（Mac / Linux は `ifconfig`、Windows は `ipconfig` で確認�
 
 `node tests/run.mjs` で単体テストとブラウザテストを実行します。`--unit` または `--browser` で対象を絞り、`--filter <正規表現>` でテスト ID・名称を指定できます。ブラウザテストは `tests/browser/*.test.js` を自動検出し、既定では `// @page harness` の生成ハーネスで実行します（`// @page app` は `index.html` に注入）。ハーネス HTML は `tests/.generated/` に生成されます。Chrome の自動検出に失敗する環境では `CHROME_PATH` に実行ファイルを指定してください。
 
+GitHub Actions では `pull_request` と `main` への push で `node tests/run.mjs` を実行します。
+
 B15-00 の意図的な失敗テストは、通常実行では「期待どおり失敗したら成功」と反転して判定します。生の判定を確認する場合は `node tests/run.mjs --browser --filter 'B15-00'` を実行してください（pass / fail / fail のため終了コードは 1）。
 
 ## 開発ドキュメント
