@@ -25,6 +25,31 @@
 
 ---
 
+## 2026-10-01 — [T16-03] テンポ・拍位相・小節
+
+### 作業内容
+- `js/mfs-tempo.js`（新規）: `MfsTempo`（計画書 §5.5.1〜§5.5.5）。`constructor(sampleRate)`、`process(odf, odfLow, onsetFlags, envFull, tSec)`、`reset()`、公開 `bpm / conf / phase / barPhase / beatInBar / beatFlag / downbeatFlag / locked`。`MFS_CONST` と `mfsDerived` 以外を参照しない自己完結クラス。バッファ・候補テンポ表（τ(b)・事前分布 W(b)）は constructor で確保し、`process()`（推定を含む）で配列・オブジェクトを生成しない
+- `tests/lib/mfs-drive.mjs`（新規）: MfsExtractor 統合前に §5.1 / §5.3 どおりホップ分割・Hann・FFT で A を作り MfsOnset / MfsTempo を駆動するテスト用ヘルパ（`forEachHop`、`runTempo`）。L=R の信号は R の FFT を省略（同値、時間短縮のみ）
+- `tests/unit/mfs-onset.test.mjs`: ホップ駆動部を上記ヘルパへ置換（テスト内容・閾値は不変、結果も同一）
+- `tests/unit/mfs-tempo.test.mjs`（新規）: U16-05〜U16-08 ＋ 無音・決定性・reset
+
+### 検証
+- U16-05: クリック/ドラム × 8 テンポ × {ノイズなし, ピンク0.25} × {48k, 44.1k} = 64 条件すべて、8 秒以降の全ホップの BPM 誤差 最大 0.36%（基準 ±1% / ノイズ付き ±2%）。ロック時刻 4.5 秒（1 条件のみ 5.5 秒）。62〜198BPM 4BPM 刻みスイープ 70/70、最大誤差 0.31%
+- U16-06: 全 64 条件で中央値 ≤ 10.7ms、p95 ≤ 17.2ms（基準 20 / 35ms）。ノイズなし全条件の符号付き平均誤差 48kHz -1.73ms / 44.1kHz -1.10ms（T16-04 の校正の入力）
+- U16-07: 切替後 5.05 秒（48kHz）/ 5.48 秒（44.1kHz）で 128±1% に到達
+- U16-08: 12 条件（6 テンポ × 2 レート）すべて 16 秒以降の DOWNBEAT_FLAG が 100% 一致（最大ずれ 12ms）
+- `node tests/run.mjs`: 54 件中 53 成功 / 0 失敗 / 1 スキップ（U15-00 異常系）
+
+### 備考
+- 実装: Sonnet サブエージェント
+- 計画書の解釈（推測で決めた箇所）: §5.5.2 の `tempoConf` は `conf < TEMPO_MIN_CONF` のときも推定を実行した時点で更新する。小節蓄積中に次の拍イベントが来た場合は先に蓄積を確定する（実際には拍間隔 > 4 ホップのため起きない）
+- テスト実行時間: MfsOnset の `Math.log` が支配的で、mfs-tempo.test.mjs は約 110 秒
+- 定数・オンセット実装は変更していない
+
+---
+
+---
+
 ## 2026-10-01 — [T16-08] FramePipeline・レンダラー契約 v2
 
 ### 作業内容
