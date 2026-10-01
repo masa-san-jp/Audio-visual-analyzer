@@ -122,6 +122,7 @@ class UIController {
     try {
       await this.mediaManager.loadFile(file, index);
       if (isActive) {
+        // 読込完了後の解析リセットは connectMedia 内と _applyActiveSlot 先頭で行われる（計画書 §6.2）
         this._applyActiveSlot();
       } else {
         this._updateSlotUI();
@@ -141,6 +142,7 @@ class UIController {
 
   // アクティブスロットの内容を表示系（ファイル名/再生可否/動画合成/シーク）へ反映する
   _applyActiveSlot() {
+    this.audioEngine.resetAnalysis();
     const mm = this.mediaManager;
     const slot = mm.slots[mm.activeIndex];
     const fileNameEl = document.getElementById('file-name');
@@ -272,6 +274,7 @@ class UIController {
 
     document.getElementById('btn-stop').addEventListener('click', () => {
       this.mediaManager.stop();
+      this.audioEngine.resetAnalysis(); // currentTime = 0 に戻ったので解析も 0 から
       this.visualizer.stop();
     });
 
@@ -300,6 +303,7 @@ class UIController {
       const el = this.mediaManager.mediaElement;
       if (!el || !isFinite(el.duration) || el.duration <= 0) return;
       el.currentTime = (Number(seekBar.value) / 1000) * el.duration;
+      this.audioEngine.resetAnalysis(); // シークで解析の連続性が切れる
     });
 
     const volumeBar = document.getElementById('volume-bar');
