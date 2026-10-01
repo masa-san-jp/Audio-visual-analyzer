@@ -3,25 +3,27 @@
 ## 2026-10-01 — [T16-04] 統合抽出器（ステレオ・音色・クロマ・ラウドネス含む）と校正の確認
 
 ### 作業内容
-- `js/mfs-extractor.js`（新規）: `MfsExtractor`（計画書 §5.0〜§5.9）。ホップ分割、従来互換 byte（`SpectrumAnalyzer`）、メル帯域、オンセット、テンポ呼び出し、ステレオ、音色・クロマ、RMS/PEAK、K 特性ラウドネス、AGC を §5.9 の順で処理。`MFS_LAYOUT` の全フィールドを書く。自己完結（`MFS_CONST` / `MFS_LAYOUT` / `mfsDerived` / `mfsWindowHann` / `SpectrumAnalyzer` / `MfsFft` / `MfsMelBank` / `MfsBiquad` / `MfsOnset` / `MfsTempo` のみ参照）。ホップ処理・`pushSamples` で配列・オブジェクトを生成しない。テスト用に読み取り getter `tauHop` を追加（§5.2 の検証用）
-- `tests/stubs/mfs-tempo-stub.js`（新規）: §5.0 の API を持ち常に `locked = 0` の `MfsTempo` スタブ。アプリ（`index.html`・ワークレット）からは読み込まない。T16-03 の `js/mfs-tempo.js` がマージされたら、テストの `loadClassic` 一覧で差し替えるだけ（`mfs-extractor.js` は変更不要）
-- `tests/shared/signals.js`: `sigScaleToLufs(buf, targetLufs)` を追加（`MfsBiquad.kWeighting` を使用、係数の複製なし）
-- `tests/unit/mfs-extractor.test.mjs`（新規）: U16-09〜U16-17
-- 校正の確認（計画書 §3 の「校正」列 ○）: 実測結果は PR 本文に記載。コード上の定数は変更していない
+- `js/mfs-extractor.js`（新規）: `MfsExtractor`（計画書 §5.0〜§5.9）。§5.9 の順で処理し `MFS_LAYOUT` の全フィールドを書く。自己完結、ホップ処理で配列・オブジェクトを生成しない。テスト用 getter `tauHop` を追加。クロマはアーキテクト決定（2026-10-01、§5.7 改訂）に従いスペクトルの山の頂点のビンのみ加算
+- `js/mfs-const.js`: `EVENT_LATENCY_FFT_FRACTION` 0.45 → 0.316（計画書 §3 の更新に合わせた。校正）
+- `tests/shared/signals.js`: `sigScaleToLufs(buf, targetLufs)` を追加（`MfsBiquad.kWeighting` を使用）
+- `tests/unit/mfs-extractor.test.mjs`（新規）: U16-09〜U16-17。実物の `js/mfs-tempo.js` を読み込む（先行用スタブ `tests/stubs/` は削除）
+- `tests/unit/mfs-dsp.test.mjs`: `eventLatencySec` の期待値を 0.316 に更新（定数の変更に追従。閾値の緩和ではない）
 
 ### 検証
-- `node tests/run.mjs`: 65 件中 63 成功 / 0 失敗 / 2 スキップ（U15-00 異常系は想定どおり、もう 1 件は下記 U16-11 の 48kHz 正弦波）
-- U16-12: 1kHz/0.1/両ch = -19.993 / -19.990 LUFS、997Hz/1.0/L のみ = -3.010 / -3.007 LUFS（48k / 44.1k）
-- U16-17: 60 秒ステレオ 48kHz = 1.32 秒（リアルタイム比 45x）
-- `node --check` 全 `.js` / `.mjs`: PASS
+- `node tests/run.mjs`: 71 件中 70 成功 / 0 失敗 / 1 スキップ（U15-00 異常系は想定どおり）
+- U16-06（校正）: ノイズなし全条件の符号付き平均誤差 48kHz = +3.89ms、44.1kHz = +5.01ms（0〜+8ms 内）。中央値 最大 14.7 / 16.3ms、p95 最大 18.7 / 21.6ms（基準 20 / 35ms）
+- U16-05 全条件合格（最大誤差 0.36%、スイープ 70/70・最大 0.31%）、U16-07 再追従 5.05s / 5.48s、U16-08 downbeat 全テンポ 100% 一致（最大ずれ 15ms）
+- U16-11: 48kHz / 44.1kHz とも正弦波・和音合格（和音: 48k C 0.98 E 1.00 G 0.97）
+- U16-12: -19.993 / -19.990、-3.010 / -3.007 LUFS。U16-16: AGC_DB 15.89 (期待 16.01)、-3.97 (期待 -3.99)。U16-17: 60 秒 = 2.93 秒
+- 校正（ONSET_K=2.0・ONSET_DELTA=0.02 は 7 組の掃引で変更不要、AGC_TARGET_LUFS=-14 も変更不要）。TEMPO_MIN_CONF・PLL_GAIN は U16-05〜08 合格のため変更なし
 
 ### spec.md 変更
 - なし（振る舞いの変更なし）
 
 ### 備考
 - 実装: Sonnet サブエージェント
-- 未解決: U16-11（440Hz 正弦波）が 48kHz で計画書 §5.7 のとおりでは基準未達（CHROMA[8]=0.69）。該当アサーションのみ skip とし PR で質問
-- `loadClassic`（vm コンテキスト）は `Math` 等のグローバル参照が約 15 倍遅いため、U16-17 のみ `vm.runInThisContext` で読み込んで測定
+- アーキテクト決定: クロマ（§5.7）をピーク頂点のみに変更、EVENT_LATENCY_FFT_FRACTION=0.316（計画書 7d28a1f）
+- `loadClassic`（vm コンテキスト）は `Math` 等の参照が約 15 倍遅いため、U16-17 のみ `vm.runInThisContext` で測定
 
 ---
 

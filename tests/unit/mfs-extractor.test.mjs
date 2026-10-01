@@ -8,10 +8,9 @@ import { loadClassic } from '../lib/load-classic.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 
-// T16-03 のマージ後は 'tests/stubs/mfs-tempo-stub.js' を 'js/mfs-tempo.js' に差し替える（T16-04 は常に locked = 0 のスタブで先行）
 const { get } = loadClassic([
   'js/mfs-const.js', 'js/fft.js', 'js/mfs-dsp.js', 'js/mfs-onset.js',
-  'tests/stubs/mfs-tempo-stub.js', 'js/mfs-extractor.js', 'tests/shared/signals.js'
+  'js/mfs-tempo.js', 'js/mfs-extractor.js', 'tests/shared/signals.js'
 ]);
 const MFS_CONST = get('MFS_CONST');
 const MFS_LAYOUT = get('MFS_LAYOUT');
@@ -119,12 +118,7 @@ test('U16-11 クロマ: 440Hz 正弦波（44.1kHz）CHROMA[9]=1・他<0.3', () =
   assertSineChroma(44100);
 });
 
-// 未解決（計画書 §5.7 の「各ビンの A[k] を加算」のままでは 48kHz で基準未達）。PR・報告で質問済み。
-// 48kHz ではビン幅 23.4Hz が 440Hz 付近の半音幅（25.4Hz）にほぼ等しく、Hann 窓の主ローブがとなりの半音へ漏れる
-// （実測 CHROMA[8]=0.69, CHROMA[10]=0.35）。計画書の改訂後に skip を外す。
-test('U16-11 クロマ: 440Hz 正弦波（48kHz）CHROMA[9]=1・他<0.3', {
-  skip: '計画書 §5.7 のとおりでは未達（CHROMA[8]=0.69）。アーキテクトの判断待ち'
-}, () => {
+test('U16-11 クロマ: 440Hz 正弦波（48kHz）CHROMA[9]=1・他<0.3', () => {
   assertSineChroma(48000);
 });
 
@@ -244,8 +238,6 @@ test('U16-14 ホップ番号・hopEndSample・R=null の扱い', () => {
   ex2.onHop = (e) => bf.push(new Float32Array(e.packed));
   ex2.pushSamples(s, null, s.length);
   assert.ok(bitsOf(a).equals(bitsOf(bf)));
-  // スタブのテンポは確定しない
-  for (const f of bf) { assert.equal(f[L.BPM], 0); assert.equal(f[L.TEMPO_LOCKED], 0); }
 });
 
 // §4 の値域チェック
@@ -327,7 +319,7 @@ test('U16-17 性能: 60 秒ステレオ 48kHz の処理時間 ≤ 6 秒', () => 
   // loadClassic の vm コンテキストは Math 等のグローバル参照が約 15 倍遅い（実測）ため、性能は通常のコンテキスト
   // （ブラウザ・ワークレットと同じ条件）で測る。ここで読み込むのはアプリ本体のファイルのみ
   for (const f of ['js/mfs-const.js', 'js/fft.js', 'js/mfs-dsp.js', 'js/mfs-onset.js',
-    'tests/stubs/mfs-tempo-stub.js', 'js/mfs-extractor.js']) {
+    'js/mfs-tempo.js', 'js/mfs-extractor.js']) {
     vm.runInThisContext(fs.readFileSync(path.join(ROOT, f), 'utf8'), { filename: f });
   }
   const Ex = vm.runInThisContext('MfsExtractor');

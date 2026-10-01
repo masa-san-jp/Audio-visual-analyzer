@@ -4,7 +4,7 @@
 // SpectrumAnalyzer / MfsFft / MfsMelBank / MfsBiquad / MfsOnset / MfsTempo 以外のグローバルを参照しない
 // 自己完結の実装とする（js/mfs-worklet.js が toString() で埋め込む）。
 // pushSamples・ホップ処理では配列・オブジェクトを生成しない（ガイド §9.3）。
-// MfsTempo は API（§5.0）のみを使う。js/mfs-tempo.js が読み込まれていれば実物、なければ呼び出し側が用意した同 API の実装が使われる。
+// MfsTempo は API（§5.0）のみを使う。実体は js/mfs-tempo.js。
 
 class MfsExtractor {
   // opts.smoothing: 従来互換 byte スペクトルの平滑化係数（既定 0.8）
@@ -296,9 +296,9 @@ class MfsExtractor {
     // 6''. クロマ
     const chroma = this._chroma, pc = this._pc;
     chroma.fill(0);
-    for (let k = 0; k < K; k++) {
+    for (let k = 1; k < K - 1; k++) {
       const c = pc[k];
-      if (c >= 0) chroma[c] += A[k];
+      if (c >= 0 && A[k] > A[k - 1] && A[k] >= A[k + 1]) chroma[c] += A[k];   // スペクトルの山の頂点のみ（§5.7）
     }
     let cmax = 0;
     for (let i = 0; i < 12; i++) if (chroma[i] > cmax) cmax = chroma[i];
