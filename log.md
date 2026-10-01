@@ -1,5 +1,30 @@
 # 開発ログ
 
+## 2026-10-01 — [T15-08] デバッグ表示
+
+### 作業内容
+- `js/debug-overlay.js`（新規）: `DebugOverlay.create(containerEl[, search]) -> overlay | null`、`recordFrame(renderMs, nowMs)`、`setField(key, text)`、`dispose()`。`?debug=1` のときだけ `#debug-overlay`（pointer-events なしの DOM 要素）を作る。FPS は 1 秒窓、描画時間は直近 120 フレーム（平均 / p95 / 最大）、表示更新は 250ms ごと。バッファは constructor で確保済みで、フレームごとの配列・オブジェクト生成なし
+- `js/visualizer-core.js`: `start()` で `DebugOverlay.create`、`_loop` で overlay がある場合のみ `performance.now()` を `pipeline.render` の前後に呼んで計測（無効時は従来と同じ経路）
+- `index.html`: `js/debug-overlay.js` を `visualizer-core.js` の前に追加
+- `tests/run.mjs`: app ページ用に任意の `// @query <クエリ>` 宣言を追加（未指定は従来どおり `index.html`。後方互換）。クエリごとにページを開き直す
+- `tests/browser/b15-06.test.js`（`@query debug=1`）、`tests/browser/b15-06-nodebug.test.js`（クエリなし。ID は B15-06b）
+- `doc/spec.md` v2.9: §20 に「Phase 15（実装済み）」を追加、Phase 15 を計画済み表から除去。`README.md`: `?debug=1` と `@query` を追記
+
+### 検証
+- `node tests/run.mjs`: 40 件中 39 成功 / 0 失敗 / 1 スキップ（U15-00 異常系は想定どおり）。B15-04 ゴールデン 66 ケース一致（基準値未変更）
+- B15-06 / B15-06b: PASS
+- `file://` で `index.html` と `index.html?debug=1` を開きコンソールエラー 0。debug 時の表示例: `FPS: 62.1 / render avg/p95/max: 0.02 / 0.10 / 0.10 ms / type: bar`
+- `node --check` 全 `.js` / `.mjs`: PASS
+
+### spec.md 変更
+- v2.8 → v2.9（2026-10-01）。§20 に Phase 15 完了を追加（計画書 §8、フェーズ最終チケットのため）
+
+### 備考
+- 実装: Sonnet サブエージェント
+- 判断: ランナーが app ページでクエリを開けないため `@query` 宣言を追加。overlay の生成は `app.js` ではなく `VisualizerCore.start()` に置いた（計画書の変更対象ファイルに合わせるため）
+
+---
+
 ## 2026-10-01 — [T16-01] 定数・データ配置・DSP 部品
 
 ### 作業内容

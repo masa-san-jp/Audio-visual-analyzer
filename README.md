@@ -72,13 +72,14 @@ IP アドレス（Mac / Linux は `ifconfig`、Windows は `ipconfig` で確認�
 
 - 対応するファイル形式はブラウザ依存です。
 - 初回再生時はブラウザの制限によりユーザー操作が必要です。
+- URL に `?debug=1` を付けて開く（例: `index.html?debug=1`）と、表示領域の左上に FPS・描画時間（平均 / p95 / 最大）・現在のタイプのデバッグ表示が出ます。録画・書き出しには写りません。付けなければ何も表示されません。
 - 詳細仕様は `doc/spec.md` を参照してください。
 
 ## 開発者向けテスト
 
 テストは Node.js 22.4 以上と Chrome / Chromium を使って実行します。依存パッケージのインストールは不要です。
 
-`node tests/run.mjs` で単体テストとブラウザテストを実行します。`--unit` または `--browser` で対象を絞り、`--filter <正規表現>` でテスト ID・名称を指定できます。ブラウザテストは `tests/browser/*.test.js` を自動検出し、既定では `// @page harness` の生成ハーネスで実行します（`// @page app` は `index.html` に注入）。ハーネス HTML は `tests/.generated/` に生成されます。Chrome の自動検出に失敗する環境では `CHROME_PATH` に実行ファイルを指定してください。
+`node tests/run.mjs` で単体テストとブラウザテストを実行します。`--unit` または `--browser` で対象を絞り、`--filter <正規表現>` でテスト ID・名称を指定できます。ブラウザテストは `tests/browser/*.test.js` を自動検出し、既定では `// @page harness` の生成ハーネスで実行します（`// @page app` は `index.html` に注入。`// @query debug=1` を併記すると `index.html?debug=1` を開きます）。ハーネス HTML は `tests/.generated/` に生成されます。Chrome の自動検出に失敗する環境では `CHROME_PATH` に実行ファイルを指定してください。
 
 GitHub Actions では `pull_request` と `main` への push で `node tests/run.mjs` を実行します。
 

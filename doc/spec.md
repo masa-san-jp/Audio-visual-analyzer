@@ -2,7 +2,7 @@
 
 - Repository: `masa-san-jp/Audio-visual-analyzer`
 - Default branch: `main`
-- Document version: `v2.8`
+- Document version: `v2.9`
 - Date: `2026-10-01`
 - Purpose: 開発担当者への引き継ぎ用仕様書
 
@@ -824,12 +824,17 @@ Phase 6.1（表現調整）: 実機レビューを受けて各タイプを改善
 - チャンクはデコード順で返し、提示時刻（pts = dts + `ctts` オフセット）は tick 領域で最小値0へ正規化してから μs へ変換する
 - H.264 デコーダー非搭載環境では `isConfigSupported` 判定によりシーク方式へ自動的に譲る（機能欠落なし）
 
-### Phase 15〜18: 計画済み（未実装）
+### Phase 15: テスト基盤・描画パイプライン共通化（実装済み）
+- Node 単体テスト・ブラウザテスト・ゴールデンフレーム（見た目の回帰テスト）の基盤を `tests/` に整備（`node tests/run.mjs`）
+- 1フレームの描画処理をライブ・書き出し共通の `FramePipeline`（`js/frame-pipeline.js`）へ集約。色相連続変化は経過時間基準に統一
+- デバッグ表示（`js/debug-overlay.js`）: URL に `?debug=1` を付けたときだけ、キャンバス領域に FPS・描画時間（平均 / p95 / 最大）・現在のタイプを重ねて表示する。録画・書き出しには写らず、`?debug` なしでは要素自体を作らない
+- 計画書: `doc/20260928-plan-phase15-test-foundation-and-frame-pipeline.md`
+
+### Phase 16〜18: 計画済み（未実装）
 2026-09-28 に進化構想（`doc/20260928-evolution-concept-music-understanding-visual-engine.md`）をオーナーが承認し、推奨ルート（15 → 16 → 18）から着手することを決定した。各フェーズ完了時に次の着手を再判断する。
 
 | Phase | 内容 | 計画書 |
 |---|---|---|
-| 15 | テスト基盤・描画パイプライン共通化 | `doc/20260928-plan-phase15-test-foundation-and-frame-pipeline.md` |
 | 16 | 音楽特徴ストリーム（MFS）。ライブ・書き出しの解析を AudioWorklet に一本化し、AnalyserNode はフォールバックとして残す（オーナー決定） | `doc/20260928-plan-phase16-music-feature-stream.md` |
 | 18 | ソングマップと自動演出 | `doc/20260928-plan-phase18-song-map-and-auto-director.md` |
 
@@ -882,7 +887,7 @@ Phase 6.1（表現調整）: 実機レビューを受けて各タイプを改善
 初版で挙げた候補（プリセット保存・JSON入出力・動画合成・画質/FPS指定録画・レイヤーブレンド・マイク入力・フルスクリーン・ショートカット）は Phase 8〜11 で、3スロット再生キューは Phase 12、モバイルレイアウトは Phase 13、動画デコード高速化（WebM/MP4）は Phase 14 ですべて実装済み。現時点の残候補:
 
 - モバイルでの録画品質改善（`MediaRecorder` のブラウザ実装差に依存するため対応範囲は限定的）
-- 進化構想（Phase 15〜21）: §20「Phase 15〜18: 計画済み」を参照
+- 進化構想（Phase 15〜21）: §20「Phase 16〜18: 計画済み」を参照
 
 ---
 
