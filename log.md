@@ -25,6 +25,45 @@
 
 ---
 
+---
+
+## 2026-10-01 — [T16-02] オンセット検出
+
+### 作業内容
+- `js/mfs-onset.js`: `MfsOnset`（計画書 §5.4 の擬似コードどおり。`constructor(sampleRate, fftSize)` / `process(A, tSec)` → フラグ 0..15 / `reset()`、公開 `flux` / `env`（Float32Array(4)）/ `odf` / `odfLow`）。`MFS_CONST` と `mfsDerived` のみ参照する自己完結実装。`process()` 内で配列・オブジェクトを生成しない
+- `tests/unit/mfs-onset.test.mjs`: U16-04。`MfsExtractor` 未実装のため、テスト内で §5.1 / §5.3 どおりにホップ分割・Hann 窓・FFT・モノラル振幅 A を作って駆動する
+- `index.html`・ワークレットは未変更
+
+### 検証
+- U16-04（クリック 120BPM 16 秒）: 48kHz クリック 32 / 命中 32 / 取りこぼし 0 / 範囲外 0、遅れ 5.3〜16.0ms。44.1kHz 同 32/32/0/0、遅れ 6.2〜17.1ms（基準 0〜25ms）
+- U16-04（無音 10 秒）: 全群で発生 0（両サンプルレート）
+- 参考（基準なし）: ピンクノイズ 0.25 重畳で 27/32 検出、誤検出 1（両サンプルレート）
+- `node tests/run.mjs`: 42 件中 41 成功 / 0 失敗 / 1 スキップ（U15-00 異常系は想定どおり）。`node --check` PASS
+
+---
+
+## 2026-10-01 — [T16-06] メインスレッドのビューとレイヤー分割
+
+### 作業内容
+- `js/mfs-view.js`: `MfsFrameView`（構築時に subarray とネストした getter ビューを1回だけ生成。`setPacked(f)` は内部 `Float32Array(104)` へコピーのみ。`beatFlag` / `downbeatFlag` / `locked` は raw >= 0.5 の boolean）、`applyAutoGain(freqIn, agcDb, out)`（§5.8 の式どおり）、`computeLayerRange(i, count, sliceLen, sampleRate, fftSize, mode, out)`（§6.5。`'mel'` 以外は現行の線形式、`'mel'` はメル等分境界をビン番号へ変換し各レイヤー最低1ビン・隙間なし。`computeFreqRange` の結果は (sampleRate, fftSize) ごとにモジュール内へキャッシュし、毎回のオブジェクト生成を避ける）
+- `tests/unit/mfs-view.test.mjs`: U16-18〜U16-20
+- `index.html` / `frame-pipeline.js` / `audio-engine.js` は未変更（組み込みは T16-07 / T16-08）
+
+### 検証
+- `node tests/run.mjs`: 43 件中 42 成功 / 0 失敗 / 1 スキップ（U15-00 異常系は想定どおり）
+- U16-18〜U16-20: PASS
+
+### spec.md 変更
+- なし
+
+### 備考
+- 実装: Sonnet サブエージェント
+- 時刻は `tSec`（ホップ完了時刻）を使用。`eventLatencySec` による補正はしていない（計画書に従う）
+
+---
+
+- mel の最終レイヤーの終端は常に `sliceLen`（計画書の clamp 規則だと 15000Hz のビンが sliceLen-1 に丸まる場合に末尾1ビンが欠けるため）。差は ±1 ビン以内
+
 ## 2026-10-01 — [T16-01] 定数・データ配置・DSP 部品
 
 ### 作業内容
