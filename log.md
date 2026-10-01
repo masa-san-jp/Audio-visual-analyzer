@@ -1,5 +1,25 @@
 # 開発ログ
 
+## 2026-10-01 — [T16-05] ワークレット
+
+### 作業内容
+- `js/mfs-worklet.js`（新規）: `MFS_PROCESSOR_SOURCE`（`MfsProcessor` のソース文字列）、`buildMfsWorkletSource()`、`createMfsWorkletUrl()`（計画書 §2.2・§6.1・§6.3）。data: URL 方式で `file://` 直開きでも動く。live は hop ごとに `{type:'hop', hop, t, f, freq, time}`（`t = (currentFrame + hopEndSample - ブロック先頭までの入力数)/sampleRate`、3 配列は transfer）、offline は §6.3 の規則で `{type:'frame', index, hop, t, f, freq, time}` と `{type:'done'}` を送る。`reset` / `smoothing` メッセージに対応。`process()` 経路は配列・オブジェクトを生成しない（メッセージ用配列のみ許可例外）
+- `index.html`: `fft.js` を `analysis-worklet.js` の前から MFS ブロックの先頭へ移動し、`mfs-dsp` → `mfs-onset` → `mfs-tempo` → `mfs-extractor` → `mfs-worklet` を計画書 §2.1 の順で追加（ハーネスが index.html の script 順から作られるため）。コメントを更新
+- `tests/browser/b16-worklet.test.js`（新規）: B16-01（offline 30fps、ドラム 10 秒。ページ内 MfsExtractor 直接駆動 + §6.3 の規則で独立に組んだ期待値と比較）、B16-08（offline フレーム数・index・hop・done）、B16-08b（live の hop 番号・時刻・配列長）
+
+### 検証
+- `node tests/run.mjs`: 74 件中 73 成功 / 0 失敗 / 1 スキップ（U15-00 異常系は想定どおり）。B15-02（オフライン書き出し）・B15-04（ゴールデン）も合格
+- B16-01: packed 最大絶対差 ≤ 1e-6、freq/time バイト一致、フレーム 301 件
+- `index.html` を `file://` で開いてコンソールエラー 0
+
+### spec.md 変更
+- なし
+
+### 備考
+- 実装: Sonnet サブエージェント
+- reset / smoothing メッセージの実時間での挙動は OfflineAudioContext ではメッセージ到着順が不定のため、T16-07 の B16-04 で確認する
+- offline フレームの `t` は出力フレーム時刻（`s_i / sampleRate` 秒）とした（計画書に明記なし）
+
 ## 2026-10-01 — [T16-04] 統合抽出器（ステレオ・音色・クロマ・ラウドネス含む）と校正の確認
 
 ### 作業内容
