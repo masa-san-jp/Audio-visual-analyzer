@@ -1,5 +1,23 @@
 # 開発ログ
 
+## 2026-10-01 — [T16-06] メインスレッドのビューとレイヤー分割
+
+### 作業内容
+- `js/mfs-view.js`: `MfsFrameView`（構築時に subarray とネストした getter ビューを1回だけ生成。`setPacked(f)` は内部 `Float32Array(104)` へコピーのみ。`beatFlag` / `downbeatFlag` / `locked` は raw >= 0.5 の boolean）、`applyAutoGain(freqIn, agcDb, out)`（§5.8 の式どおり）、`computeLayerRange(i, count, sliceLen, sampleRate, fftSize, mode, out)`（§6.5。`'mel'` 以外は現行の線形式、`'mel'` はメル等分境界をビン番号へ変換し各レイヤー最低1ビン・隙間なし。`computeFreqRange` の結果は (sampleRate, fftSize) ごとにモジュール内へキャッシュし、毎回のオブジェクト生成を避ける）
+- `tests/unit/mfs-view.test.mjs`: U16-18〜U16-20
+- `index.html` / `frame-pipeline.js` / `audio-engine.js` は未変更（組み込みは T16-07 / T16-08）
+
+### 検証
+- `node tests/run.mjs`: 43 件中 42 成功 / 0 失敗 / 1 スキップ（U15-00 異常系は想定どおり）
+- U16-18〜U16-20: PASS
+
+### spec.md 変更
+- なし
+
+### 備考
+- 実装: Sonnet サブエージェント
+- mel の最終レイヤーの終端は常に `sliceLen`（計画書の clamp 規則だと 15000Hz のビンが sliceLen-1 に丸まる場合に末尾1ビンが欠けるため）。差は ±1 ビン以内
+
 ## 2026-10-01 — [T16-01] 定数・データ配置・DSP 部品
 
 ### 作業内容

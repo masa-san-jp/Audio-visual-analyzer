@@ -617,7 +617,7 @@ function computeLayerRange(i, count, sliceLen, sampleRate, fftSize, mode, out) -
 ```
 
 - `mode` が `'mel'` 以外（`undefined` を含む）: 現行と同じ `[floor(i·sliceLen/count), floor((i+1)·sliceLen/count))`
-- `mode === 'mel'`: `mel(FREQ_MIN_HZ)`〜`mel(FREQ_MAX_HZ)` を count 等分した境界周波数 f をビン番号 `round(f·fftSize/sampleRate) - startBin` に変換し、`[0, sliceLen]` にクランプ。各レイヤーは最低1ビンを持つ（`end ≤ start` なら `end = start + 1`、以降の開始を繰り下げる）
+- `mode === 'mel'`: `mel(FREQ_MIN_HZ)`〜`mel(FREQ_MAX_HZ)` を count 等分した境界周波数 f をビン番号 `round(f·fftSize/sampleRate) - startBin` に変換し、`[0, sliceLen]` にクランプ。各レイヤーは最低1ビンを持つ（`end ≤ start` なら `end = start + 1`、以降の開始を繰り下げる）。最終レイヤーの `end` は常に `sliceLen` とする（`FREQ_MAX_HZ` の丸めで末尾ビンが欠けないため。2026-10-01 T16-06 で追記）
 - `FramePipeline` の既定 `getLayer` をこの関数で置き換える（`input.sampleRate`・`input.fftSize` を追加。ライブは `ctx.sampleRate` と 2048、オフラインは音声のサンプルレートと 2048）
 - **T16-08 以降、ライブ（`VisualizerCore`）もオフラインも `input.getLayer` を渡さない**（`null`）。レイヤーは常に `FramePipeline` 内で、音量自動補正後の `freq` から `computeLayerRange` で切り出す（`AudioEngine.getLayerData` は使わなくなるが、互換のため残す）
 
