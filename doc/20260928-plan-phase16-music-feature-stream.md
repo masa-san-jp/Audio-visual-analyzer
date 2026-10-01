@@ -110,7 +110,7 @@ function buildMfsWorkletSource() {
 | `ONSET_REFRACTORY_SEC` | 0.06 | 同一帯域群の連続検出禁止時間 | |
 | `ONSET_PEAK_RELEASE_SEC` | 2.0 | 強度正規化用ピークの減衰時定数 | |
 | `ONSET_ENV_DECAY_SEC` | 0.15 | オンセット包絡の減衰時定数 | |
-| `EVENT_LATENCY_FFT_FRACTION` | 0.45 | 拍位相の遅れ補正 = この値 × N / sr（秒）。2026-09-28 の検証（§11）で決定 | ○ |
+| `EVENT_LATENCY_FFT_FRACTION` | 0.316 | 拍位相の遅れ補正 = この値 × N / sr（秒）。2026-09-28 の検証（§11）で 0.45 と決定し、2026-10-01 に T16-03 の U16-06 実測（48kHz 符号付き平均誤差 m = −1.73ms）から §8 の校正式で 0.45 + (−1.73 − 4)/1000 × 48000/2048 = 0.316 に更新 | ○ |
 | `TEMPO_BUFFER_SEC` | 8 | テンポ推定に使う ODF の長さ | |
 | `TEMPO_MIN_FILL_SEC` | 4 | 推定を始める最小蓄積時間 | |
 | `TEMPO_UPDATE_SEC` | 0.5 | 推定の実行間隔 | |
@@ -326,7 +326,7 @@ c = fold(b*):  while c < TEMPO_FOLD_MIN_BPM: c *= 2;  while c ≥ TEMPO_FOLD_MAX
 #### 5.5.2 テンポの確定・更新（ヒステリシス）
 
 ```
-if conf < TEMPO_MIN_CONF: 何もしない
+if conf < TEMPO_MIN_CONF: 何もしない（確定・更新処理を行わない。公開値 conf は推定した値に更新する。2026-10-01 T16-03 で明記）
 same(a, b) = |a - b|/b ≤ TEMPO_SAME_TOL
 pending = 0 は「保留中の候補なし」を表し、same(c, 0) は常に偽とする。初期値 bpm = 0, pending = 0, pendingCount = 0
 if bpm == 0:
@@ -411,9 +411,10 @@ CENTROID = lognorm( Σ fk·P[k] / Ptot )
 FLATNESS = exp( mean_{k∈K} ln(P[k] + EPS) ) / (mean_{k∈K} P[k] + EPS)
 ROLLOFF  = lognorm( 累積 Σ P が ROLLOFF_FRACTION·Ptot 以上になる最小の fk )
 
-クロマ: CHROMA_MIN_HZ ≤ fk ≤ CHROMA_MAX_HZ の各ビンについて
+クロマ: CHROMA_MIN_HZ ≤ fk ≤ CHROMA_MAX_HZ の各ビンのうち、スペクトルの山の頂点（A[k] > A[k−1] かつ A[k] ≥ A[k+1]）だけについて
   pc = ((round(12·log2(fk/440) + 69) mod 12) + 12) mod 12
   chroma[pc] += A[k]
+  （2026-10-01 変更: 全ビンを足すと 48kHz ではビン幅 ≈ 半音のため窓の主ローブが隣の音名へ漏れ、U16-11 が不合格になるため。T16-04 で判明）
 max(chroma) > EPS なら chroma /= max(chroma)、そうでなければ全 0
 RMS  = sqrt(mean(mono²)),  PEAK = max|mono|
 ```

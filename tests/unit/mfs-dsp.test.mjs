@@ -140,7 +140,7 @@ test('T16-01 mfsDerived / MFS_LAYOUT: 導出値と配置', () => {
   assert.ok(Math.abs(d48.alpha(0.15) - (1 - Math.exp(-512 / (48000 * 0.15)))) < 1e-15);
   assert.equal(d48.frames(8), 750);
   assert.equal(d48.frames(0), 1);
-  assert.ok(Math.abs(d48.eventLatencySec - 0.45 * 2048 / 48000) < 1e-15);
+  assert.ok(Math.abs(d48.eventLatencySec - 0.316 * 2048 / 48000) < 1e-15);
   assert.equal(d48.binHz, 48000 / 2048);
   assert.equal(d48.binOf(1000), Math.round(1000 / (48000 / 2048)));
   assert.equal(MFS_LAYOUT.LENGTH, 104);

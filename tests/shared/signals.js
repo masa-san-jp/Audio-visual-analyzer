@@ -208,6 +208,31 @@ function sigConcat(buffers) {
   return { sampleRate, channels };
 }
 
+// Phase 16 §5.8 の K 特性（js/mfs-dsp.js の MfsBiquad.kWeighting。係数は複製しない）で全区間のラウドネスを測り、
+// 目標 LUFS になるよう全体に定数を掛けた新しい PcmBuffer を返す。無音（エネルギー 0）はそのままコピーする。
+// MfsBiquad / MFS_CONST は呼び出し時に参照する（呼び出し側が js/mfs-const.js と js/mfs-dsp.js を読み込んでおくこと）
+function sigScaleToLufs(buf, targetLufs) {
+  const sr = buf.sampleRate;
+  const length = buf.channels[0].length;
+  let sum = 0;
+  for (let c = 0; c < 2; c++) {
+    const src = buf.channels[c < buf.channels.length ? c : 0];
+    const [s1, s2] = MfsBiquad.kWeighting(sr);
+    let acc = 0;
+    for (let i = 0; i < length; i++) {
+      const y = s2.process(s1.process(src[i]));
+      acc += y * y;
+    }
+    sum += acc / length;
+  }
+  const channels = buf.channels.map((ch) => new Float32Array(ch));
+  if (!(sum > 0)) return { sampleRate: sr, channels };
+  const loud = MFS_CONST.LOUD_OFFSET + 10 * Math.log10(sum);
+  const gain = Math.pow(10, (targetLufs - loud) / 20);
+  for (const ch of channels) for (let i = 0; i < ch.length; i++) ch[i] *= gain;
+  return { sampleRate: sr, channels };
+}
+
 function synthFrame(i, freqLen, timeLen, outFreq, outTime) {
   const pulse = i % 15 < 3 ? 1.0 : 0.4;
   const center1 = 0.10 + 0.05 * Math.sin(i * 0.07);
@@ -236,6 +261,7 @@ if (typeof module !== 'undefined' && module.exports) {
     sigChord,
     sigMix,
     sigConcat,
+    sigScaleToLufs,
     synthFrame
   };
 }
