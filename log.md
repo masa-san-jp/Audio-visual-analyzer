@@ -1,5 +1,30 @@
 # 開発ログ
 
+## 2026-10-01 — [T16-07] ライブ経路の統合
+
+### 作業内容
+- `js/audio-engine.js`: MFS AudioWorklet を主経路に統合（計画書 §6.2）。グラフ `source → analyser → destination`（従来）に加え `source → mfsNode → silentGain(0) → destination`。`mfsStatus`（`initializing` / `active` / `fallback`）。AudioWorklet 非対応・`window.__avzForceMfsFailure === true`・`addModule`/ノード生成の例外・`onprocessorerror`・ウォッチドッグ（`LIVE_WATCHDOG_SEC` 秒ホップなし）で `fallback`（`console.warn` のみ、戻らない）。ホップは 32 件のリングへ蓄積し、`captureFrame(nowPerfMs)` で `getOutputTimestamp()`（無効時は `currentTime - baseLatency - outputLatency`）から出力時刻を求めて `t <= target` の最新ホップを選択。フラグ（onset / beat / downbeat）は「前回選択より後〜今回選択以下」のホップの OR に集約し、同じホップの再選択では 0（二重発火なし・リング内 packed は不変）。`getFreqSlice` / `getTimeDomainData` / `getFeatures` / `getMfsDebugInfo`（同一オブジェクトを使い回す）/ `resetAnalysis` / `setSmoothing`（AnalyserNode と smoothing メッセージ）。`connectMedia` / `connectStream` は MFS ノードへも接続して `resetAnalysis()`。ホップ番号が戻ったら（reset 前の未着メッセージ後に reset 後のホップが来た場合）リングを破棄
+- `js/visualizer-core.js`: `captureFrame(now)`、`input.getLayer = null`、`features` / `sampleRate` / `fftSize` を FramePipeline へ渡す
+- `js/ui-controller.js`: `resetAnalysis()` をシーク `input`、停止ボタン（`mediaManager.stop()` の直後）、`_applyActiveSlot()` 先頭で呼ぶ（読込完了後は `connectMedia` と `_applyActiveSlot` で呼ばれるため `_loadMediaFile` 内の重複呼び出しは置かなかった）
+- `index.html`: 変更なし（スクリプト順は T16-05 で対応済み）。`js/mic-input.js`: 変更なし（`connectStream` 経由で MFS に接続される）
+- `tests/browser/b16-live.test.js`（新規）: B16-02、B16-02f（フラグ集約・二重発火なし・リセット・ホップ番号の戻り）、B16-02m（フェイクマイクで active とホップ受信）、B16-03（フォールバック。共有ページの AudioEngine を汚さないよう新規 AudioEngine / VisualizerCore で実施）、B16-04（シーク・スロット切替・停止。T16-05 から持ち越した reset の実時間確認を兼ねる）
+- `tests/browser/b15-07.test.js`: AudioEngine スタブに `getFeatures()`（null を返す）を追加。VisualizerCore が呼ぶ新メソッドへの追従のみ（閾値・アサーションは不変）
+- `doc/spec.md`（v2.9 → v2.10）§9.1〜9.3・§19.2・§19.5、`README.md`
+
+### 検証
+- `node tests/run.mjs`（ブラウザ込み全件）: 79 件中 78 成功 / 0 失敗 / 1 スキップ（U15-00 異常系は想定どおり）。B15-03（14 タイプ）・B15-04（ゴールデン 66 ケース、基準値未変更）・B16-05・B16-01 も合格
+- B16-02: 10〜12 秒の BPM が 120 ± 1.5% 内、受信ホップ数/秒 約 94
+- B16-04: シーク・スロット切替・停止の 200ms 後の `lastHop` は操作前（100 超）より小さく 30 以下
+- 補助確認: 一時停止中もホップは届き続ける（約 94/秒）ためウォッチドッグの誤検知なし。ヘッドレス Chrome の `getOutputTimestamp()` は contextTime が currentTime より約 32ms 遅れた値を返す（出力遅延補正が効いている）
+- 全 `.js` / `.mjs` で `node --check` 合格。`index.html` を `file://` で開いてコンソールエラー 0
+
+### spec.md 変更
+- v2.10: §9.1（AudioWorklet 解析・自動フォールバック・ライブ/オフライン同一コード）、§9.2（音楽特徴）、§9.3（約 94 回/秒・出力遅延補正・解析リセット）、§19.2 / §19.5。理由: 計画書 §10・§1.1 のとおり、ユーザーから見える描画タイミング（10〜40ms 遅れ）と解析方式が変わるため
+
+### 備考
+- 実装: Sonnet サブエージェント
+- 計画書 §9.3 の手動確認（実楽曲 3 曲以上での BPM、10 分連続再生、体感の遅れ・カクつき）は実施していない（実楽曲・長時間再生・人手の体感が必要）
+
 ## 2026-10-01 — [T16-05] ワークレット
 
 ### 作業内容
