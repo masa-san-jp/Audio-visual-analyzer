@@ -8,7 +8,9 @@
 - `doc/spec.md`（v3.0）§14.8.3、`README.md`: 解析粒度がライブと同一になった旨
 
 ### 検証
-- RESULT_PLACEHOLDER
+- `node tests/run.mjs` 全件: 75 件中 74 成功相当（初回実行で B16-06 のみ失敗＝アプリページのライブ描画ループの render も数えていたテスト側の誤り。書き出し側の固定 dt のみ数えるよう修正し、`--filter 'B16-06|B15-02|B15-05'` で 3 件成功を確認。他 72 件は初回実行で成功、U15-00 異常系のみ SKIP）
+- B16-06: featureFrames/freqFrames/timeFrames/frameTimesMs = 151 件、フレーム 0 の packed 全 0、render 151 回すべて features 非 null。B15-02（90±1）・B15-05・B15-04 ゴールデンも合格
+- `node --check` 全 js 通過、`index.html` を `file://` で開いてコンソールエラー 0
 
 ### spec.md 変更
 - §14.8.3 に Phase 16 以降の解析経路（ライブと同一の解析コード、フォールバック時は音楽特徴なし）を追記。version v2.9 → v3.0、date 2026-10-01（T16-07 と並行のため、後からマージする側で調整）
