@@ -1,5 +1,24 @@
 # 開発ログ
 
+## 2026-10-02 — [T18-02] ワークレット songmap モード
+
+### 作業内容
+- `js/mfs-const.js`: `SONGMAP_ROW`（FLUX 0 / BANDS 4 / CHROMA 36 / ENERGY 48 / LENGTH 49。計画書 Phase 18 §3）を追加し `module.exports` に含めた
+- `js/mfs-worklet.js`: `processorOptions.mode = 'songmap'`（`totalSamples` 必須）を追加。ホップ完了ごとに 1 行（`ex.flux` 4 + BANDS 32 + CHROMA 12 + `hopEnergy` 1）を constructor で確保した 256 行ぶんのバッファへ積み、256 行ごとに `{type:'rows', startHop, count, data: Float32Array(count*49)}`（transfer）を送る。入力終端で残りを送ってから `{type:'done', hops}`。ワークレットソースに `SONGMAP_ROW` と定数 `MFS_SONGMAP_BATCH = 256` を埋め込む。process() 経路の配列生成は送信時の `slice` のみ（メッセージ用の許可例外）。live / offline の挙動は変更なし
+- `tests/lib/songmap-rows.mjs`: `SONGMAP_ROW` のローカル代替定義を削除し `get('SONGMAP_ROW')`（mfs-const.js）に一本化（SSOT）
+- `tests/browser/b18-worklet.test.js`（新規）: B18-01a（`synthSong(48000, {bpm:128})` の行データがページ内 MfsExtractor 直接駆動と最大絶対差 1e-6 以内、行数 = ホップ数、startHop 連続、途中メッセージは 256 行、`done.hops`）、B18-01b（端数サンプルの短い信号で rows 1 通 + done）
+
+### 検証
+- `node tests/run.mjs`: 82 件中 81 成功 / 0 失敗 / 1 スキップ（U15-00 異常系は想定どおり）。B16-01・B16-08・B16-08b、B15 系も合格
+- 全 `.js` / `.mjs` で `node --check` 合格
+
+### spec.md 変更（あれば）
+- なし
+
+### 備考
+- 実装: Sonnet サブエージェント
+- SongMapService（T18-05）がこのメッセージ形式を利用する
+
 ## 2026-10-01 — [T18-01] テスト用合成楽曲・行データ生成
 
 ### 作業内容

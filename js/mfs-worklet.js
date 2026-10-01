@@ -1,4 +1,4 @@
-// MFS の AudioWorklet 組み立て（プロセッサ MfsProcessor と data: URL 生成）— doc/20260928-plan-phase16-music-feature-stream.md §2.2・§6.1・§6.3
+// MFS の AudioWorklet 組み立て（プロセッサ MfsProcessor と data: URL 生成）— doc/20260928-plan-phase16-music-feature-stream.md §2.2・§6.1・§6.3、songmap モードは doc/20260928-plan-phase18-song-map-and-auto-director.md §3
 //
 // 既存 js/analysis-worklet.js と同じく、ワークレットモジュールは file:// 直開きでも動くよう data: URL として生成する
 // （外部ファイルの fetch を行わない。クラスは toString() で埋め込む。blob: URL は file:// オリジンで addModule が拒否される）。
@@ -12,6 +12,7 @@ class MfsProcessor extends AudioWorkletProcessor {
     super();
     const o = (options && options.processorOptions) || {};
     this._offline = o.mode === 'offline';
+    this._songmap = o.mode === 'songmap';
     this._fps = o.fps > 0 ? o.fps : 30;
     this._total = typeof o.totalSamples === 'number' ? o.totalSamples : Infinity;
     this._extractor = new MfsExtractor(sampleRate, { smoothing: o.smoothing });
@@ -29,11 +30,18 @@ class MfsProcessor extends AudioWorkletProcessor {
     this._accDown = 0;
     this._nextIndex = 0;
     this._doneSent = false;
+    // songmap: 256 行ぶんの行バッファ（constructor で確保して使い回す。送信時のみ slice でコピー）
+    this._smRows = new Float32Array(MFS_SONGMAP_BATCH * SONGMAP_ROW.LENGTH);
+    this._smCount = 0;
+    this._smStartHop = 0;
+    this._smHops = 0;
     this._resetOfflineState();
 
-    this._extractor.onHop = this._offline
-      ? (ex) => this._onHopOffline(ex)
-      : (ex) => this._onHopLive(ex);
+    this._extractor.onHop = this._songmap
+      ? (ex) => this._onHopSongmap(ex)
+      : this._offline
+        ? (ex) => this._onHopOffline(ex)
+        : (ex) => this._onHopLive(ex);
     this.port.onmessage = (ev) => {
       const m = ev.data;
       if (!m) return;
@@ -52,6 +60,9 @@ class MfsProcessor extends AudioWorkletProcessor {
     this._accDown = 0;
     this._nextIndex = 0;
     this._doneSent = false;
+    this._smCount = 0;
+    this._smStartHop = 0;
+    this._smHops = 0;
   }
 
   // 全状態を初期化（ホップ番号も 0 から数え直し）
@@ -113,6 +124,39 @@ class MfsProcessor extends AudioWorkletProcessor {
     this._accDown |= p[LY.DOWNBEAT_FLAG];
   }
 
+  // songmap: ホップ完了ごとに 1 行を積み、256 行たまるごとに rows メッセージで送る（§3）
+  _onHopSongmap(ex) {
+    const R = SONGMAP_ROW;
+    const base = this._smCount * R.LENGTH;
+    const rows = this._smRows;
+    const flux = ex.flux;
+    const p = ex.packed;
+    for (let i = 0; i < 4; i++) rows[base + R.FLUX + i] = flux[i];
+    for (let i = 0; i < 32; i++) rows[base + R.BANDS + i] = p[MFS_LAYOUT.BANDS + i];
+    for (let i = 0; i < 12; i++) rows[base + R.CHROMA + i] = p[MFS_LAYOUT.CHROMA + i];
+    rows[base + R.ENERGY] = ex.hopEnergy;
+    this._smCount++;
+    this._smHops++;
+    if (this._smCount >= MFS_SONGMAP_BATCH) this._flushSongmapRows();
+  }
+
+  _flushSongmapRows() {
+    if (this._smCount === 0) return;
+    const data = this._smRows.slice(0, this._smCount * SONGMAP_ROW.LENGTH);
+    this.port.postMessage(
+      { type: 'rows', startHop: this._smStartHop, count: this._smCount, data: data },
+      [data.buffer]
+    );
+    this._smStartHop += this._smCount;
+    this._smCount = 0;
+  }
+
+  _finishSongmap() {
+    this._doneSent = true;
+    this._flushSongmapRows();
+    this.port.postMessage({ type: 'done', hops: this._smHops });
+  }
+
   _finishOffline() {
     this._doneSent = true;
     // 入力の終わり: 未送信のフレームを最後のホップの内容で全て送る
@@ -138,7 +182,10 @@ class MfsProcessor extends AudioWorkletProcessor {
       this._extractor.pushSamples(L, R, n);
       this._pushed += n;
     }
-    if (this._offline && !this._doneSent && this._pushed >= this._total) this._finishOffline();
+    if (!this._doneSent && this._pushed >= this._total) {
+      if (this._songmap) this._finishSongmap();
+      else if (this._offline) this._finishOffline();
+    }
     return true;
   }
 }
@@ -149,6 +196,8 @@ function buildMfsWorkletSource() {
   return [
     'const MFS_CONST = ' + JSON.stringify(MFS_CONST) + ';',
     'const MFS_LAYOUT = ' + JSON.stringify(MFS_LAYOUT) + ';',
+    'const SONGMAP_ROW = ' + JSON.stringify(SONGMAP_ROW) + ';',
+    'const MFS_SONGMAP_BATCH = 256;', // rows メッセージ 1 通あたりの行数（計画書 §3）
     mfsDerived.toString(), mfsWindowHann.toString(),
     SpectrumAnalyzer.toString(), MfsFft.toString(), MfsMelBank.toString(), MfsBiquad.toString(),
     MfsOnset.toString(), MfsTempo.toString(), MfsExtractor.toString(),

@@ -105,6 +105,15 @@ const MFS_LAYOUT = {
   LENGTH: 104,
 };
 
+// ワークレット songmap モードの1行（長さ 49 の数値列）の配置（Phase 18 計画書 §3）
+const SONGMAP_ROW = {
+  FLUX: 0,
+  BANDS: 4,
+  CHROMA: 36,
+  ENERGY: 48,
+  LENGTH: 49,
+};
+
 // サンプルレートからの導出値（計画書 §3.1）。alpha / frames / binOf は関数として返す
 function mfsDerived(sampleRate) {
   const H = MFS_CONST.HOP_SIZE;
@@ -123,5 +132,5 @@ function mfsDerived(sampleRate) {
 }
 
 if (typeof module !== 'undefined' && module.exports) {
-  module.exports = { MFS_CONST, MFS_LAYOUT, mfsDerived };
+  module.exports = { MFS_CONST, MFS_LAYOUT, SONGMAP_ROW, mfsDerived };
 }
