@@ -25,6 +25,23 @@
 
 ---
 
+## 2026-10-01 — [T16-08] FramePipeline・レンダラー契約 v2
+
+### 作業内容
+- `js/frame-pipeline.js`: `input` に `features` / `sampleRate` / `fftSize` を追加。`settings.autoGain && input.features` のとき `applyAutoGain` で補正した freq（内部バッファ、長さ変更時のみ再確保）を履歴・レイヤー切り出し・レンダラーの全てに使う。読み取り専用 `FramePipeline.lastFreq`（実際に描画へ使った freq）を追加。`input.getLayer` が null（または補正適用フレーム）のときは補正後 freq から `computeLayerRange`（`settings.layerSplit`）で切り出す。`sampleRate` / `fftSize` が無い入力は均等分割。レイヤーの subarray はレイヤー別にキャッシュして毎フレーム生成しない。ステートフルレンダラーへ渡す `frame` に `features`（null あり）を追加。`frame.beat`（`BeatDetector`）は補正前の `input.freq` で動かし、従来と同一
+- `index.html`: `js/mfs-const.js`・`js/mfs-view.js` を `frame-pipeline.js` の前に追加（`FramePipeline` が `applyAutoGain` / `computeLayerRange` / `MFS_CONST` を使うため必須。ハーネスも index.html の script 順から生成される）
+- `doc/renderer-contract.md`: v2。`frame.features` 行、`getLayer` の説明、必須ルール2に「features が null の場合のガード」を追記
+- `tests/browser/b16-05.test.js`（新規、ハーネス）: 全14タイプ × 4 パターン（features なし / あり・autoGain 無効 / あり・autoGain 有効・聴感分割 / なし・autoGain 有効）を描画。`lastFreq` が autoGain 無効時は入力そのまま、有効時は `applyAutoGain` の結果と一致、`frame.features` の受け渡し・null を確認
+
+### 検証
+- `node tests/run.mjs` 全件（B16-05 追加）。B15-04 ゴールデン66ケースは基準値を再生成せず一致。ゴールデンの pipeline ドライバは `getLayer: null` のまま入力形が不変のため未変更
+
+### 備考
+- 実装: Sonnet サブエージェント
+- ライブ（`visualizer-core.js`）・オフライン（`offline-exporter.js`）は従来どおり `getLayer` を渡す。T16-07 / T16-09 で `null` に切り替える
+- 設定キー `autoGain` / `layerSplit` は `DEFAULT_SETTINGS` 未追加（T16-10）。未定義は falsy / 均等として扱われる
+---
+
 ## 2026-10-01 — [T15-08] デバッグ表示
 
 ### 作業内容
