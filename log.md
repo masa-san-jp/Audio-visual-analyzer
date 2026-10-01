@@ -1,5 +1,22 @@
 # 開発ログ
 
+## 2026-10-01 — [T16-09] オフライン経路の統合
+
+### 作業内容
+- `js/offline-exporter.js`: `_captureFramesWorklet` を MFS プロセッサ（`mode: 'offline'`、チャンネル指定は §6.2 と同じ）に置き換え。`frame` メッセージを index 順に `freqFrames`（`computeFreqRange` スライス）・`timeFrames`・`frameTimesMs`（`i·1000/fps`）・`featureFrames`（packed）へ格納し、`done` で完了。ScriptProcessor 経路は残し `featureFrames = null`。`_renderAndEncode` は `MfsFrameView` を 1 つ構築して `setPacked` で差し替え、`pipeline.render` の input に `features`・`sampleRate`・`fftSize`（2048）を渡す（`getLayer` は `null`）。MFS 用ワークレットの生成に失敗した場合は従来経路へフォールバック
+- `tests/browser/b16-06.test.js`（新規）: B16-06
+- `doc/spec.md`（v3.0）§14.8.3、`README.md`: 解析粒度がライブと同一になった旨
+
+### 検証
+- RESULT_PLACEHOLDER
+
+### spec.md 変更
+- §14.8.3 に Phase 16 以降の解析経路（ライブと同一の解析コード、フォールバック時は音楽特徴なし）を追記。version v2.9 → v3.0、date 2026-10-01（T16-07 と並行のため、後からマージする側で調整）
+
+### 備考
+- 実装: Sonnet サブエージェント
+- `js/analysis-worklet.js` は `index.html`（T16-07 の担当範囲）に script タグが残るため削除せず、未使用のまま残置
+
 ## 2026-10-01 — [T16-05] ワークレット
 
 ### 作業内容
