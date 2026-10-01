@@ -1,4 +1,6 @@
-# Phase 6 レンダラー実装契約（実装者向け）
+# Phase 6 レンダラー実装契約（実装者向け）— v2（Phase 16 / T16-08）
+
+v2 の変更点: `frame.features` を追加（追加のみ。既存フィールドの意味は不変）。`frame.freq` は設定 `autoGain` が有効で特徴が得られているとき音量自動補正後の値になる。詳細は `doc/20260928-plan-phase16-music-feature-stream.md` §6.6。
 
 新レンダラーは **classic script**（`import/export` 不可、`#private` フィールド不可、
 グローバルにクラス宣言）で書く。`index.html` に `<script>` で直列読み込みされる。
@@ -24,7 +26,10 @@ class XxxRenderer {
 | `frame.beat` | `{ isBeat: bool, energy: 0..1, sinceBeatMs: number }` |
 | `frame.dtMs` | 前フレームからの経過ミリ秒（実時間基準の動きに使う） |
 | `frame.nowMs` | 現在時刻ms（`performance.now` 基準） |
-| `frame.getLayer(i, count)` | レイヤー帯域スライス `Uint8Array` を返す |
+| `frame.getLayer(i, count)` | レイヤー帯域スライス `Uint8Array` を返す（`autoGain` 補正後の `freq` から切り出す。分割方式は設定 `layerSplit`） |
+| `frame.features` | `MfsFrameView \| null`（v2 追加）。音楽特徴（`bands`・`onset`・`tempo`・`stereo`・`timbre`・`chroma`・`loudness`・`rms`・`peak`。定義は Phase 16 計画書 §4 / §6.4）。**null の場合あり**（AudioWorklet 非対応でフォールバック中、または特徴未取得）。読み取り専用で、フレーム間で同じオブジェクトが使い回される（保持・変更しない） |
+
+`frame.beat`（従来の `BeatDetector`）は v2 でも変更しない（補正前の `freq` で動く）。
 
 ## settings（全設定・effectiveHue反映済み）
 
@@ -61,7 +66,8 @@ class XxxRenderer {
 1. **背景クリアはしない**（コアが `_clearWithAfterimage` で行う）。
    例外: `selfClear: true` を宣言するタイプ（spectrogram 系）は自分で全面塗り＋履歴風残しを行う。
 2. `canvas.width`/`height` が 0、`frame.freq` が null/空、`frame.history.size===0`、
-   `frame.time` が null のケースを**必ずガード**する（例外を出さない）。
+   `frame.time` が null、**`frame.features` が null** のケースを**必ずガード**する（例外を出さない）。
+   `frame.features` が null のときは従来の `freq` / `beat` だけで描画できるようにする。
 3. 描画要素数は spec §6 の性能予算で**上限クランプ**する（固定長プール推奨）。
 4. 毎フレームの配列/オブジェクト新規生成を避ける（プールは constructor / onResize で確保）。
 5. 動きは `frame.dtMs` を用いて実時間基準にする（`motionSpeed` はその倍率）。
