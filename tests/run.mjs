@@ -6,20 +6,25 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { spawnSync } from 'node:child_process';
 import { BrowserEnvironmentError, findChrome, launchChrome } from './lib/chrome.mjs';
 import { listSharedScripts, writeHarness } from './lib/harness-builder.mjs';
+import { encodeRgbaPng } from './lib/png.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const OUTPUT_DIR = path.join(ROOT, 'tests/output');
+const GOLDEN_PATH = path.join(ROOT, 'tests/golden/frames.json');
 const args = process.argv.slice(2);
-const options = { unit: false, browser: false, headed: false, skipSlow: false, filter: null };
+const options = {
+  unit: false, browser: false, headed: false, skipSlow: false, updateGolden: false, filter: null,
+};
 for (let i = 0; i < args.length; i += 1) {
   const arg = args[i];
   if (arg === '--unit') options.unit = true;
   else if (arg === '--browser') options.browser = true;
   else if (arg === '--headed') options.headed = true;
   else if (arg === '--skip-slow') options.skipSlow = true;
+  else if (arg === '--update-golden') options.updateGolden = true;
   else if (arg === '--filter') options.filter = args[++i];
   else if (arg === '--help') {
-    console.log('使い方: node tests/run.mjs [--unit] [--browser] [--filter <正規表現>] [--headed] [--skip-slow]');
+    console.log('使い方: node tests/run.mjs [--unit] [--browser] [--update-golden] [--filter <正規表現>] [--headed] [--skip-slow]');
     process.exit(0);
   } else {
     console.error(`不明なオプション: ${arg}`);
@@ -113,15 +118,72 @@ async function saveArtifacts(result) {
   }
 }
 
+async function readGoldenFrames() {
+  try {
+    return JSON.parse(await fs.readFile(GOLDEN_PATH, 'utf8'));
+  } catch (error) {
+    if (error.code === 'ENOENT') return null;
+    throw error;
+  }
+}
+
+function thumbnailRgbToRgba(rgb, width, height) {
+  const blockSize = 10;
+  const rgba = new Uint8Array(width * blockSize * height * blockSize * 4);
+  for (let blockY = 0; blockY < height; blockY += 1) {
+    for (let blockX = 0; blockX < width; blockX += 1) {
+      const source = (blockY * width + blockX) * 3;
+      for (let y = 0; y < blockSize; y += 1) {
+        for (let x = 0; x < blockSize; x += 1) {
+          const target = ((blockY * blockSize + y) * width * blockSize
+            + blockX * blockSize + x) * 4;
+          rgba[target] = rgb[source];
+          rgba[target + 1] = rgb[source + 1];
+          rgba[target + 2] = rgb[source + 2];
+          rgba[target + 3] = 255;
+        }
+      }
+    }
+  }
+  return { width: width * blockSize, height: height * blockSize, rgba };
+}
+async function saveGoldenDiffs(diffs) {
+  if (!diffs.length) return;
+  const outputDir = path.join(OUTPUT_DIR, 'golden');
+  await fs.mkdir(outputDir, { recursive: true });
+  for (const diff of diffs) {
+    const safeCaseId = String(diff.caseId).replace(/[^a-zA-Z0-9._-]+/g, '-');
+    const baseName = `${safeCaseId}-${diff.frame}`;
+    const expected = thumbnailRgbToRgba(Buffer.from(diff.expectedThumb, 'base64'), diff.thumbWidth, diff.thumbHeight);
+    const actual = thumbnailRgbToRgba(Buffer.from(diff.actualThumb, 'base64'), diff.thumbWidth, diff.thumbHeight);
+    await fs.writeFile(path.join(outputDir, `${baseName}-expected.png`), encodeRgbaPng(expected.width, expected.height, expected.rgba));
+    await fs.writeFile(path.join(outputDir, `${baseName}-actual.png`), encodeRgbaPng(actual.width, actual.height, actual.rgba));
+    await fs.writeFile(path.join(outputDir, `${baseName}-full.png`), encodeRgbaPng(diff.fullWidth, diff.fullHeight, Buffer.from(diff.fullActual, 'base64')));
+  }
+}
+async function writeGoldenFrames(frames) {
+  await fs.mkdir(path.dirname(GOLDEN_PATH), { recursive: true });
+  await fs.writeFile(GOLDEN_PATH, JSON.stringify(frames, null, 2) + '\n');
+}
 async function runBrowserPage(chrome, page, files, includeExpectedFailure) {
   if (page === 'app') {
     for (const sharedFile of await listSharedScripts(ROOT)) await injectScript(chrome, sharedFile);
     await injectScript(chrome, path.join(ROOT, 'tests/browser/lib/avz-test.js'));
     for (const file of files) await injectScript(chrome, file.filePath, file.source);
   }
-  await chrome.evaluate(`window.__avzIncludeExpectedFailure = ${includeExpectedFailure}; window.__avzSkipSlow = ${options.skipSlow}; true`);
-  const browserResults = await chrome.evaluate(`window.__avzRun(${JSON.stringify(filter?.source ?? null)})`);
+  const expectedFrames = page === 'harness' && !options.updateGolden ? await readGoldenFrames() : null;
+  await chrome.evaluate(`window.__avzIncludeExpectedFailure = ${includeExpectedFailure}; window.__avzSkipSlow = ${options.skipSlow}; window.__avzUpdateGolden = ${options.updateGolden}; window.__avzGoldenExpectedFrames = ${JSON.stringify(expectedFrames)}; true`);
+  const browserResults = await chrome.evaluate(`window.__avzRun(${JSON.stringify(filter?.source ?? null)})`, { timeoutMs: 180_000 });
   if (!Array.isArray(browserResults)) throw new Error('ブラウザテストの結果配列を取得できませんでした。');
+  if (page === 'harness') {
+    const goldenOutput = await chrome.evaluate('({ frames: window.__avzGoldenFrames || null, diffs: window.__avzGoldenDiffs || [] })');
+    const goldenResult = browserResults.find((result) => result.id === 'B15-04');
+    if (options.updateGolden && goldenResult?.status === 'pass') {
+      if (!goldenOutput.frames) throw new Error('ゴールデン基準値をブラウザーから取得できませんでした。');
+      await writeGoldenFrames(goldenOutput.frames);
+    }
+    await saveGoldenDiffs(goldenOutput.diffs || []);
+  }
   for (const result of browserResults) {
     record(result.id, result.name, result.status, result.ms, result.error);
     await saveArtifacts(result);
