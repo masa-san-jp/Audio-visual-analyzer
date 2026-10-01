@@ -1,5 +1,27 @@
 # 開発ログ
 
+## 2026-10-01 — [T16-01] 定数・データ配置・DSP 部品
+
+### 作業内容
+- `js/mfs-const.js`: `MFS_CONST`（計画書 §3 の全定数を同名・同値で定義）、`MFS_LAYOUT`（§4 のオフセットと `LENGTH: 104`）、`mfsDerived(sampleRate)`（§3.1。`alpha(T)` / `frames(T)` / `binOf(hz)` は関数）
+- `js/mfs-dsp.js`: `mfsWindowHann(n)`、`MfsFft`（基数2・倍精度・in-place・1/N 正規化なし）、`MfsMelBank`（§5.3。三角フィルタを構築時に疎形式で保持。公開: `bands` / `lowHz` / `centerHz` / `highHz` / `weightSum(b)`、`apply(P, out)` は割り当てなし）、`MfsBiquad`（転置直接形 II、`static kWeighting(sampleRate)` は libebur128 方式の係数）。いずれも `MFS_CONST` 以外のグローバルを参照しない自己完結実装
+- `tests/unit/mfs-dsp.test.mjs`: U16-01〜U16-03 と導出値・レイアウトの確認（`loadClassic` 経由）
+- `index.html` は未変更（組み込みは後続チケット）
+
+### 検証
+- `node tests/run.mjs`: 37 件中 36 成功 / 0 失敗 / 1 スキップ（U15-00 異常系は想定どおり）
+- U16-01: PASS（最大相対誤差 1.88e-13、N=64・2048 計 2112 ビン）
+- U16-02: PASS（48kHz・44.1kHz とも 32 帯域、中心 122.4〜13617.7Hz、中心ビン代替 0 帯域）
+- U16-03: PASS（48kHz 係数が公式値と ±1e-9 で一致。997Hz 利得 48kHz +0.6910dB / 44.1kHz +0.6938dB、20Hz -13.27dB、10kHz +4.042dB / +4.046dB）
+- `node --check` 全 `.js` / `.mjs`: PASS
+
+### spec.md 変更
+- なし
+
+### 備考
+- 実装: Sonnet サブエージェント
+- 計画書の定数・擬似コードで受け入れテストはすべて合格。計画書にない判断なし（`MfsMelBank` の公開プロパティ名はテスト用に追加したもので §5.0 の API は変更していない）
+
 ## 2026-09-30 — [T15-09] CI・PR テンプレート
 
 ### 作業内容
