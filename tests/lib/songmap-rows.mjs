@@ -11,16 +11,7 @@ export const MFS_CONST = get('MFS_CONST');
 export const MFS_LAYOUT = get('MFS_LAYOUT');
 const MfsExtractor = get('MfsExtractor');
 
-// §3 の行配置。js/mfs-const.js に SONGMAP_ROW が入った（T18-02）ら、そちらを使う。
-// それまでは §3 の表どおりのテスト内定義（T18-02 で置き換わる想定。アプリ本体には追加しない）
-function resolveSongmapRow() {
-  try {
-    return get('SONGMAP_ROW');
-  } catch (e) {
-    return { FLUX: 0, BANDS: 4, CHROMA: 36, ENERGY: 48, LENGTH: 49 };
-  }
-}
-export const SONGMAP_ROW = resolveSongmapRow();
+export const SONGMAP_ROW = get('SONGMAP_ROW'); // js/mfs-const.js が唯一の定義（SSOT）
 
 const BLOCK = 128; // AudioWorklet のレンダー量子と同じ
 
