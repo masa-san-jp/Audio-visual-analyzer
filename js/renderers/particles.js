@@ -193,7 +193,7 @@ class ParticlesRenderer {
 
     // 加算合成でグロー感を出す（美しさ向上）。描画後に必ず戻す。
     const prevOp = ctx.globalCompositeOperation;
-    ctx.globalCompositeOperation = 'lighter';
+    ctx.globalCompositeOperation = settings && settings.bgColor === '#fff' ? 'multiply' : 'lighter';
 
     if (method === 'line') {
       // ── 線: 速度方向に伸びる流れ星状のストリーク ──
@@ -353,7 +353,7 @@ class FlowRenderer {
     // ── 描画: 表現方法で明確に描き分ける ──
     const method = settings.expressionMethod === 'dot' ? 'dot' : 'line';
     const prevOp = ctx.globalCompositeOperation;
-    ctx.globalCompositeOperation = 'lighter'; // グロー感
+    ctx.globalCompositeOperation = settings && settings.bgColor === '#fff' ? 'multiply' : 'lighter'; // グロー感
 
     if (method === 'dot') {
       // 点: 流れに沿って移動する小さな光点（線でつながず粒として見せる）

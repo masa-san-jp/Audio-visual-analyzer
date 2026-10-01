@@ -197,7 +197,7 @@ time[n] = clamp(round(128 + 90*(0.5 + 0.5*p)*sin(2π*n*(3 + i%7)/timeLen)), 0, 2
 | 判定 | 条件 |
 |---|---|
 | 一致 | 全要素の平均絶対差 ≤ **2.0** かつ 最大絶対差 ≤ **40** |
-| 非空 | フレーム 39・59 のサムネイルの標準偏差 > **1.0**（背景一色でないこと） |
+| 非空 | フレーム 39・59 のサムネイルの標準偏差 > **0.1**（背景一色でないこと）。2026-09-30 オーナー決定で 1.0 から変更（粒子・トンネル等の疎らな描画は 10px ブロック平均で 0.3 前後になるため） |
 
 失敗時は `tests/output/golden/<caseId>-<frame>-expected.png` / `-actual.png`（サムネイルを10倍に拡大）と、実描画のフル解像度 `-full.png` を保存する。
 
@@ -299,11 +299,12 @@ class FramePipeline {
 | T15-02 | Node 単体テストの整備 | ★1 | T15-01 | `tests/unit/*.test.mjs` | U15-01〜U15-06 | 不要 |
 | T15-03 | ブラウザテストハーネス | ★2 | T15-01 | `tests/lib/harness-builder.mjs`、`tests/browser/lib/avz-test.js` | B15-00 | 不要 |
 | T15-04 | 合成信号・WAV ライブラリ | ★2 | T15-01 | `tests/shared/signals.js`、`tests/shared/wav.js` | U15-07、U15-08 | 不要 |
-| T15-05 | ゴールデン基準値の作成 | ★2 | T15-03, T15-04 | `tests/shared/golden-cases.js`、`tests/browser/golden.test.js`（`visualizer-core` ドライバ）、`tests/golden/frames.json`、`tests/lib/png.mjs` | B15-04 | 不要 |
+| T15-05 | ゴールデン基準値の作成 | ★2 | T15-03, T15-04, T15-10 | `tests/shared/golden-cases.js`、`tests/browser/golden.test.js`（`visualizer-core` ドライバ）、`tests/golden/frames.json`、`tests/lib/png.mjs` | B15-04 | 不要 |
 | T15-06 | FramePipeline への統合 | ★3 | T15-05, T15-07 | `js/frame-pipeline.js`、`visualizer-core.js`・`offline-exporter.js`・`index.html` の変更、ゴールデンを `pipeline` ドライバへ切替 | B15-04、B15-05、B15-02、B15-03 | 要（§4.4） |
 | T15-07 | 既存機能の回帰テスト | ★2 | T15-03, T15-04 | `tests/browser/b15-01.test.js`（`@page harness`）、`tests/browser/regression.test.js`（`@page app`） | B15-01〜B15-03 | 不要 |
 | T15-08 | デバッグ表示 | ★1 | T15-06 | `js/debug-overlay.js`、`index.html`、`visualizer-core.js` | B15-06 | 要（README に `?debug=1` を追記） |
 | T15-09 | CI・PR テンプレート | ★1 | T15-02, T15-07 | `.github/workflows/test.yml`、`.github/pull_request_template.md` | CI 上で全テストが成功すること | 不要 |
+| T15-10 | 白背景での加算合成の修正（2026-09-30 追加） | ★1 | T15-03, T15-04 | `js/renderers/particles.js`（`ParticlesRenderer`・`FlowRenderer`）、`js/renderers/ripple.js`、`tests/browser/b15-07.test.js` | B15-07 | 要（`doc/spec.md` §11.1） |
 
 - **T15-05 は T15-06 より前に、必ずリファクタ前のコードで基準値を作ること**（基準値が「現行の見た目」を表すため）
 - T15-07 は T15-06 と並行可。ただし T15-06 のマージ前に T15-07 がマージされていること（リファクタの回帰検出に使う）
@@ -337,6 +338,7 @@ class FramePipeline {
 | B15-04 | ハーネス | ゴールデン全66ケースが §3.6.3 の判定に合格 |
 | B15-05 | ハーネス | （T15-06 以降）`OfflineExporter` の書き出し中に `FramePipeline.prototype.render` が総フレーム数と同じ回数呼ばれる（複製ロジックが残っていないことの確認） |
 | B15-06 | アプリ | `index.html?debug=1` でデバッグ表示が存在し、1秒後に FPS 表示が数値。`?debug` なしでは要素が存在しない |
+| B15-07 | ハーネス | （T15-10）`particles`・`flow`・`ripple` を背景 `#fff`・320×180 で §3.6.2 の手順により60フレーム描画し、フレーム 59 のサムネイル標準偏差が 0.1 超。背景 `#000` の同条件の描画結果（サムネイル）は修正前後で不変（`lighter` のまま） |
 
 ### 7.3 手動確認（T15-06 の PR で実施し結果を PR に記載）
 
