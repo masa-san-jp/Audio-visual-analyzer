@@ -563,7 +563,7 @@ truth = { boundariesBars: [0, 8, 16, 32, 40, 56, 64], kinds: [intro, build, drop
           beats: 各4分音符の時刻, downbeats: 各小節の t0 }
 ```
 
-`tests/shared/song-synth.js` には、テンポ変化曲 `synthTempoChange(sampleRate)`（Phase 15 の `sigDrumPattern` によるキック4つ打ち＋8分ハットを 120BPM 30 秒 → 126BPM 30 秒で連結）も置く。
+`tests/shared/song-synth.js` には、テンポ変化曲 `synthTempoChange(sampleRate)`（Phase 15 の `sigDrumPattern` によるキック4つ打ち＋8分ハットを 120BPM 30 秒 → 126BPM 30 秒で連結）も置く。戻り値の `truth.beats` に正解の拍時刻（秒）を持たせる（U18-10 の F 値計算用。2026-10-01 T18-01 で明記）。
 
 ### 8.2 Node 単体
 

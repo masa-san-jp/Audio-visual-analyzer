@@ -21,6 +21,26 @@
 - 実装: Sonnet サブエージェント
 - `js/analysis-worklet.js` は `index.html`（T16-07 の担当範囲）に script タグが残るため削除せず、未使用のまま残置
 
+---
+
+## 2026-10-01 — [T18-01] テスト用合成楽曲・行データ生成
+
+### 作業内容
+- `tests/shared/song-synth.js`（新規）: `synthSong(sampleRate, { bpm = 128, seed = 11 })`（計画書 §8.1 の手順・乱数消費順どおり。64 小節・6 セクション、ピーク 0.9 に正規化、`truth` 付き）と `synthTempoChange(sampleRate)`（120BPM 30 秒 → 126BPM 30 秒。U18-10 用に拍の真値 `truth.beats` を追加）
+- `tests/lib/songmap-rows.mjs`（新規）: `songmapRows(signal)`。Node 上の `MfsExtractor` を 128 サンプルずつ駆動し、ホップ完了ごとに §3 の配置（FLUX 4 / BANDS 32 / CHROMA 12 / ENERGY 1 = 49）の行を作る。`SONGMAP_ROW` は §3 の表どおりにテスト内で定義（`js/mfs-const.js` に `SONGMAP_ROW` が入れば自動でそちらを使う。T18-02 で置き換わる）。アプリ本体は変更していない
+- `tests/unit/song-synth.test.mjs`（新規）: U18-S01〜S06（決定性・truth・長さ・ピーク・行数 = ホップ数）
+
+### 検証
+- `node tests/run.mjs`: 77 件中 76 成功 / 0 失敗 / 1 スキップ（U15-00 異常系は想定どおり）
+- U18-S01: 2 回生成で L/R ビット一致、U18-S06: 行データも 2 回でビット一致・全値有限
+
+### spec.md 変更（あれば）
+- なし
+
+### 備考
+- 実装: Sonnet サブエージェント
+- 合成は Node の vm 上でやや遅い（48kHz・120 秒で約 20 秒）。U18-08 で全 6 条件を生成する際の所要時間に注意
+
 ## 2026-10-01 — [T16-05] ワークレット
 
 ### 作業内容
