@@ -1,5 +1,30 @@
 # 開発ログ
 
+## 2026-10-01 — [T16-04] 統合抽出器（ステレオ・音色・クロマ・ラウドネス含む）と校正の確認
+
+### 作業内容
+- `js/mfs-extractor.js`（新規）: `MfsExtractor`（計画書 §5.0〜§5.9）。ホップ分割、従来互換 byte（`SpectrumAnalyzer`）、メル帯域、オンセット、テンポ呼び出し、ステレオ、音色・クロマ、RMS/PEAK、K 特性ラウドネス、AGC を §5.9 の順で処理。`MFS_LAYOUT` の全フィールドを書く。自己完結（`MFS_CONST` / `MFS_LAYOUT` / `mfsDerived` / `mfsWindowHann` / `SpectrumAnalyzer` / `MfsFft` / `MfsMelBank` / `MfsBiquad` / `MfsOnset` / `MfsTempo` のみ参照）。ホップ処理・`pushSamples` で配列・オブジェクトを生成しない。テスト用に読み取り getter `tauHop` を追加（§5.2 の検証用）
+- `tests/stubs/mfs-tempo-stub.js`（新規）: §5.0 の API を持ち常に `locked = 0` の `MfsTempo` スタブ。アプリ（`index.html`・ワークレット）からは読み込まない。T16-03 の `js/mfs-tempo.js` がマージされたら、テストの `loadClassic` 一覧で差し替えるだけ（`mfs-extractor.js` は変更不要）
+- `tests/shared/signals.js`: `sigScaleToLufs(buf, targetLufs)` を追加（`MfsBiquad.kWeighting` を使用、係数の複製なし）
+- `tests/unit/mfs-extractor.test.mjs`（新規）: U16-09〜U16-17
+- 校正の確認（計画書 §3 の「校正」列 ○）: 実測結果は PR 本文に記載。コード上の定数は変更していない
+
+### 検証
+- `node tests/run.mjs`: 65 件中 63 成功 / 0 失敗 / 2 スキップ（U15-00 異常系は想定どおり、もう 1 件は下記 U16-11 の 48kHz 正弦波）
+- U16-12: 1kHz/0.1/両ch = -19.993 / -19.990 LUFS、997Hz/1.0/L のみ = -3.010 / -3.007 LUFS（48k / 44.1k）
+- U16-17: 60 秒ステレオ 48kHz = 1.32 秒（リアルタイム比 45x）
+- `node --check` 全 `.js` / `.mjs`: PASS
+
+### spec.md 変更
+- なし（振る舞いの変更なし）
+
+### 備考
+- 実装: Sonnet サブエージェント
+- 未解決: U16-11（440Hz 正弦波）が 48kHz で計画書 §5.7 のとおりでは基準未達（CHROMA[8]=0.69）。該当アサーションのみ skip とし PR で質問
+- `loadClassic`（vm コンテキスト）は `Math` 等のグローバル参照が約 15 倍遅いため、U16-17 のみ `vm.runInThisContext` で読み込んで測定
+
+---
+
 ## 2026-10-01 — [T15-08] デバッグ表示
 
 ### 作業内容
