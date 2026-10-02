@@ -59,6 +59,7 @@ class VisualizerCore {
     this.running = true;
     if (!this.debugOverlay && typeof DebugOverlay !== 'undefined') {
       this.debugOverlay = DebugOverlay.create(this.canvas.parentElement);
+      if (this.debugOverlay) this.debugOverlay.setMfsSource(this.audioEngine);
     }
     this._lastFrameMs = performance.now();
     this._loop();
@@ -131,6 +132,7 @@ class VisualizerCore {
       const t0 = performance.now();
       this.pipeline.render(input, this.settings);
       overlay.setField('type', this.settings.analyzerType);
+      overlay.recordFeatures(input.features, now);
       overlay.recordFrame(performance.now() - t0, now);
     } else {
       this.pipeline.render(input, this.settings);
