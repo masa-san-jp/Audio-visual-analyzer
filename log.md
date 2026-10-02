@@ -6,7 +6,7 @@
 - `js/settings.js`: `DEFAULT_SETTINGS` に `autoGain: false`・`layerSplit: 'linear'` を追加（計画書 §7。既定値のためゴールデン B15-04 は不変）。`settings-io.js` は既存の汎用処理で往復・旧形式 JSON の既定値補完に対応（変更なし）
 - `index.html`: 「感度・形状」セクション先頭にチェックボックス「音量自動補正」（`chk-auto-gain`）、レイヤー数ボタンの下にセレクト「レイヤー分割」（`layer-split`: 均等 / 聴感。`group-layer-split`）を追加
 - `js/ui-controller.js`: 2 項目の change ハンドラ、`_syncControlsFromSettings()` への同期（不正値は既定値扱い）、`_updateLayerSplitVisibility()`（layers 対応タイプかつ `layerCount >= 2` のときだけ表示。`_renderLayerSettings`・`_applyCapabilities` から呼ぶ）。ランダムボタンは 2 項目を変更しない
-- `tests/browser/b16-10.test.js`（新規）: B16-07・B16-09
+- `tests/browser/b16-07-09.test.js`（新規）: B16-07・B16-09
 - `tests/unit/settings-io.test.mjs`: U15-01 に 2 キーの往復・旧形式・型不一致フォールバックを追加
 - `doc/spec.md`（v2.12、2026-10-03）§10.2・§12.3、`README.md`
 
