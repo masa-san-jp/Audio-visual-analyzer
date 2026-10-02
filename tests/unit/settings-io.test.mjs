@@ -31,3 +31,25 @@ test('U15-01 settings-io: 不正入力は例外を出さず既定値へフォー
     assert.deepEqual(deserializeSettings(input), defaults);
   }
 });
+
+test('U15-01 settings-io: Phase 16 の autoGain・layerSplit の往復と、旧形式・型不一致での既定値フォールバック', () => {
+  const defaults = createDefaultSettings();
+  assert.equal(defaults.autoGain, false);
+  assert.equal(defaults.layerSplit, 'linear');
+
+  const custom = { ...defaults, autoGain: true, layerSplit: 'mel' };
+  const restored = deserializeSettings(serializeSettings(custom));
+  assert.equal(restored.autoGain, true);
+  assert.equal(restored.layerSplit, 'mel');
+
+  const legacy = serializeSettings(defaults);
+  delete legacy.settings.autoGain;
+  delete legacy.settings.layerSplit;
+  const fromLegacy = deserializeSettings(legacy);
+  assert.equal(fromLegacy.autoGain, false);
+  assert.equal(fromLegacy.layerSplit, 'linear');
+
+  const wrongTypes = deserializeSettings({ settings: { autoGain: 'yes', layerSplit: 5 } });
+  assert.equal(wrongTypes.autoGain, false);
+  assert.equal(wrongTypes.layerSplit, 'linear');
+});
