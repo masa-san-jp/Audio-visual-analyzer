@@ -80,7 +80,7 @@ IP アドレス（Mac / Linux は `ifconfig`、Windows は `ipconfig` で確認�
 
 テストは Node.js 22.4 以上と Chrome / Chromium を使って実行します。依存パッケージのインストールは不要です。
 
-`node tests/run.mjs` で単体テストとブラウザテストを実行します。`--unit` または `--browser` で対象を絞り、`--filter <正規表現>` でテスト ID・名称を指定できます。ブラウザテストは `tests/browser/*.test.js` を自動検出し、既定では `// @page harness` の生成ハーネスで実行します（`// @page app` は `index.html` に注入。`// @query debug=1` を併記すると `index.html?debug=1` を開きます）。ハーネス HTML は `tests/.generated/` に生成されます。Chrome の自動検出に失敗する環境では `CHROME_PATH` に実行ファイルを指定してください。
+`node tests/run.mjs` で単体テストとブラウザテストを実行します。`--unit` または `--browser` で対象を絞り、`--filter <正規表現>` でテスト ID・名称を指定できます。単体とブラウザの両方を実行する場合は並行して走らせます（順に実行したいときは `--serial`）。ブラウザテストは `tests/browser/*.test.js` を自動検出し、既定では `// @page harness` の生成ハーネスで実行します（`// @page app` は `index.html` に注入。`// @query debug=1` を併記すると `index.html?debug=1` を開きます）。ハーネス HTML は `tests/.generated/` に生成されます。Chrome の自動検出に失敗する環境では `CHROME_PATH` に実行ファイルを指定してください。
 
 GitHub Actions では `pull_request` と `main` への push で `node tests/run.mjs` を実行します。
 
