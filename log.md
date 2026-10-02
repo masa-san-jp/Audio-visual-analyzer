@@ -16,6 +16,7 @@
 
 ### 備考
 - 実装: Sonnet サブエージェント
+- 2026-10-03: main（T18-02・T16-07・T16-09）をマージ。全件実行は 99 件中 97 成功 / 1 失敗 / 1 スキップ。失敗は U16-17（性能 ≤6 秒）で、他エージェント並行実行による負荷が原因（単独実行では 1.36 秒で合格）
 - `songGridBeats(o, P, dpBeats, sampleRate)` の署名・戻り値 `{ beatHops, beats, beatSource, near }`（beats < 0 の拍は両配列から除く）を計画書 §4.2 ④ に反映（2026-10-03 T18-03 で明記）。sampleRate は必須（当初の任意引数案から変更）
 - SSOT: `songmap-analysis.js` の `SONGMAP_ROW` フォールバックを削除し、`js/mfs-const.js`（T18-02）のグローバルのみを使用
 
