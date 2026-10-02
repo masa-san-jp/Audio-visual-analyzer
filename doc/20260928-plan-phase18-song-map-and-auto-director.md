@@ -118,7 +118,7 @@ Phase 16 の定数（`MFS_CONST`・`mfsDerived`）もそのまま使う（`fr`�
 | ① | `songOdf(rows, L, fr) -> { o, oL }`（Float64Array） |
 | ② | `songGlobalTempo(o, fr) -> { bpm, conf, P }` |
 | ③ | `songDpBeats(o, P) -> number[]`（ホップ番号） |
-| ④ | `songGridBeats(o, P, dpBeats) -> { beatHops, beatSource }` |
+| ④ | `songGridBeats(o, P, dpBeats, sampleRate) -> { beatHops, beats, beatSource, near }` |
 | ⑤ | `songDownbeats(beatHops, oL, rows, L) -> number[]`（downbeatIndices） |
 | ⑥ | `songBars(beatHops, beats, downbeatIndices, rows, L, durationSec) -> { bars, v, E }` |
 | ⑦ | `songBoundaries(v, E, bpm) -> number[]`（小節番号。先頭 0・末尾 nbar を含む） |
@@ -166,6 +166,8 @@ beatSource = near ≥ GRID_MIN_FRAC ? 'grid' : 'dp'
 beats[i] = (beatHops[i] + 1)·hopSec − eventLatencySec
 beats[i] < 0 となる i は beats と beatHops の両方から除く（以降の添字は除いた後の配列で数える）
 ```
+
+- `songGridBeats` は `sampleRate` を受け取り、上の秒換算と「`beats[i] < 0` の拍を `beats` と `beatHops` の両方から除く」処理までを行って `beats`（秒、昇順）も返す。`near`（格子上にある DP 拍の割合）も返す。`buildSongMap` と T18-04 以降は、この戻り値の `beatHops` / `beats` をそのまま使う（2026-10-03 T18-03 で明記）
 
 - 打ち込み音楽のようにテンポが一定の曲では格子を使う（キックの無いブレイクで拍が裏に滑る DP の弱点を補う。§10）。テンポが揺れる曲では DP 拍を使う
 
