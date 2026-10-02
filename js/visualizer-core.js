@@ -19,7 +19,9 @@ class VisualizerCore {
     // pipeline.render へ渡す input（毎フレーム使い回して値だけ更新する）
     this._input = {
       freq: null, time: null,
-      getLayer: (i, count) => this.audioEngine.getLayerData(i, count),
+      // T16-07 以降、レイヤーは FramePipeline 内で（音量自動補正後の）freq から切り出す（計画書 §6.5）
+      getLayer: null,
+      features: null, sampleRate: 0, fftSize: 2048,
       dtMs: 16.7, nowMs: 0,
       historyFps: 60,
       drawBackground: (ctx, canvas) => this._drawVideoComposite(ctx, canvas),
@@ -114,11 +116,13 @@ class VisualizerCore {
     this._lastFrameMs = now;
 
     // フレームデータ取得
-    this.audioEngine.captureFrame();
+    this.audioEngine.captureFrame(now);
 
     const input = this._input;
     input.freq = this.audioEngine.getFreqSlice();
     input.time = this.audioEngine.getTimeDomainData();
+    input.features = this.audioEngine.getFeatures();
+    input.sampleRate = this.audioEngine.ctx ? this.audioEngine.ctx.sampleRate : 0;
     input.dtMs = dtMs;
     input.nowMs = now;
     const overlay = this.debugOverlay;

@@ -2,7 +2,7 @@
 
 - Repository: `masa-san-jp/Audio-visual-analyzer`
 - Default branch: `main`
-- Document version: `v2.9`
+- Document version: `v2.10`
 - Date: `2026-10-01`
 - Purpose: 開発担当者への引き継ぎ用仕様書
 
@@ -204,15 +204,22 @@
 ### 9.1 解析方式
 - `Web Audio API` を利用する
 - `AudioContext`
-- `MediaElementAudioSourceNode`
-- `AnalyserNode`
+- `MediaElementAudioSourceNode` / `MediaStreamAudioSourceNode`（マイク）
+- 解析は **AudioWorklet（音楽特徴ストリーム: MFS）** で行う。ワークレットは `file://` 直開きでも動くよう data: URL で生成する
+- AudioWorklet が使えない環境、またはワークレットからホップが届かない場合は、従来の `AnalyserNode` 経路へ自動でフォールバックする（以後そのページでは戻らない）。この場合 `frame.features` は `null` になり、機能低下のみで動作は継続する
+- ライブ表示とオフライン書き出しは**同一の解析コード**（`MfsExtractor`）を使う
+- 設計の詳細は `doc/20260928-plan-phase16-music-feature-stream.md` を参照
 
 ### 9.2 取得データ
-- 周波数スペクトラムデータ
-- 必要に応じて時系列波形データ
+- 周波数スペクトラムデータ（従来互換の byte スペクトル）
+- 時系列波形データ
+- 音楽特徴（`frame.features`）: 聴感（メル）帯域・オンセット・テンポ/拍位相/小節・ステレオ・音色・クロマ・ラウドネス・音量自動補正量。データ配置は計画書 `doc/20260928-plan-phase16-music-feature-stream.md` §4 の表を参照
 
 ### 9.3 更新方式
 - `requestAnimationFrame` を使用して描画同期を行う
+- 解析は約 94 回/秒（48kHz。ホップ 512 サンプル）で行う
+- 描画は、出力遅延（`getOutputTimestamp()`）を補正した時刻の解析結果を使う。そのため描画は音に対して 10〜40ms 程度遅れて表示される（従来は音より先行していた）。見た目はほぼ同じ
+- シーク・停止・スロット切替・ファイル読込のときは解析状態（テンポ推定など）を 0 からやり直す
 
 ### 9.4 基本表現
 - 原則として **全音域を1つのアナライザーで表現** する
@@ -630,9 +637,11 @@ Phase 6 では時間軸系・擬似3D系・流体/粒子系・幾何系の 12 �
 
 ### 19.2 `audio-engine.js`
 - AudioContext 管理
-- AnalyserNode 管理
+- MFS AudioWorklet の生成と状態管理（`initializing` / `active` / `fallback`）
+- ホップのリングバッファと、出力遅延補正による解析結果の選択
+- AnalyserNode 管理（フォールバック・録画用）
 - FFT データ取得
-- レイヤー向け帯域データ分配
+- 解析状態のリセット（`resetAnalysis()`）
 
 ### 19.3 `media-manager.js`
 - Audio / Video 要素の管理
@@ -646,7 +655,7 @@ Phase 6 では時間軸系・擬似3D系・流体/粒子系・幾何系の 12 �
 - スロット状態更新
 
 ### 19.5 `visualizer-core.js`
-- 描画ループ
+- 描画ループ（`FramePipeline` への入力に `freq` / `time` / `features` / `sampleRate` / `fftSize` を渡す）
 - キャンバスサイズ管理
 - レンダラー切替
 - レイヤー合成
