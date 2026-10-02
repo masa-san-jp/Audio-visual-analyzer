@@ -23,6 +23,49 @@
 
 ---
 
+## 2026-10-02 — [T18-03] 拍・格子・小節頭（①〜⑤）
+
+### 作業内容
+- `js/songmap-analysis.js`（新規・前半）: `SONG_CONST`（計画書 §4.1 の全定数）、`SongMapError`、共通ヘルパ `songZ` / `songCos` / `songPct`、段階関数 `songOdf`（①）・`songGlobalTempo`（②）・`songDpBeats`（③）・`songGridBeats`（④）・`songDownbeats`（⑤）、①〜⑤ の結果を返す `buildSongMap` の骨格（長さ判定 `too-short` / `too-long`、`no-rhythm`）。⑥〜⑨ と `validateSongMap` は T18-04 でファイル末尾の「後半」位置に追記する。`index.html` への読み込み追加は T18-05 以降（本チケットではアプリの挙動を変えない）
+- `tests/unit/songmap-beats.test.mjs`（新規）: U18-01〜U18-04、U18-10（＋ ⑤ のクロマ経路と `buildSongMap` 骨格の確認）
+
+### 検証
+- `node --test tests/unit/songmap-beats.test.mjs`: 8 件成功、約 11.7 秒（うち U18-10 の 48kHz・60 秒の行生成が約 11.5 秒）
+- U18-10: bpm 119.75、beatSource = dp、拍 F 値 1.0000（±70ms）
+- 参考（テスト外の確認。synthSong の ①〜⑤ を 8 条件で実行）: 100/128/140BPM × 48k/44.1k は全て beatSource = grid、拍 F 値 0.998〜1.000、小節頭 98.5〜100%。174BPM は bpm = 87.00、拍 F 値 1.000（偶数/奇数の良い方）。解析時間（特徴抽出後）143〜380ms
+
+### spec.md 変更（あれば）
+- なし
+
+### 備考
+- 実装: Sonnet サブエージェント
+- 2026-10-03: main（T18-02・T16-07・T16-09）をマージ。全件実行は 99 件中 97 成功 / 1 失敗 / 1 スキップ。失敗は U16-17（性能 ≤6 秒）で、他エージェント並行実行による負荷が原因（単独実行では 1.36 秒で合格）
+- `songGridBeats(o, P, dpBeats, sampleRate)` の署名・戻り値 `{ beatHops, beats, beatSource, near }`（beats < 0 の拍は両配列から除く）を計画書 §4.2 ④ に反映（2026-10-03 T18-03 で明記）。sampleRate は必須（当初の任意引数案から変更）
+- SSOT: `songmap-analysis.js` の `SONGMAP_ROW` フォールバックを削除し、`js/mfs-const.js`（T18-02）のグローバルのみを使用
+
+---
+
+## 2026-10-03 — [T16-11] デバッグ表示の MFS 項目
+
+### 作業内容
+- `js/debug-overlay.js`: `setMfsSource(engine)` / `recordFeatures(features, nowMs)` を追加。`MFS: <status>`、`BPM <値> (<信頼度>) locked|—`、`beat [###.....] n/4`、`LUFS M <値> S <値> AGC <値>dB`、`hops/s`、オンセットランプ `onset: L M H`（発生から 150ms 点灯）を表示。本文は 250ms ごとの更新時にだけ文字列を生成し、ランプは事前生成した 8 通りの文字列から状態変化時のみ DOM 更新（毎フレームの配列・オブジェクト生成なし）。本文とランプは別の子要素
+- `js/visualizer-core.js`: `?debug=1` のときだけ overlay へ `audioEngine` を渡し、毎フレーム `recordFeatures(input.features, now)` を呼ぶ（無効時は従来どおり何もしない）
+- `tests/browser/b16-10.test.js`（新規、`// @query debug=1`）: B16-10
+- `README.md`: デバッグ表示の項目説明を更新
+
+### 検証
+- `--filter 'B16-10|B15-06|B15-04'`: B16-10、B15-06、B15-06b、B15-04（ゴールデン 66 ケース）合格
+- `index.html` を `file://` で開き（`?debug=1` あり・なし）コンソールエラー 0
+
+### spec.md 変更
+- なし（計画書 §8: spec 更新 不要）
+
+### 備考
+- 実装: Sonnet サブエージェント
+- フォールバック時は `MFS: fallback`、BPM / LUFS は `—` 表示
+
+---
+
 ## 2026-10-03 — [T16-09] オフライン経路の統合
 
 ### 作業内容
