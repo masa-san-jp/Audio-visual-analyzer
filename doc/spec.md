@@ -2,8 +2,8 @@
 
 - Repository: `masa-san-jp/Audio-visual-analyzer`
 - Default branch: `main`
-- Document version: `v3.0`
-- Date: `2026-10-01`
+- Document version: `v2.11`
+- Date: `2026-10-03`
 - Purpose: 開発担当者への引き継ぎ用仕様書
 
 ---
