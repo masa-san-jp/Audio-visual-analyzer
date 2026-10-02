@@ -3,11 +3,12 @@
 //
 // 処理の流れ:
 //  1. ファイルを AudioBuffer にデコードする
-//  2. OfflineAudioContext 上で各出力フレーム時刻の周波数/時間波形スナップショットを
-//     採取する。AudioWorklet + 自前FFT（js/fft.js の SpectrumAnalyzer を
-//     js/analysis-worklet.js がワークレットへ埋め込む）を優先し、非対応環境では
-//     従来の ScriptProcessorNode + AnalyserNode へフォールバックする。
+//  2. OfflineAudioContext 上で各出力フレーム時刻の周波数/時間波形スナップショットと
+//     音楽特徴（MFS）を採取する。音楽特徴ストリーム用 AudioWorklet（js/mfs-worklet.js、
+//     ライブと同一の解析コード）を優先し、非対応環境では従来の
+//     ScriptProcessorNode + AnalyserNode へフォールバックする（その場合 features = null）。
 //     OfflineAudioContext は実時間より高速に処理されるため、採取自体も高速に終わる
+//     — doc/20260928-plan-phase16-music-feature-stream.md §6.3
 //  3. 採取したフレーム列を、既存レンダラー群（renderer-registry.js）を用いて
 //     固定 dt（1/fps）で1枚ずつ Canvas に描画する。
 //  4. WebCodecs（VideoEncoder / AudioEncoder）でエンコードし、
@@ -115,7 +116,7 @@ class OfflineExporter {
   }
 
   // ── 解析フェーズ: OfflineAudioContext 上でフレーム列を採取 ──
-  // AudioWorklet + 自前FFT（js/fft.js / js/analysis-worklet.js）を優先し、
+  // MFS AudioWorklet（js/mfs-worklet.js）を優先し、
   // 非対応環境では従来の ScriptProcessorNode + AnalyserNode へフォールバックする。
   // 両経路はスナップショット粒度（2048サンプル境界）・平滑化の進み方を揃えており、
   // 同一音源に対して実用上同一の出力を返す
@@ -140,7 +141,7 @@ class OfflineExporter {
     const freqLen = endBin - startBin;
 
     let captured = null;
-    if (typeof AudioWorkletNode !== 'undefined' && typeof createAnalysisWorkletUrl === 'function') {
+    if (typeof AudioWorkletNode !== 'undefined' && typeof createMfsWorkletUrl === 'function') {
       try {
         captured = await this._captureFramesWorklet(audioBuffer, smoothing, fps, startBin, endBin);
       } catch (_) {
@@ -159,52 +160,52 @@ class OfflineExporter {
       freqFrames: captured.freqFrames,
       timeFrames: captured.timeFrames,
       frameTimesMs: captured.frameTimesMs,
+      featureFrames: captured.featureFrames, // ScriptProcessor 経路では null
     };
   }
 
-  // AudioWorklet 経路（Phase 9.2）: ワークレット内の SpectrumAnalyzer で解析する
+  // AudioWorklet 経路（Phase 16）: MFS プロセッサ（mode: 'offline'）で解析する — 計画書 §6.3
   async _captureFramesWorklet(audioBuffer, smoothing, fps, startBin, endBin) {
     const sampleRate = audioBuffer.sampleRate;
     const totalSamples = audioBuffer.length;
     const offlineCtx = new OfflineAudioContext(audioBuffer.numberOfChannels, totalSamples, sampleRate);
     if (!offlineCtx.audioWorklet) throw new Error('AudioWorklet 非対応');
 
-    await offlineCtx.audioWorklet.addModule(createAnalysisWorkletUrl());
+    await offlineCtx.audioWorklet.addModule(createMfsWorkletUrl());
 
     const source = offlineCtx.createBufferSource();
     source.buffer = audioBuffer;
 
-    // channelCount:1 / explicit / speakers で、AnalyserNode が解析時に行うのと
-    // 同じ規則のモノラルダウンミックスをブラウザ側に任せる
-    const node = new AudioWorkletNode(offlineCtx, 'offline-analysis', {
+    // チャンネル指定はライブ経路（計画書 §6.2）と同じ
+    const node = new AudioWorkletNode(offlineCtx, 'mfs', {
       numberOfInputs: 1,
       numberOfOutputs: 1,
-      channelCount: 1,
+      outputChannelCount: [1],
+      channelCount: 2,
       channelCountMode: 'explicit',
       channelInterpretation: 'speakers',
-      processorOptions: {
-        fftSize: OFFLINE_ANALYSIS_FFT_SIZE,
-        blockSize: OFFLINE_ANALYSIS_BLOCK_SIZE,
-        samplesPerFrame: sampleRate / fps,
-        totalSamples,
-        smoothing,
-      },
+      processorOptions: { mode: 'offline', smoothing, fps, totalSamples },
     });
 
     const freqFrames = [];
     const timeFrames = [];
     const frameTimesMs = [];
+    const featureFrames = [];
     let cancelled = false;
     let done = false;
 
     node.port.onmessage = (e) => {
       const d = e.data;
-      if (d && d.done) { done = true; return; }
+      if (!d) return;
+      if (d.type === 'done') { done = true; return; }
+      if (d.type !== 'frame') return;
       if (this._cancelRequested) { cancelled = true; return; }
+      // frame は index 順に届く（FIFO）。frameTimesMs は出力フレーム時刻 i·1000/fps で自前計算する
       freqFrames.push(d.freq.slice(startBin, endBin));
       timeFrames.push(d.time);
-      frameTimesMs.push(d.timeMs);
-      this._setProgress(clamp((d.timeMs / 1000) * sampleRate / totalSamples, 0, 1) * 0.4);
+      frameTimesMs.push(d.index * 1000 / fps);
+      featureFrames.push(d.f);
+      this._setProgress(clamp((d.index / fps) * sampleRate / totalSamples, 0, 1) * 0.4);
     };
 
     source.connect(node);
@@ -219,7 +220,7 @@ class OfflineExporter {
     try { node.disconnect(); source.disconnect(); } catch (_) {}
     if (!done) throw new Error('ワークレット解析の完了通知を受信できませんでした');
 
-    return { freqFrames, timeFrames, frameTimesMs, cancelled };
+    return { freqFrames, timeFrames, frameTimesMs, featureFrames, cancelled };
   }
 
   // ScriptProcessorNode 経路（従来実装・フォールバック）:
@@ -274,13 +275,13 @@ class OfflineExporter {
     await offlineCtx.startRendering();
     try { processor.disconnect(); analyser.disconnect(); source.disconnect(); } catch (_) {}
 
-    return { freqFrames, timeFrames, frameTimesMs, cancelled };
+    return { freqFrames, timeFrames, frameTimesMs, featureFrames: null, cancelled };
   }
 
   // ── 描画 + エンコードフェーズ ──
   async _renderAndEncode(analysis, settings, opts) {
     const { fps, width, height } = opts;
-    const { freqFrames, timeFrames, frameTimesMs, freqLen, durationMs, audioBuffer, sampleRate, numberOfChannels } = analysis;
+    const { freqFrames, timeFrames, frameTimesMs, featureFrames, freqLen, durationMs, audioBuffer, sampleRate, numberOfChannels } = analysis;
     const totalFrames = freqFrames.length;
 
     const canvas = document.createElement('canvas');
@@ -379,8 +380,12 @@ class OfflineExporter {
       if (compositeDrawable) this._drawCompositeVideoFrame(bgCtx, bgCanvas, compositeDrawable, settings);
     };
     // pipeline.render へ渡す input（毎フレーム使い回して値だけ更新する）
+    // features: MFS 経路では MfsFrameView（構築 1 回・setPacked で差し替え）、フォールバックでは null。
+    // getLayer は null（レイヤーは FramePipeline が補正後の freq から切り出す — 計画書 §6.5）
+    const featureView = featureFrames && typeof MfsFrameView === 'function' ? new MfsFrameView() : null;
     const input = {
       freq: null, time: null, getLayer: null,
+      features: null, sampleRate, fftSize: OFFLINE_ANALYSIS_FFT_SIZE,
       dtMs, nowMs: 0, historyFps: fps,
       drawBackground: compositeSource ? drawBackground : null,
     };
@@ -407,6 +412,7 @@ class OfflineExporter {
 
         input.freq = freqFrames[i];
         input.time = timeFrames[i];
+        if (featureView) { featureView.setPacked(featureFrames[i]); input.features = featureView; }
         input.nowMs = nowMs;
         input.drawBackground = compositeSource ? drawBackground : null;
         pipeline.render(input, settings);

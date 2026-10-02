@@ -111,7 +111,7 @@ class MfsProcessor extends AudioWorkletProcessor {
     // 終端が s_i を超えるホップが完了した時点で、直前のホップの内容でフレーム i を送る
     for (;;) {
       const s = this._nextIndex * sr / this._fps;
-      if (!(s < e) || s > this._total) break;
+      if (!(s < e) || s > this._total + 1) break; // +1 の理由は _finishOffline を参照
       this._sendFrame(s / sr);
     }
     this._prevPacked.set(ex.packed);
@@ -162,7 +162,9 @@ class MfsProcessor extends AudioWorkletProcessor {
     // 入力の終わり: 未送信のフレームを最後のホップの内容で全て送る
     for (;;) {
       const s = this._nextIndex * sampleRate / this._fps;
-      if (s > this._total) break;
+      // デコード時のリサンプリング（例: 48kHz 素材を 44.1kHz で復号）で長さが duration×rate より 1 サンプル短くなることがあり、
+      // 最終フレーム（s_i = duration×rate）を失わないよう 1 サンプル分の許容を持たせる（計画書 §6.3、2026-10-03 T16-09）
+      if (s > this._total + 1) break;
       this._sendFrame(s / sampleRate);
     }
     this.port.postMessage({ type: 'done' });

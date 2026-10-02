@@ -161,7 +161,7 @@ B15-00 の意図的な失敗テストは、通常実行では「期待どおり�
 ### オフライン書き出し（Phase 7 / Phase 9.1でMP4対応）
 音楽ファイルの信号を**再生を伴わず**解析し、現在のビジュアライザー設定に合わせて動画ファイルを書き出す機能です。通常の録画とは独立しており、専用のファイル選択から操作します。
 
-- **決定的な解析**: `OfflineAudioContext` 上で音声全体を解析し、実時間より高速にフレームデータを採取。解析は AudioWorklet + 自前FFT（`AnalyserNode` 互換実装、`js/fft.js`）を優先し、非対応環境では `ScriptProcessorNode` + `AnalyserNode` へ自動フォールバック
+- **決定的な解析**: `OfflineAudioContext` 上で音声全体を解析し、実時間より高速にフレームデータを採取。解析はライブ再生と同一の解析コード（AudioWorklet の音楽特徴ストリーム、`js/mfs-worklet.js`）を優先し、解析粒度もライブと同じになります。非対応環境では `ScriptProcessorNode` + `AnalyserNode` へ自動フォールバック（音楽特徴なし）
 - **確定レンダリング**: 実時間再生に依存せず、既存の全アナライザータイプ（棒グラフ〜ボロノイ脈動）を固定フレームレートで1枚ずつ描画
 - **WebCodecs エンコード**: `VideoEncoder`（MP4対応環境ではH.264、非対応環境はVP9→VP8フォールバック）と `AudioEncoder`（MP4ではAAC、WebMではOpus）で圧縮
 - **自前マクサー**: 外部ライブラリなしで MP4（fragmented MP4、`js/mp4-muxer.js`）/ WebM（`js/webm-muxer.js`）コンテナを新規構築。いずれも **シーク索引**（MP4: `mfra` / WebM: Cues）を書き込むため、通常録画（Duration 後付けのみ）より編集ソフトでの扱いやすさが高い

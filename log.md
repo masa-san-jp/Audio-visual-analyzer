@@ -1,5 +1,30 @@
 # 開発ログ
 
+## 2026-10-03 — [T16-09] オフライン経路の統合
+
+### 作業内容
+- `js/offline-exporter.js`: `_captureFramesWorklet` を MFS プロセッサ（`mode: 'offline'`、チャンネル指定は §6.2 と同じ）に置き換え。`frame` メッセージを index 順に `freqFrames`（`computeFreqRange` スライス）・`timeFrames`・`frameTimesMs`（`i·1000/fps`）・`featureFrames`（packed）へ格納し、`done` で完了。ScriptProcessor 経路は残し `featureFrames = null`。`_renderAndEncode` は `MfsFrameView` を 1 つ構築して `setPacked` で差し替え、`pipeline.render` の input に `features`・`sampleRate`・`fftSize`（2048）を渡す（`getLayer` は `null`）。MFS 用ワークレットの生成に失敗した場合は従来経路へフォールバック
+- `js/mfs-worklet.js`: オフラインのフレーム確定条件を `s_i ≤ totalSamples + 1` に変更（フレーム送出と入力終端のフラッシュの両方）。原因: 48kHz 素材を 44.1kHz のデバイスで復号すると長さが 220499 になり（実測。22.05kHz も 1 サンプル短い）、s_150 = 220500 > totalSamples で最終フレームが落ち 150 フレームになっていた（CI 失敗）。計画書 §6.3 の文言も更新
+- `tests/browser/b16-08c.test.js`（新規）: B16-08c — 44.1kHz・totalSamples = 220499・fps 30 のワークレット単体で 151 フレーム（デバイスレート非依存）
+- `tests/browser/b16-06.test.js`（新規）: B16-06
+- `tests/browser/b16-06b.test.js`（新規）: B16-06b（デコーダー方式）・B16-06c（シーク方式）。MediaRecorder で赤キャンバス + オシレーター音声の WebM を作り、動画合成有効で書き出し。state done、フレーム数 = floor(長さ×fps)+1 ±1、render の features 非 null、`_drawCompositeVideoFrame` の呼び出し回数と描画後の画素が赤であることを確認
+- `doc/spec.md`（v2.11、2026-10-03）§14.8.3、`README.md`: 解析粒度がライブと同一になった旨
+
+### 検証
+- `node tests/run.mjs` 全件: 75 件中 74 成功相当（初回実行で B16-06 のみ失敗＝アプリページのライブ描画ループの render も数えていたテスト側の誤り。書き出し側の固定 dt のみ数えるよう修正し、`--filter 'B16-06|B15-02|B15-05'` で 3 件成功を確認。他 72 件は初回実行で成功、U15-00 異常系のみ SKIP）
+- B16-06: featureFrames/freqFrames/timeFrames/frameTimesMs = 151 件、フレーム 0 の packed 全 0、render 151 回すべて features 非 null。B15-02（90±1）・B15-05・B15-04 ゴールデンも合格
+- 全件再実行: 77 件 / 76 成功 / 0 失敗 / 1 スキップ（U15-00 異常系）。B16-06b・B16-06c 合格（動画合成の両方式で実行）
+- `node --check` 全 js 通過、`index.html` を `file://` で開いてコンソールエラー 0
+
+### spec.md 変更
+- §14.8.3 に Phase 16 以降の解析経路（ライブと同一の解析コード、フォールバック時は音楽特徴なし）を追記。version v2.11、date 2026-10-03（T16-07 の v2.10 の次）
+
+### 備考
+- 実装: Sonnet サブエージェント
+- `js/analysis-worklet.js` は `index.html`（T16-07 の担当範囲）に script タグが残るため削除せず、未使用のまま残置
+
+---
+
 ## 2026-10-01 — [T16-07] ライブ経路の統合
 
 ### 作業内容
