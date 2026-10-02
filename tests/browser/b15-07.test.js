@@ -66,6 +66,7 @@ function b1507MakeAudioEngine() {
     freqSliceLength() { return 638; },
     getFreqSlice() { return freq; },
     getTimeDomainData() { return time; },
+    getFeatures() { return null; },   // T16-07: VisualizerCore が features を取得するため（スタブにも用意）
     getLayerData(index, count) {
       const start = Math.floor(index * freq.length / count);
       const end = Math.floor((index + 1) * freq.length / count);

@@ -16,7 +16,79 @@
 
 ### 備考
 - 実装: Sonnet サブエージェント
-- 計画書にない追加: `songGridBeats` の第 4 引数 `sampleRate`（任意）。渡すと秒への換算と「beats < 0 の拍を beatHops / beats の両方から除く」処理まで行い `beats` を返す（④ の署名が sampleRate を持たないため）。省略時は `{ beatHops, beatSource, near }`
+- `songGridBeats(o, P, dpBeats, sampleRate)` の署名・戻り値 `{ beatHops, beats, beatSource, near }`（beats < 0 の拍は両配列から除く）を計画書 §4.2 ④ に反映（2026-10-03 T18-03 で明記）。sampleRate は必須（当初の任意引数案から変更）
+- SSOT: `songmap-analysis.js` の `SONGMAP_ROW` フォールバックを削除し、`js/mfs-const.js`（T18-02）のグローバルのみを使用
+
+## 2026-10-03 — [T16-09] オフライン経路の統合
+
+### 作業内容
+- `js/offline-exporter.js`: `_captureFramesWorklet` を MFS プロセッサ（`mode: 'offline'`、チャンネル指定は §6.2 と同じ）に置き換え。`frame` メッセージを index 順に `freqFrames`（`computeFreqRange` スライス）・`timeFrames`・`frameTimesMs`（`i·1000/fps`）・`featureFrames`（packed）へ格納し、`done` で完了。ScriptProcessor 経路は残し `featureFrames = null`。`_renderAndEncode` は `MfsFrameView` を 1 つ構築して `setPacked` で差し替え、`pipeline.render` の input に `features`・`sampleRate`・`fftSize`（2048）を渡す（`getLayer` は `null`）。MFS 用ワークレットの生成に失敗した場合は従来経路へフォールバック
+- `js/mfs-worklet.js`: オフラインのフレーム確定条件を `s_i ≤ totalSamples + 1` に変更（フレーム送出と入力終端のフラッシュの両方）。原因: 48kHz 素材を 44.1kHz のデバイスで復号すると長さが 220499 になり（実測。22.05kHz も 1 サンプル短い）、s_150 = 220500 > totalSamples で最終フレームが落ち 150 フレームになっていた（CI 失敗）。計画書 §6.3 の文言も更新
+- `tests/browser/b16-08c.test.js`（新規）: B16-08c — 44.1kHz・totalSamples = 220499・fps 30 のワークレット単体で 151 フレーム（デバイスレート非依存）
+- `tests/browser/b16-06.test.js`（新規）: B16-06
+- `tests/browser/b16-06b.test.js`（新規）: B16-06b（デコーダー方式）・B16-06c（シーク方式）。MediaRecorder で赤キャンバス + オシレーター音声の WebM を作り、動画合成有効で書き出し。state done、フレーム数 = floor(長さ×fps)+1 ±1、render の features 非 null、`_drawCompositeVideoFrame` の呼び出し回数と描画後の画素が赤であることを確認
+- `doc/spec.md`（v2.11、2026-10-03）§14.8.3、`README.md`: 解析粒度がライブと同一になった旨
+
+### 検証
+- `node tests/run.mjs` 全件: 75 件中 74 成功相当（初回実行で B16-06 のみ失敗＝アプリページのライブ描画ループの render も数えていたテスト側の誤り。書き出し側の固定 dt のみ数えるよう修正し、`--filter 'B16-06|B15-02|B15-05'` で 3 件成功を確認。他 72 件は初回実行で成功、U15-00 異常系のみ SKIP）
+- B16-06: featureFrames/freqFrames/timeFrames/frameTimesMs = 151 件、フレーム 0 の packed 全 0、render 151 回すべて features 非 null。B15-02（90±1）・B15-05・B15-04 ゴールデンも合格
+- 全件再実行: 77 件 / 76 成功 / 0 失敗 / 1 スキップ（U15-00 異常系）。B16-06b・B16-06c 合格（動画合成の両方式で実行）
+- `node --check` 全 js 通過、`index.html` を `file://` で開いてコンソールエラー 0
+
+### spec.md 変更
+- §14.8.3 に Phase 16 以降の解析経路（ライブと同一の解析コード、フォールバック時は音楽特徴なし）を追記。version v2.11、date 2026-10-03（T16-07 の v2.10 の次）
+
+### 備考
+- 実装: Sonnet サブエージェント
+- `js/analysis-worklet.js` は `index.html`（T16-07 の担当範囲）に script タグが残るため削除せず、未使用のまま残置
+
+---
+
+## 2026-10-01 — [T16-07] ライブ経路の統合
+
+### 作業内容
+- `js/audio-engine.js`: MFS AudioWorklet を主経路に統合（計画書 §6.2）。グラフ `source → analyser → destination`（従来）に加え `source → mfsNode → silentGain(0) → destination`。`mfsStatus`（`initializing` / `active` / `fallback`）。AudioWorklet 非対応・`window.__avzForceMfsFailure === true`・`addModule`/ノード生成の例外・`onprocessorerror`・ウォッチドッグ（`LIVE_WATCHDOG_SEC` 秒ホップなし）で `fallback`（`console.warn` のみ、戻らない）。ホップは 32 件のリングへ蓄積し、`captureFrame(nowPerfMs)` で `getOutputTimestamp()`（無効時は `currentTime - baseLatency - outputLatency`）から出力時刻を求めて `t <= target` の最新ホップを選択。フラグ（onset / beat / downbeat）は「前回選択より後〜今回選択以下」のホップの OR に集約し、同じホップの再選択では 0（二重発火なし・リング内 packed は不変）。`getFreqSlice` / `getTimeDomainData` / `getFeatures` / `getMfsDebugInfo`（同一オブジェクトを使い回す）/ `resetAnalysis` / `setSmoothing`（AnalyserNode と smoothing メッセージ）。`connectMedia` / `connectStream` は MFS ノードへも接続して `resetAnalysis()`。ホップ番号が戻ったら（reset 前の未着メッセージ後に reset 後のホップが来た場合）リングを破棄
+- `js/visualizer-core.js`: `captureFrame(now)`、`input.getLayer = null`、`features` / `sampleRate` / `fftSize` を FramePipeline へ渡す
+- `js/ui-controller.js`: `resetAnalysis()` をシーク `input`、停止ボタン（`mediaManager.stop()` の直後）、`_applyActiveSlot()` 先頭で呼ぶ（読込完了後は `connectMedia` と `_applyActiveSlot` で呼ばれるため `_loadMediaFile` 内の重複呼び出しは置かなかった）
+- `index.html`: 変更なし（スクリプト順は T16-05 で対応済み）。`js/mic-input.js`: 変更なし（`connectStream` 経由で MFS に接続される）
+- `tests/browser/b16-live.test.js`（新規）: B16-02、B16-02f（フラグ集約・二重発火なし・リセット・ホップ番号の戻り）、B16-02m（フェイクマイクで active とホップ受信）、B16-03（フォールバック。共有ページの AudioEngine を汚さないよう新規 AudioEngine / VisualizerCore で実施）、B16-04（シーク・スロット切替・停止。T16-05 から持ち越した reset の実時間確認を兼ねる）
+- `tests/browser/b15-07.test.js`: AudioEngine スタブに `getFeatures()`（null を返す）を追加。VisualizerCore が呼ぶ新メソッドへの追従のみ（閾値・アサーションは不変）
+- `doc/spec.md`（v2.9 → v2.10）§9.1〜9.3・§19.2・§19.5、`README.md`
+
+### 検証
+- `node tests/run.mjs`（ブラウザ込み全件）: 79 件中 78 成功 / 0 失敗 / 1 スキップ（U15-00 異常系は想定どおり）。B15-03（14 タイプ）・B15-04（ゴールデン 66 ケース、基準値未変更）・B16-05・B16-01 も合格
+- B16-02: 10〜12 秒の BPM が 120 ± 1.5% 内、受信ホップ数/秒 約 94
+- B16-04: シーク・スロット切替・停止の 200ms 後の `lastHop` は操作前（100 超）より小さく 30 以下
+- 補助確認: 一時停止中もホップは届き続ける（約 94/秒）ためウォッチドッグの誤検知なし。ヘッドレス Chrome の `getOutputTimestamp()` は contextTime が currentTime より約 32ms 遅れた値を返す（出力遅延補正が効いている）
+- 全 `.js` / `.mjs` で `node --check` 合格。`index.html` を `file://` で開いてコンソールエラー 0
+
+### spec.md 変更
+- v2.10: §9.1（AudioWorklet 解析・自動フォールバック・ライブ/オフライン同一コード）、§9.2（音楽特徴）、§9.3（約 94 回/秒・出力遅延補正・解析リセット）、§19.2 / §19.5。理由: 計画書 §10・§1.1 のとおり、ユーザーから見える描画タイミング（10〜40ms 遅れ）と解析方式が変わるため
+
+### 備考
+- 実装: Sonnet サブエージェント
+- 計画書 §9.3 の手動確認（実楽曲 3 曲以上での BPM、10 分連続再生、体感の遅れ・カクつき）は実施していない（実楽曲・長時間再生・人手の体感が必要）
+
+---
+
+## 2026-10-02 — [T18-02] ワークレット songmap モード
+
+### 作業内容
+- `js/mfs-const.js`: `SONGMAP_ROW`（FLUX 0 / BANDS 4 / CHROMA 36 / ENERGY 48 / LENGTH 49。計画書 Phase 18 §3）を追加し `module.exports` に含めた
+- `js/mfs-worklet.js`: `processorOptions.mode = 'songmap'`（`totalSamples` 必須）を追加。ホップ完了ごとに 1 行（`ex.flux` 4 + BANDS 32 + CHROMA 12 + `hopEnergy` 1）を constructor で確保した 256 行ぶんのバッファへ積み、256 行ごとに `{type:'rows', startHop, count, data: Float32Array(count*49)}`（transfer）を送る。入力終端で残りを送ってから `{type:'done', hops}`。ワークレットソースに `SONGMAP_ROW` と定数 `MFS_SONGMAP_BATCH = 256` を埋め込む。process() 経路の配列生成は送信時の `slice` のみ（メッセージ用の許可例外）。live / offline の挙動は変更なし
+- `tests/lib/songmap-rows.mjs`: `SONGMAP_ROW` のローカル代替定義を削除し `get('SONGMAP_ROW')`（mfs-const.js）に一本化（SSOT）
+- `tests/browser/b18-worklet.test.js`（新規）: B18-01a（`synthSong(48000, {bpm:128})` の行データがページ内 MfsExtractor 直接駆動と最大絶対差 1e-6 以内、行数 = ホップ数、startHop 連続、途中メッセージは 256 行、`done.hops`）、B18-01b（端数サンプルの短い信号で rows 1 通 + done）
+
+### 検証
+- `node tests/run.mjs`: 82 件中 81 成功 / 0 失敗 / 1 スキップ（U15-00 異常系は想定どおり）。B16-01・B16-08・B16-08b、B15 系も合格
+- 全 `.js` / `.mjs` で `node --check` 合格
+
+### spec.md 変更（あれば）
+- なし
+
+### 備考
+- 実装: Sonnet サブエージェント
+- SongMapService（T18-05）がこのメッセージ形式を利用する
 
 ## 2026-10-01 — [T18-01] テスト用合成楽曲・行データ生成
 

@@ -577,11 +577,11 @@ MfsFrameView へ selected.packed をコピー（setPacked）してから、フ�
 出力フレームの確定規則（ワークレット内）:
 
 ```
-出力フレーム i の時刻（サンプル）s_i = i·sampleRate/fps（実数）。i = 0, 1, … s_i ≤ totalSamples の間
+出力フレーム i の時刻（サンプル）s_i = i·sampleRate/fps（実数）。i = 0, 1, … s_i ≤ totalSamples + 1 の間（デコード時のリサンプリングで長さが 1 サンプル短くなる場合に最終フレームを失わないため。2026-10-03 T16-09 で変更）
 フレーム i のデータ = ホップ終端 (h+1)·H ≤ s_i を満たす最大の h のホップ
   そのようなホップが無い（s_i < H）: packed 全 0、freq 全 0、time 全 128、hop = -1
 確定のタイミング: 終端が s_i を超えるホップが完了した時点で、直前のホップの内容でフレーム i を送る
-  入力の終わり（totalSamples 到達）で、未送信のフレームを最後のホップの内容で全て送り、'done' を送る
+  入力の終わり（totalSamples 到達）で、s_i ≤ totalSamples + 1 を満たす未送信のフレームを最後のホップの内容で全て送り、'done' を送る
 フラグの集約: フレーム i のフラグ = フレーム i-1 のホップより後、フレーム i のホップ以前の全ホップの OR
   （同じホップを指す場合はフラグ 0）
 'frame' メッセージの t = s_i / sampleRate（出力フレームの時刻 [秒]。OfflineExporter は frameTimesMs を自前で計算するため参照しない。2026-10-01 T16-05 で明記）

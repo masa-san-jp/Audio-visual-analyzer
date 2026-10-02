@@ -106,14 +106,14 @@ test('U18-03 格子: U18-02 の入力で beatSource = grid。後半のテンポ�
   const rows = rowsWith({ L, full: pos.map((h) => [h, 1]) });
   const { o } = songOdf(rows, L, FR48);
   const tempo = songGlobalTempo(o, FR48);
-  const g = songGridBeats(o, tempo.P, songDpBeats(o, tempo.P));
+  const g = songGridBeats(o, tempo.P, songDpBeats(o, tempo.P), 48000);
   assert.equal(g.beatSource, 'grid');
 
   const pos2 = impulsePositions(L, P, { changeAt: L / 2, scale: 1.05 });
   const rows2 = rowsWith({ L, full: pos2.map((h) => [h, 1]) });
   const o2 = songOdf(rows2, L, FR48).o;
   const t2 = songGlobalTempo(o2, FR48);
-  const g2 = songGridBeats(o2, t2.P, songDpBeats(o2, t2.P));
+  const g2 = songGridBeats(o2, t2.P, songDpBeats(o2, t2.P), 48000);
   assert.equal(g2.beatSource, 'dp', `near=${g2.near}`);
 });
 

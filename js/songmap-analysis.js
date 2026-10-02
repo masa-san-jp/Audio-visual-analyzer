@@ -32,10 +32,9 @@ const SONG_CONST = {
   MAX_DURATION_SEC: 1200,
 };
 
-// §3 の行配置。js/mfs-const.js に SONGMAP_ROW があればそれを使い、無ければ §3 の表どおりの値を使う
+// §3 の行配置は js/mfs-const.js の SONGMAP_ROW（SSOT）を使う。そのため mfs-const.js を先に読み込むこと
 function _songRow() {
-  if (typeof SONGMAP_ROW !== 'undefined') return SONGMAP_ROW;
-  return { FLUX: 0, BANDS: 4, CHROMA: 36, ENERGY: 48, LENGTH: 49 };
+  return SONGMAP_ROW;
 }
 
 // §4.3 SongMapError の code: 'no-rhythm' | 'too-short' | 'too-long' | 'decode' | 'cancelled'
@@ -213,8 +212,8 @@ function songDpBeats(o, P) {
 }
 
 // ── ④ 一定テンポ格子の当てはめ ──
-// sampleRate を渡すと、拍の秒（beats）への換算と「beats < 0 の拍を beats / beatHops の両方から除く」処理まで行う
-// （buildSongMap はこの形で呼ぶ）。省略時は beatHops / beatSource のみを返す（段階単独のテスト用）。
+// 拍の秒（beats）への換算と「beats < 0 の拍を beats / beatHops の両方から除く」処理まで行う（計画書 §4.2 ④）。
+// 戻り値: { beatHops, beats, beatSource, near }（near = 格子上にある DP 拍の割合）
 function songGridBeats(o, P, dpBeats, sampleRate) {
   const S = SONG_CONST;
   const L = o.length;
@@ -245,19 +244,14 @@ function songGridBeats(o, P, dpBeats, sampleRate) {
   }
   const near = dpBeats.length > 0 ? nearCount / dpBeats.length : 0;
   const useGrid = near >= S.GRID_MIN_FRAC;
-  let beatHops = useGrid ? grid : dpBeats.slice();
-  const out = { beatHops: beatHops, beatSource: useGrid ? 'grid' : 'dp', near: near };
-  if (sampleRate !== undefined) {
-    const d = mfsDerived(sampleRate);
-    const hops = [], beats = [];
-    for (let i = 0; i < beatHops.length; i++) {
-      const sec = (beatHops[i] + 1) * d.hopSec - d.eventLatencySec;
-      if (sec >= 0) { hops.push(beatHops[i]); beats.push(sec); }
-    }
-    out.beatHops = hops;
-    out.beats = beats;
+  const allHops = useGrid ? grid : dpBeats;
+  const d = mfsDerived(sampleRate);
+  const hops = [], beats = [];
+  for (let i = 0; i < allHops.length; i++) {
+    const sec = (allHops[i] + 1) * d.hopSec - d.eventLatencySec;
+    if (sec >= 0) { hops.push(allHops[i]); beats.push(sec); }
   }
-  return out;
+  return { beatHops: hops, beats: beats, beatSource: useGrid ? 'grid' : 'dp', near: near };
 }
 
 // ── ⑤ 小節頭（4/4 固定）。戻り値は beats の添字（昇順）──
