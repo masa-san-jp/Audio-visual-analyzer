@@ -325,7 +325,7 @@ class SongMapService {
 
 ### 6.3 シーンカタログ（`js/director-scenes.js`）
 
-内蔵シーンは全14タイプを系統に割り当てる。空欄は「ユーザー設定のまま」。`patch` の適用規則（プリセット由来も同じ。`applyScenePatch(settings, patch)` として `director-scenes.js` に置く）:
+内蔵シーンは全8タイプを系統に割り当てる（T18-11: 2026-10-04 オーナー決定で削除）。calm は2、build は3、drop は3シーンを保持し、各系統2以上と連続シーン回避を維持する。空欄は「ユーザー設定のまま」。`patch` の適用規則（プリセット由来も同じ。`applyScenePatch(settings, patch)` として `director-scenes.js` に置く）:
 
 - `analyzerType` は常に適用し、以降の判定は適用後のタイプの `capabilities` で行う
 - `expressionMethod`: `capabilities.methods` に含まれる場合のみ
@@ -337,21 +337,16 @@ class SongMapService {
 |---|---|---|---|---|---|---|---|---|
 | `builtin:spectrogram` | calm | spectrogram | | | | | | |
 | `builtin:lissajous` | calm | lissajous | line | | | 1.0 | | 4 |
-| `builtin:flower` | calm | flower | line | | 2 | 0.6 | | 3 |
-| `builtin:voronoi` | calm | voronoi | | | 2 | 0.5 | 40 | 2 |
-| `builtin:ripple` | calm | ripple | | | 2 | 0.8 | | 3 |
 | `builtin:tunnel` | build | tunnel | line | | | 1.2 | | 2 |
 | `builtin:terrain` | build | terrain | line | | | 1.0 | | 0 |
 | `builtin:ring3d` | build | ring3d | line | | 2 | 1.2 | | 2 |
-| `builtin:flow` | build | flow | dot | | 2 | 1.2 | 70 | 4 |
-| `builtin:particles` | drop | particles | dot | | 3 | 1.5 | 90 | 3 |
 | `builtin:bar3d` | drop | bar3d | | | 3 | | | 0 |
 | `builtin:radial` | drop | radial | bar | | 3 | | | 2 |
-| `builtin:metaball` | drop | metaball | | | 2 | 1.2 | | 0 |
 | `builtin:bar` | drop | bar | bar | mirror-vertical | 4 | | | 1 |
 
 「マイプリセット」を選んだ場合（`directorPool = 'presets'`）:
 - 各プリセットの系統は、そのプリセットの `analyzerType` を上表で引いて決める
+- 削除対象の旧プリセットは、通常設定読込の `bar` への互換変換より前に演出プールから除外する（2026-10-04 オーナー決定で削除）。直接渡された旧タイプの候補も飛ばす
 - `patch` はプリセットの設定のうち `DIRECTOR_MANAGED_KEYS`（§6.1。`hue` は除く）に含まれるキーだけを取り出したもの。色・感度・レイヤー個別設定・背景・動画合成・解析設定などはプリセットの値を使わず、ユーザーの現在の設定のまま（§6.1 の方針どおり）
 - ある系統にプリセットが1つも無い場合、その系統は内蔵シーンを使う
 - シーン ID は `preset:<プリセット名>`

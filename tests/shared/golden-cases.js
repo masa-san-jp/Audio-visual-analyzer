@@ -1,9 +1,8 @@
-// 目的 — ゴールデンフレームの66ケースを決定的に定義する（計画書 §3.6.1）。
+// 目的 — ゴールデンフレームの42ケースを決定的に定義する（計画書 §3.6.1）。
 
 const GOLDEN_ANALYZER_TYPES = [
   'bar', 'radial', 'spectrogram', 'terrain', 'tunnel',
-  'bar3d', 'ring3d', 'particles', 'ripple', 'flow',
-  'metaball', 'lissajous', 'flower', 'voronoi',
+  'bar3d', 'ring3d', 'lissajous',
 ];
 
 function _goldenCaseSettings(overrides) {

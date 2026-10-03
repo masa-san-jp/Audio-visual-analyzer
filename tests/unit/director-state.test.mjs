@@ -77,7 +77,7 @@ test('U18-17 ビルド 0/50/100% の式・クランプ・丸め、前シーン�
     // 最終ビルドなら100%も primary として直接観測できる。
     const single = timeline([{ ...build, startSec: 0, endSec: 10, variations: [],
       transitionIn: { type: 'cut', duration: 0 },
-      patch: { analyzerType: 'flow', motionSpeed: 1, afterimageIntensity: 2, particleAmount: 40 } }], { intensity });
+      patch: { analyzerType: 'tunnel', motionSpeed: 1, afterimageIntensity: 2, particleAmount: 40 } }], { intensity });
     for (const u of [0, 0.5, 1]) {
       directorStateAt(single, 10 * u, base, out);
       close(out.primary.settings.motionSpeed, 1 + (C.RAMP_MOTION_MUL[intensity] - 1) * u);
@@ -85,19 +85,19 @@ test('U18-17 ビルド 0/50/100% の式・クランプ・丸め、前シーン�
       assert.equal(out.primary.settings.particleAmount, Math.round(40 * (1 + (C.RAMP_PARTICLE_MUL - 1) * u)));
       measurements.push(`${intensity}@${u}: ${out.primary.settings.motionSpeed.toFixed(2)}/${out.primary.settings.afterimageIntensity}/${out.primary.settings.particleAmount}`);
     }
-    single.segments[0].patch = { analyzerType: 'flow', motionSpeed: 2.9, afterimageIntensity: 9, particleAmount: 95 };
+    single.segments[0].patch = { analyzerType: 'tunnel', motionSpeed: 2.9, afterimageIntensity: 9, particleAmount: 95 };
     directorStateAt(single, 10, base, out);
     assert.equal(out.primary.settings.motionSpeed, 3);
     assert.equal(out.primary.settings.afterimageIntensity, 10);
     assert.equal(out.primary.settings.particleAmount, 100);
-    single.segments[0].patch = { analyzerType: 'flow', motionSpeed: 0.01, afterimageIntensity: -2, particleAmount: 1 };
+    single.segments[0].patch = { analyzerType: 'tunnel', motionSpeed: 0.01, afterimageIntensity: -2, particleAmount: 1 };
     directorStateAt(single, 0, base, out);
     assert.equal(out.primary.settings.motionSpeed, 0.1);
     assert.equal(out.primary.settings.afterimageIntensity, 0);
     assert.equal(out.primary.settings.particleAmount, 10);
   }
   const previous = segment(0, 10, {
-    patch: { analyzerType: 'flow', motionSpeed: 1, afterimageIntensity: 2, particleAmount: 41 },
+    patch: { analyzerType: 'tunnel', motionSpeed: 1, afterimageIntensity: 2, particleAmount: 41 },
     variations: [{ timeSec: 9, op: 'hueShift' }],
     ramp: { motionMul: [1, C.RAMP_MOTION_MUL.standard], afterimageAdd: [0, C.RAMP_AFTERIMAGE_ADD], particleMul: [1, C.RAMP_PARTICLE_MUL] },
   });

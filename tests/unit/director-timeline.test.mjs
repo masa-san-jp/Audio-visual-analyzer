@@ -115,20 +115,14 @@ test('U18-15 seedOffset 0〜49 で連続シーンを回避する（fixture・同
   t.diagnostic(`連続回避: ${pairs}/${pairs} 組（seedOffset 0〜49）`);
 });
 
-test('U18-16 内蔵14シーンは §6.3 の値・空欄・系統と一致する', () => {
+test('U18-16 内蔵8シーンは §6.3 の値・空欄・系統と一致する', () => {
   const rows = [
     ['spectrogram', 'calm'], ['lissajous', 'calm', 'line', undefined, undefined, 1.0, undefined, 4],
-    ['flower', 'calm', 'line', undefined, 2, 0.6, undefined, 3],
-    ['voronoi', 'calm', undefined, undefined, 2, 0.5, 40, 2],
-    ['ripple', 'calm', undefined, undefined, 2, 0.8, undefined, 3],
     ['tunnel', 'build', 'line', undefined, undefined, 1.2, undefined, 2],
     ['terrain', 'build', 'line', undefined, undefined, 1.0, undefined, 0],
     ['ring3d', 'build', 'line', undefined, 2, 1.2, undefined, 2],
-    ['flow', 'build', 'dot', undefined, 2, 1.2, 70, 4],
-    ['particles', 'drop', 'dot', undefined, 3, 1.5, 90, 3],
     ['bar3d', 'drop', undefined, undefined, 3, undefined, undefined, 0],
     ['radial', 'drop', 'bar', undefined, 3, undefined, undefined, 2],
-    ['metaball', 'drop', undefined, undefined, 2, 1.2, undefined, 0],
     ['bar', 'drop', 'bar', 'mirror-vertical', 4, undefined, undefined, 1],
   ];
   const keys = ['expressionMethod', 'barDisplayMode', 'layerCount', 'motionSpeed', 'particleAmount', 'afterimageIntensity'];
@@ -138,6 +132,9 @@ test('U18-16 内蔵14シーンは §6.3 の値・空欄・系統と一致する'
     return { id: `builtin:${type}`, cls, patch };
   });
   assert.deepEqual(DIRECTOR_SCENES, expected);
+  for (const [cls, count] of [['calm', 2], ['build', 3], ['drop', 3]]) {
+    assert.equal(DIRECTOR_SCENES.filter(scene => scene.cls === cls).length, count);
+  }
   assert.deepEqual(Object.keys(registry).sort(), rows.map(row => row[0]).sort());
 });
 
@@ -164,7 +161,7 @@ test('U18-16 各 op の効果は累積し、末尾から先頭へ循環する', 
   }
 });
 
-test('U18-16 14タイプ全ての適用条件を使い、非対応 op を飛ばして次を選ぶ', t => {
+test('U18-16 8タイプ全ての適用条件を使い、非対応 op を飛ばして次を選ぶ', t => {
   let skipped = 0;
   let starts = new Set();
   for (const scene of DIRECTOR_SCENES) {
@@ -274,7 +271,7 @@ test('U18-19 内蔵シーンと全タイプのプリセットで保護キーを�
     settings: { ...createDefaultSettings(), ...scene.patch },
   }));
   const scenes = ['calm', 'build', 'drop'].flatMap(cls => directorSceneCandidates(cls, 'presets', presets));
-  assert.equal(scenes.length, 14);
+  assert.equal(scenes.length, 8);
   for (const scene of [...DIRECTOR_SCENES, ...scenes]) {
     assert.ok(Object.keys(scene.patch).every(key => allowed.has(key)));
     const settings = structuredClone(base);
@@ -296,7 +293,7 @@ test('U18-19 内蔵シーンと全タイプのプリセットで保護キーを�
   applyScenePatch(settings, hostile);
   for (const key of forbidden) assert.deepEqual(settings[key], base[key]);
   assert.deepEqual(base, before);
-  t.diagnostic(`保護キー ${forbidden.length} 個・内蔵14 + プリセット14 シーン・コンパイル50条件`);
+  t.diagnostic(`保護キー ${forbidden.length} 個・内蔵8 + プリセット8 シーン・コンパイル50条件`);
 });
 
 test('U18-19 パッチは適用後のタイプの capabilities に従う', () => {
@@ -338,4 +335,34 @@ test('U18-19 プリセット候補は ID 昇順・系統ごとの内蔵フォー
   }
   assert.deepEqual(compileDirectorTimeline(map, { ...options, pool: 'presets' }, []), compileDirectorTimeline(map, options));
   assert.deepEqual(presets, before);
+});
+
+test('U18-15 T18-11: 削除タイプのプリセットを飛ばし、系統別フォールバックと連続回避を保持する', t => {
+  const removed = ['particles', 'ripple', 'flow', 'metaball', 'flower', 'voronoi'];
+  const legacy = removed.map(type => ({ name: `legacy:${type}`, settings: { analyzerType: type } }));
+  const valid = DIRECTOR_SCENES.map(scene => ({ name: scene.id, settings: { ...scene.patch } }));
+  const before = structuredClone(legacy);
+  for (const cls of ['calm', 'build', 'drop']) {
+    assert.deepEqual(directorSceneCandidates(cls, 'presets', legacy), directorSceneCandidates(cls, 'builtin'));
+    assert.deepEqual(directorSceneCandidates(cls, 'presets', [...legacy, ...valid]), directorSceneCandidates(cls, 'presets', valid));
+  }
+  let pairs = 0;
+  for (const cls of ['calm', 'build', 'drop']) {
+    const kind = { calm: 'break', build: 'build', drop: 'drop' }[cls];
+    const consecutive = { ...map, sections: map.sections.map((section, i) => ({ ...section, kind, label: `legacy-test:${i}` })) };
+    for (const presets of [legacy, [...legacy, ...valid]]) {
+      for (const intensity of intensities) {
+        for (let seedOffset = 0; seedOffset < 50; seedOffset++) {
+          const compiled = compileDirectorTimeline(consecutive, { ...options, intensity, pool: 'presets', seedOffset }, presets);
+          assert.ok(compiled.segments.every(seg => !removed.includes(seg.patch.analyzerType)));
+          for (let i = 1; i < compiled.segments.length; i++) {
+            assert.notEqual(compiled.segments[i - 1].sceneId, compiled.segments[i].sceneId);
+            pairs++;
+          }
+        }
+      }
+    }
+  }
+  assert.deepEqual(legacy, before);
+  t.diagnostic(`旧プリセット6件、3系統 × 2プール × 3強度 × 50 seeds、連続回避 ${pairs}/${pairs} 組`);
 });

@@ -63,7 +63,7 @@ avzTest('B18-02', 'B18-02 合成曲をスロット1へ読込・ONで再生: 準�
       (director.songMap.sections[i].endSec - director.songMap.sections[i].startSec) / director.songMap.durationSec * 100,
       0.01, 'セクションの比例幅（CSS の % は小数第3位で丸められる）');
     const ids = ['analyzer-type', 'expression-method', 'bar-display-mode', 'btn-layer-1', 'btn-layer-2',
-      'btn-layer-3', 'btn-layer-4', 'slider-motion', 'slider-particles', 'slider-afterimage',
+      'btn-layer-3', 'btn-layer-4', 'slider-motion', 'slider-afterimage',
       'btn-analyzer-randomize', 'btn-shape-randomize'];
     for (const id of ids) {
       avzAssert.equal(document.getElementById(id).disabled, true, id);

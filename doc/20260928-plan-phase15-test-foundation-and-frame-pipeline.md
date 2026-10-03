@@ -7,7 +7,7 @@
 - 目的: Phase 16・18 の大規模改修を安全に行うための土台を作る
   1. **テスト基盤**: Node 標準機能と Chrome だけで動く自動テスト一式をリポジトリに収める（オーナー決定 D5）
   2. **FramePipeline**: ライブ表示（`js/visualizer-core.js`）とオフライン書き出し（`js/offline-exporter.js`）に**複製されている描画ロジックを1つに統合**し、「プレビュー＝書き出し」をコードで保証する（D4 の前提）
-  3. **ゴールデンフレーム**: 全14タイプの見た目を数値で固定し、リファクタによる意図しない見た目の変化を自動検出する
+  3. **ゴールデンフレーム**: 全8タイプの見た目を数値で固定し、リファクタによる意図しない見た目の変化を自動検出する
 
 ---
 
@@ -170,7 +170,9 @@ time[n] = clamp(round(128 + 90*(0.5 + 0.5*p)*sin(2π*n*(3 + i%7)/timeLen)), 0, 2
 
 #### 3.6.1 ケース定義（`tests/shared/golden-cases.js`）
 
-- 基本 56 ケース: 全14タイプ × 背景 `#000`/`#fff` × 解像度 320×180（16:9）/ 180×180（1:1）。設定は `createDefaultSettings()` に `analyzerType` と `bgColor` のみ上書き
+T18-11: 2026-10-04 オーナー決定で削除。基本32 + 追加10 = 計42ケース。削除対象の基準値エントリだけを除き、残存基準値は再生成せず維持する。
+
+- 基本 32 ケース: 全8タイプ × 背景 `#000`/`#fff` × 解像度 320×180（16:9）/ 180×180（1:1）。設定は `createDefaultSettings()` に `analyzerType` と `bgColor` のみ上書き
 - 追加 10 ケース（すべて `#000`・320×180）:
 
 | ID | 上書き設定 |
@@ -264,7 +266,7 @@ class FramePipeline {
 
 - `{...settings, hue}` の毎フレーム生成は現行と同じく許容する（ガイド §9.3 の例外）
 - `sliceLayerLinear(freq, i, count)` は `frame-pipeline.js` にトップレベル関数として置く（現 `OfflineExporter._sliceLayer` と同じ式）
-- `frame.getLayer` は `bar3d`・`flower`・`metaball`・`particles`・`ring3d`・`ripple` が使う。**constructor で1回だけ作る束縛関数** `this._getLayerBound = (i, count) => this._getLayer(i, count)` を設定し、`_getLayer` は現在の `input.getLayer`（無ければ `sliceLayerLinear(現在の freq, …)`）へ委譲する（毎フレームのクロージャ生成を避ける）
+- `frame.getLayer` は `bar3d`・`ring3d` が使う。**constructor で1回だけ作る束縛関数** `this._getLayerBound = (i, count) => this._getLayer(i, count)` を設定し、`_getLayer` は現在の `input.getLayer`（無ければ `sliceLayerLinear(現在の freq, …)`）へ委譲する（毎フレームのクロージャ生成を避ける）
 - ステートレス経路のレイヤー取得も同じ `_getLayer` を使う
 
 ### 4.4 意図的な振る舞い変更（1件のみ）
@@ -309,7 +311,7 @@ class FramePipeline {
 | T15-07 | 既存機能の回帰テスト | ★2 | T15-03, T15-04 | `tests/browser/b15-01.test.js`（`@page harness`）、`tests/browser/regression.test.js`（`@page app`） | B15-01〜B15-03 | 不要 |
 | T15-08 | デバッグ表示 | ★1 | T15-06 | `js/debug-overlay.js`、`index.html`、`visualizer-core.js` | B15-06 | 要（README に `?debug=1` を追記） |
 | T15-09 | CI・PR テンプレート | ★1 | T15-02, T15-07 | `.github/workflows/test.yml`、`.github/pull_request_template.md` | CI 上で全テストが成功すること | 不要 |
-| T15-10 | 白背景での加算合成の修正（2026-09-30 追加） | ★1 | T15-03, T15-04 | `js/renderers/particles.js`（`ParticlesRenderer`・`FlowRenderer`）、`js/renderers/ripple.js`、`tests/browser/b15-07.test.js` | B15-07 | 要（`doc/spec.md` §11.1） |
+| T15-10 | 白背景での加算合成の修正（2026-09-30 追加、2026-10-04 オーナー決定で削除） | ★1 | T15-03, T15-04 | 対象レンダラーの削除により修正コード・専用テストを廃止（T18-11） | B15-07 退役 | §11.1 の専用注記を削除 |
 
 - **T15-05 は T15-06 より前に、必ずリファクタ前のコードで基準値を作ること**（基準値が「現行の見た目」を表すため）
 - T15-07 は T15-06 と並行可。ただし T15-06 のマージ前に T15-07 がマージされていること（リファクタの回帰検出に使う）
@@ -339,12 +341,12 @@ class FramePipeline {
 | B15-00 | 両方 | 成功1件・失敗1件・コンソールエラーを出すテスト1件で、判定がそれぞれ pass / fail / fail になる |
 | B15-01 | ハーネス | `OfflineAudioContext`（48kHz・2秒、白色ノイズ＋440Hz＋3kHz 正弦波）で `AnalyserNode.getByteFrequencyData` と `SpectrumAnalyzer.analyze` を同じ 2048 サンプル境界で比較し、全ビンの **99% 以上が ±1 以内** |
 | B15-02 | アプリ | 3秒の合成音（`sigDrumPattern`）の WAV を `OfflineExporter.export(file, settings, {fps: 30})` に渡し、状態が `done`、blob サイズ > 0、自前デマルチプレクサで読み戻した映像フレーム数が 90 ± 1 |
-| B15-03 | アプリ | 合成音 WAV を読み込み再生した状態で、タイプ選択 UI を全14タイプへ順に切り替え、各タイプで 500ms 描画してコンソールエラー 0 |
-| B15-04 | ハーネス | ゴールデン全66ケースが §3.6.3 の判定に合格 |
+| B15-03 | アプリ | 合成音 WAV を読み込み再生した状態で、タイプ選択 UI を全8タイプへ順に切り替え、各タイプで 500ms 描画してコンソールエラー 0（2026-10-04 オーナー決定で削除） |
+| B15-04 | ハーネス | ゴールデン全42ケースが §3.6.3 の判定に合格（2026-10-04 オーナー決定で削除） |
 | B15-05 | ハーネス | （T15-06 以降）`OfflineExporter` の書き出し中に `FramePipeline.prototype.render` が総フレーム数と同じ回数呼ばれる（複製ロジックが残っていないことの確認） |
 | B15-06 | アプリ | `index.html?debug=1`（`@query debug=1`）でデバッグ表示が存在し、1秒後に FPS 表示が数値 |
 | B15-06b | アプリ | `?debug` なしでデバッグ表示の要素が存在しない（B15-06 と別ファイル。ページのクエリが異なるため） |
-| B15-07 | ハーネス | （T15-10）`particles`・`flow`・`ripple` を背景 `#fff`・320×180 で §3.6.2 の手順により60フレーム描画し、フレーム 59 のサムネイル標準偏差が 0.1 超。背景 `#000` の同条件の描画結果（サムネイル）は修正前後で不変（`lighter` のまま） |
+| B15-07 | 退役 | 2026-10-04 オーナー決定で削除。対象タイプの廃止に伴い白背景ブレンド専用テストを削除（T18-11） |
 
 ### 7.3 手動確認（T15-06 の PR で実施し結果を PR に記載）
 

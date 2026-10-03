@@ -53,3 +53,37 @@ test('U15-01 settings-io: Phase 16 の autoGain・layerSplit の往復と、旧�
   assert.equal(wrongTypes.autoGain, false);
   assert.equal(wrongTypes.layerSplit, 'linear');
 });
+
+test('U15-01 T18-11: 削除6タイプは JSON・保存プリセットで bar に戻り、演出プールから除外される', async t => {
+  const removed = ['particles', 'ripple', 'flow', 'metaball', 'flower', 'voronoi'];
+  const remaining = ['bar', 'radial', 'spectrogram', 'terrain', 'tunnel', 'bar3d', 'ring3d', 'lissajous'];
+  const storage = new Map();
+  const { get: lookup } = loadClassic(['js/settings.js', 'js/settings-io.js', 'js/ui-controller.js'], {
+    localStorage: {
+      getItem: key => storage.get(key) ?? null,
+      setItem: (key, value) => storage.set(key, value),
+    },
+  });
+  const savePreset = lookup('savePreset');
+  const loadPreset = lookup('loadPreset');
+  const readSettingsJsonFile = lookup('readSettingsJsonFile');
+  const decode = lookup('deserializeSettings');
+  const ui = Object.create(lookup('UIController').prototype);
+  const names = [];
+  for (const type of [...removed, ...remaining]) {
+    const settings = { ...createDefaultSettings(), analyzerType: type, hue: 37, motionSpeed: 1.7 };
+    const expected = { ...settings, analyzerType: removed.includes(type) ? 'bar' : type };
+    assert.deepEqual(decode(serializeSettings(settings)), expected);
+    assert.deepEqual(await readSettingsJsonFile({ text: async () => JSON.stringify(serializeSettings(settings)) }), expected);
+    assert.equal(savePreset(type, settings), true);
+    assert.deepEqual(loadPreset(type), expected);
+    assert.deepEqual(loadPreset(type, { skipRemovedType: true }), removed.includes(type) ? null : expected);
+    if (!removed.includes(type)) names.push(type);
+  }
+  const before = storage.get(lookup('SETTINGS_IO_PRESET_KEY'));
+  const presets = ui._directorPresets();
+  assert.deepEqual(presets.map(preset => preset.name), names.sort());
+  assert.ok(presets.every(preset => remaining.includes(preset.settings.analyzerType)));
+  assert.equal(storage.get(lookup('SETTINGS_IO_PRESET_KEY')), before);
+  t.diagnostic('削除6タイプ × デシリアライズ・JSONファイル・保存読込・演出用読込、残存8タイプ保持、UI演出候補8件');
+});
