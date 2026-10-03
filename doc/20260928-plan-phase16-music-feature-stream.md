@@ -693,7 +693,7 @@ function computeLayerRange(i, count, sliceLen, sampleRate, fftSize, mode, out) -
 | U16-14 | 決定性 | 同じ入力を2回処理した全ホップの packed・freqBytes・timeBytes がビット単位で一致。`reset` 後の再処理も一致 |
 | U16-15 | 数値安全性 | 無音・直流 1.0・振幅 1 の矩形波・単発インパルス・L のみ無音 を各 5 秒: 全出力に NaN / Infinity なし、全値が §4 の値域内 |
 | U16-16 | 音量自動補正 | 同じドラムパターンを -30 LUFS と -10 LUFS に調整した2信号で、10 秒後の `AGC_DB` がそれぞれ `clamp(-14 - LOUD_SHORT, -6, 18)` ± 0.5 |
-| U16-17 | 性能 | 60 秒ステレオ 48kHz の処理時間 ≤ 6 秒（参考値として実測を出力） |
+| U16-17 | 性能 | 60 秒ステレオ 48kHz の処理時間（プロセスの CPU 時間。並列実行時の取り合いを除くため。2026-10-03 変更）≤ 6 秒（参考値として実測を出力） |
 | U16-18 | `MfsFrameView` | `setPacked` を 1000 回呼んでも `bands` 等のプロパティの参照が同一オブジェクト。各 getter が packed の該当値を返す |
 | U16-19 | `computeLayerRange` | `linear` が現行式と一致。`mel`・4 レイヤー・48kHz で境界がメル等分のビン ±1、全レイヤー幅 ≥ 1、連続して隙間・重なりなし |
 | U16-20 | `applyAutoGain` | +18dB で 200 → 255（クランプ）、-6dB で 10 → 0（クランプ）、0dB で不変 |
