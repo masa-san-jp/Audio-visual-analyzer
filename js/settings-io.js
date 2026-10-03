@@ -4,6 +4,9 @@
 const SETTINGS_IO_VERSION = 1;
 const SETTINGS_IO_PRESET_KEY = 'avz.presets.v1';
 
+// T18-11: 2026-10-04 オーナー決定で削除。旧保存データの互換判定にのみ使う。
+const REMOVED_ANALYZER_TYPES = new Set(['particles', 'ripple', 'flow', 'metaball', 'flower', 'voronoi']);
+
 function serializeSettings(settings) {
   return {
     version: SETTINGS_IO_VERSION,
@@ -47,6 +50,7 @@ function deserializeSettings(json) {
       return layer;
     });
   }
+  if (REMOVED_ANALYZER_TYPES.has(out.analyzerType)) out.analyzerType = 'bar';
   return out;
 }
 
@@ -79,10 +83,12 @@ function savePreset(name, settings) {
   } catch (_) { return false; }
 }
 
-function loadPreset(name) {
+function loadPreset(name, { skipRemovedType = false } = {}) {
   if (!_presetStorageAvailable()) return null;
   const map = _readPresetMap();
   if (!map[name]) return null;
+  // 演出プールでは bar への互換変換より先に旧タイプを除外する。
+  if (skipRemovedType && REMOVED_ANALYZER_TYPES.has(map[name].settings?.analyzerType)) return null;
   return deserializeSettings(map[name]);
 }
 

@@ -250,7 +250,8 @@ class UIController {
   // ── 自動演出の操作と表示 — Phase 18 計画書 §7 ──
 
   _directorPresets() {
-    return listPresets().map((name) => ({ name, settings: loadPreset(name) }));
+    return listPresets().map((name) => ({ name, settings: loadPreset(name, { skipRemovedType: true }) }))
+      .filter(preset => preset.settings !== null);
   }
 
   _syncDirectorOptions() {
@@ -308,7 +309,7 @@ class UIController {
     const locked = status === 'ready';
     // 色相はずらし量だけが管理対象なので、色の操作は有効のまま。
     document.querySelectorAll('#analyzer-type, #expression-method, #bar-display-mode, .layer-btn, '
-      + '#slider-motion, #slider-particles, #slider-afterimage, '
+      + '#slider-motion, #slider-afterimage, '
       + '#btn-analyzer-randomize, #btn-shape-randomize').forEach((el) => {
       el.disabled = locked;
       if (locked) el.title = '自動演出中';
@@ -832,9 +833,7 @@ class UIController {
     this._setSlider('afterimage', 'val-afterimage', s.afterimageIntensity, 0);
     this._setSlider('history', 'val-history', s.historySeconds, 0);
     this._setSlider('motion', 'val-motion', s.motionSpeed, 1);
-    this._setSlider('particles', 'val-particles', s.particleAmount, 0);
     this._setSlider('angle', 'val-angle', s.depthAngle, 0);
-    this._setSlider('petals', 'val-petals', s.petalCount, 0);
     this._setSlider('physics', 'val-physics', s.physicsAmount, 0);
     this.audioEngine.setSmoothing(s.smoothing);
 
@@ -1158,9 +1157,7 @@ class UIController {
     const sliders = caps.sliders || [];
     show('group-history',   sliders.indexOf('history') !== -1);
     show('group-motion',    sliders.indexOf('motion') !== -1);
-    show('group-particles', sliders.indexOf('particles') !== -1);
     show('group-angle',     sliders.indexOf('angle') !== -1);
-    show('group-petals',    sliders.indexOf('petals') !== -1);
     show('group-physics',   !!caps.physics);
   }
 
@@ -1281,9 +1278,7 @@ class UIController {
     // Phase 6 追加スライダー
     this._bindSlider('history',   'val-history',   v => { this.visualizer.settings.historySeconds = v; });
     this._bindSlider('motion',    'val-motion',    v => { this.visualizer.settings.motionSpeed    = v; }, 1);
-    this._bindSlider('particles', 'val-particles', v => { this.visualizer.settings.particleAmount = v; });
     this._bindSlider('angle',     'val-angle',     v => { this.visualizer.settings.depthAngle     = v; });
-    this._bindSlider('petals',    'val-petals',    v => { this.visualizer.settings.petalCount     = v; });
     this._bindSlider('physics',   'val-physics',   v => { this.visualizer.settings.physicsAmount  = v; });
 
     document.getElementById('btn-shape-randomize').addEventListener('click', () => {

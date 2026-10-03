@@ -73,48 +73,16 @@ const RENDERER_REGISTRY = {
     capabilities: { methods: ['bar', 'line', 'dot'], layers: true, sliders: ['motion'], physics: true },
   },
 
-  // ── 流体・粒子系（ステートフル） ──
-  particles: {
-    label: 'パーティクル放出', group: '流体・粒子', stateful: true,
-    create: (canvas) => new ParticlesRenderer(canvas),
-    capabilities: { methods: ['dot', 'line'], layers: true, sliders: ['particles'] },
-  },
-  ripple: {
-    label: '波紋', group: '流体・粒子', stateful: true,
-    create: (canvas) => new RippleRenderer(canvas),
-    capabilities: { methods: [], layers: true, sliders: [] },
-  },
-  flow: {
-    label: 'ノイズフロー', group: '流体・粒子', stateful: true,
-    create: (canvas) => new FlowRenderer(canvas),
-    capabilities: { methods: ['dot', 'line'], layers: true, sliders: ['motion', 'particles'] },
-  },
-  metaball: {
-    label: 'メタボール', group: '流体・粒子', stateful: true,
-    create: (canvas) => new MetaballRenderer(canvas),
-    capabilities: { methods: [], layers: true, sliders: [] },
-  },
-
   // ── 幾何系（ステートフル） ──
   lissajous: {
     label: 'オシロスコープ', group: '幾何', stateful: true,
     create: (canvas) => new LissajousRenderer(canvas),
     capabilities: { methods: ['line', 'dot'], layers: false, sliders: [] },
   },
-  flower: {
-    label: '極座標フラワー', group: '幾何', stateful: true,
-    create: (canvas) => new FlowerRenderer(canvas),
-    capabilities: { methods: ['bar', 'line', 'dot'], layers: true, sliders: ['motion', 'petals'], physics: true },
-  },
-  voronoi: {
-    label: 'ボロノイ脈動', group: '幾何', stateful: true,
-    create: (canvas) => new VoronoiRenderer(canvas),
-    capabilities: { methods: [], layers: true, sliders: ['particles', 'motion'] },
-  },
 };
 
 // タイプ一覧を group 順で返す（UI の optgroup 構築用）
-const RENDERER_GROUP_ORDER = ['基本', '時間軸', '擬似3D', '流体・粒子', '幾何'];
+const RENDERER_GROUP_ORDER = ['基本', '時間軸', '擬似3D', '幾何'];
 
 function getRendererEntry(type) {
   return RENDERER_REGISTRY[type] || RENDERER_REGISTRY.bar;
