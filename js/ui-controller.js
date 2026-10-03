@@ -1,4 +1,4 @@
-// UI とメディア読込後のソングマップ解析の接続 — doc/20260928-plan-phase18-song-map-and-auto-director.md §2・§5
+// 目的 — UI とメディア読込後のソングマップ解析・自動演出の接続 — doc/20260928-plan-phase18-song-map-and-auto-director.md §2・§5・§6.8・§7
 class UIController {
   constructor(visualizer, mediaManager, audioEngine, recorder, micInput) {
     this.visualizer = visualizer;
@@ -7,6 +7,16 @@ class UIController {
     this.songMapService = new SongMapService({
       isAvailable: () => audioEngine.mfsStatus !== 'fallback' && typeof AudioWorkletNode !== 'undefined',
     });
+    this._songMapStates = new Map();
+    this.songMapService.onProgress = (key, ratio) => {
+      const entry = this._songMapStates.get(key);
+      if (!entry || entry.state !== 'analyzing') return;
+      entry.info.progress = ratio;
+      if (this._isActiveSongKey(key)) {
+        this.visualizer.director.setAnalysisState('analyzing', entry.info);
+        this._updateDirectorUI();
+      }
+    };
     this.recorder = recorder;
     this.micInput = micInput || new MicInputManager(audioEngine);
     this.mode = 'play'; // 'play' | 'rec'
@@ -28,6 +38,7 @@ class UIController {
     this._initAnalyzer();
     this._initColorControls();
     this._initShapeControls();
+    this._initDirector();
     this._initKeyboardShortcuts();
     window.addEventListener('resize', () => this.visualizer.resize());
   }
@@ -103,6 +114,9 @@ class UIController {
         fileNameEl.textContent = 'マイク入力中';
         this._setPlaybackEnabled(false);
         this._setVideoElement(null); // マイク入力中は動画合成の対象がない
+        this.visualizer.mediaElement = null;
+        this.visualizer.director.setAnalysisState('mic');
+        this._updateDirectorUI();
         this.visualizer.start();
       } catch (err) {
         fileNameEl.textContent = 'エラー: ' + err.message;
@@ -126,9 +140,9 @@ class UIController {
     try {
       const oldFile = this.mediaManager.slots[index]?.file;
       await this.mediaManager.loadFile(file, index);
-      if (oldFile) this.songMapService.cancel(oldFile);
-      // 解析は再生 UI の読込完了を待たせない。状態表示への接続は T18-09。
-      this.songMapService.request(file).catch(() => {});
+      if (oldFile) this._cancelSongMap(oldFile);
+      // 裏で解析し、古いファイルや非アクティブスロットの結果は表示へ流さない。
+      this._requestSongMap(file);
       if (isActive) {
         // 読込完了後の解析リセットは connectMedia 内と _applyActiveSlot 先頭で行われる（計画書 §6.2）
         this._applyActiveSlot();
@@ -166,8 +180,157 @@ class UIController {
       this._setPlaybackEnabled(false);
       this._setVideoElement(null);
     }
+    this.visualizer.mediaElement = this.micInput.active ? null : mm.mediaElement;
+    this._restoreDirectorAnalysis();
     this._updateRecButtons();
     this._updateSlotUI();
+  }
+
+  // ── ソングマップの非同期状態 — Phase 18 計画書 §6.8 ──
+
+  _isActiveSongKey(key) {
+    const file = this.mediaManager.slots[this.mediaManager.activeIndex]?.file;
+    return !this.micInput.active && !!file && this.songMapService.keyOf(file) === key;
+  }
+
+  _cancelSongMap(file) {
+    const key = this.songMapService.keyOf(file);
+    this._songMapStates.set(key, { state: 'idle', info: {} });
+    this.songMapService.cancel(file);
+    if (this._isActiveSongKey(key)) {
+      this.visualizer.director.setSongMap(null);
+      this._updateDirectorUI();
+    }
+  }
+
+  _requestSongMap(file) {
+    const key = this.songMapService.keyOf(file);
+    const entry = { state: 'analyzing', info: { progress: 0 } };
+    this._songMapStates.set(key, entry);
+    if (this._isActiveSongKey(key)) {
+      this.visualizer.director.setSongMap(null);
+      this.visualizer.director.setAnalysisState('analyzing', entry.info);
+      this._updateDirectorUI();
+    }
+    this.songMapService.request(file).then((map) => {
+      if (this._songMapStates.get(key) !== entry) return;
+      entry.state = 'idle';
+      if (this._isActiveSongKey(key)) {
+        this.visualizer.director.setSongMap(map);
+        this._updateDirectorUI();
+      }
+    }, (error) => {
+      if (this._songMapStates.get(key) !== entry) return;
+      if (error.code === 'cancelled') {
+        entry.state = 'idle';
+        return;
+      }
+      entry.state = error.code === 'unavailable' ? 'unavailable' : 'error';
+      entry.info = error.code === 'unavailable' ? {} : { code: error.code };
+      if (this._isActiveSongKey(key)) {
+        this.visualizer.director.setAnalysisState(entry.state, entry.info);
+        this._updateDirectorUI();
+      }
+    });
+  }
+
+  _restoreDirectorAnalysis() {
+    const director = this.visualizer.director;
+    const file = this.mediaManager.slots[this.mediaManager.activeIndex]?.file;
+    director.setSongMap(file ? this.songMapService.get(file) : null);
+    if (this.micInput.active) {
+      director.setAnalysisState('mic');
+    } else if (!director.songMap) {
+      const entry = file && this._songMapStates.get(this.songMapService.keyOf(file));
+      director.setAnalysisState(entry ? entry.state : 'idle', entry ? entry.info : null);
+    }
+    this._updateDirectorUI();
+  }
+
+  // ── 自動演出の操作と表示 — Phase 18 計画書 §7 ──
+
+  _directorPresets() {
+    return listPresets().map((name) => ({ name, settings: loadPreset(name) }));
+  }
+
+  _syncDirectorOptions() {
+    const s = this.visualizer.settings;
+    const director = this.visualizer.director;
+    director.setOptions({ intensity: s.directorIntensity, pool: s.directorPool,
+      flash: s.directorFlash, seedOffset: s.directorSeedOffset }, this._directorPresets());
+    director.setEnabled(s.directorEnabled);
+    document.getElementById('director-enabled').checked = s.directorEnabled;
+    document.getElementById('director-intensity').value = s.directorIntensity;
+    document.getElementById('director-pool').value = s.directorPool;
+    document.getElementById('director-flash').checked = s.directorFlash;
+    this._updateDirectorUI();
+  }
+
+  _initDirector() {
+    for (const [id, key] of [['director-enabled', 'directorEnabled'],
+      ['director-intensity', 'directorIntensity'], ['director-pool', 'directorPool'],
+      ['director-flash', 'directorFlash']]) {
+      const el = document.getElementById(id);
+      el.addEventListener('change', () => {
+        this.visualizer.settings[key] = el.type === 'checkbox' ? el.checked : el.value;
+        if (key === 'directorEnabled') {
+          this.visualizer.director.setEnabled(el.checked);
+          this._updateDirectorUI();
+        } else {
+          this._syncDirectorOptions();
+        }
+      });
+    }
+    document.getElementById('director-shuffle').addEventListener('click', () => {
+      this.visualizer.settings.directorSeedOffset++;
+      this._syncDirectorOptions();
+    });
+    this._syncDirectorOptions();
+    this._restoreDirectorAnalysis();
+  }
+
+  _updateDirectorUI() {
+    const director = this.visualizer.director;
+    const status = director.status;
+    const detail = director.statusDetail;
+    let text = '';
+    if (status === 'analyzing') text = '曲を解析中… ' + Math.round(detail.progress * 100) + '%';
+    if (status === 'ready') text = Math.round(director.songMap.bpm) + ' BPM・'
+      + director.songMap.sections.length + ' セクション';
+    if (status === 'unavailable') text = detail.reason === 'mic'
+      ? 'マイク入力では利用できません' : 'この環境では利用できません';
+    if (status === 'error') {
+      const reasons = { 'no-rhythm': 'リズムを検出できません', 'too-short': '20秒未満です',
+        'too-long': '20分を超えています', decode: '音声を読み込めません' };
+      text = '解析できませんでした（' + (reasons[detail.code] || detail.code) + '）';
+    }
+    document.getElementById('director-status').textContent = text;
+    const locked = status === 'ready';
+    // 色相はずらし量だけが管理対象なので、色の操作は有効のまま。
+    document.querySelectorAll('#analyzer-type, #expression-method, #bar-display-mode, .layer-btn, '
+      + '#slider-motion, #slider-particles, #slider-afterimage, '
+      + '#btn-analyzer-randomize, #btn-shape-randomize').forEach((el) => {
+      el.disabled = locked;
+      if (locked) el.title = '自動演出中';
+      else el.removeAttribute('title');
+    });
+    const strip = document.getElementById('section-strip');
+    const map = director.songMap;
+    strip.hidden = !this.visualizer.settings.directorEnabled || status !== 'ready';
+    // 進捗イベントごとに帯を作り直さず、ソングマップの変更時だけ構築する。
+    if (this._stripSongMap !== map) {
+      this._stripSongMap = map;
+      strip.replaceChildren();
+      if (map) {
+        for (const section of map.sections) {
+          const band = document.createElement('div');
+          const cls = section.kind === 'main' ? 'main' : DIRECTOR_CONST.KIND_CLASS[section.kind];
+          band.style.width = ((section.endSec - section.startSec) / map.durationSec * 100) + '%';
+          band.style.backgroundColor = 'var(--section-' + cls + ')';
+          strip.appendChild(band);
+        }
+      }
+    }
   }
 
   // ── スロットUI（Phase 12: doc/spec.md §8） ──
@@ -192,7 +355,7 @@ class UIController {
         if (this.recorder.state === 'recording') return;
         const wasActive = idx === this.mediaManager.activeIndex;
         const file = this.mediaManager.slots[idx]?.file;
-        if (file) this.songMapService.cancel(file);
+        if (file) this._cancelSongMap(file);
         this.mediaManager.clearSlot(idx);
         if (wasActive) {
           this.visualizer.stop();
@@ -246,6 +409,9 @@ class UIController {
     btnMic.classList.remove('active');
     btnMic.textContent = 'マイク入力';
     fileNameEl.textContent = this._lastFileName;
+    this._setVideoElement(this.mediaManager.slots[this.mediaManager.activeIndex]?.isVideo ? this.mediaManager.mediaElement : null);
+    this.visualizer.mediaElement = this.mediaManager.mediaElement;
+    this._restoreDirectorAnalysis();
     this._setPlaybackEnabled(this.mediaManager.isLoaded);
     this._updateRecButtons();
   }
@@ -519,7 +685,8 @@ class UIController {
       };
 
       try {
-        await this.offlineExporter.export(this._offlineFile, settingsSnapshot, { fps, quality });
+        await this.offlineExporter.export(this._offlineFile, settingsSnapshot, { fps, quality,
+          songMapService: this.songMapService, presets: this._directorPresets() });
       } catch (_) {
         // エラー内容は onError 経由で表示済み
       } finally {
@@ -610,7 +777,7 @@ class UIController {
       if (!name) { statusEl.textContent = 'プリセット名を入力してください'; return; }
       const ok = savePreset(name, this.visualizer.settings);
       statusEl.textContent = ok ? `「${name}」を保存しました` : '保存に失敗しました';
-      if (ok) refreshList();
+      if (ok) { refreshList(); this._syncDirectorOptions(); }
     });
 
     btnLoad.addEventListener('click', () => {
@@ -627,6 +794,7 @@ class UIController {
       if (!name) return;
       deletePreset(name);
       refreshList();
+      this._syncDirectorOptions();
       statusEl.textContent = `「${name}」を削除しました`;
     });
 
@@ -706,6 +874,7 @@ class UIController {
     const videoBlendSelect = document.getElementById('video-blend-mode');
     if (videoBlendSelect) videoBlendSelect.value = s.videoCompositeBlendMode || 'source-over';
 
+    this._syncDirectorOptions();
     this.visualizer.resize();
   }
 

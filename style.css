@@ -1,3 +1,16 @@
+/* 自動演出のセクション帯 — Phase 18 計画書 §7.2 */
+:root {
+  --section-calm: #666;
+  --section-build: #c90;
+  --section-drop: #e33;
+  --section-main: #999;
+}
+#section-strip { display: flex; height: 3px; width: 100%; }
+#section-strip[hidden] { display: none; }
+#section-strip > div { height: 3px; min-width: 0; }
+.director-heading { font-size: 13px; margin-top: 12px; margin-bottom: 6px; }
+#director-status { margin-top: 6px; overflow-wrap: anywhere; }
+
 *, *::before, *::after {
   box-sizing: border-box;
   margin: 0;
