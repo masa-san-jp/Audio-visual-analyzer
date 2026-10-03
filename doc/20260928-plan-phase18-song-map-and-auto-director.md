@@ -242,7 +242,7 @@ boundaries = [0, 採用した j（昇順）, nbar]
 ```
 
 - `validateSongMap(map) -> { ok, errors: string[] }` を同ファイルに置く（`beats` 昇順・`downbeatIndices` が範囲内・`sections` が連続して全区間を覆う・`kind` が6種のいずれか、等）。`buildSongMap` の出力は常に検証を通ること
-- `SongMapError(code)` の `code`: `'no-rhythm'`（リズムが検出できない）、`'too-short'`、`'too-long'`、`'decode'`（デコード失敗）、`'cancelled'`
+- `SongMapError(code)` の `code`: `'no-rhythm'`（リズムが検出できない）、`'too-short'`、`'too-long'`、`'decode'`（デコード失敗）、`'cancelled'`、`'unavailable'`（AudioWorklet が使えず解析を実行できない。2026-10-03 追加）
 
 ### 4.4 ソングマップによる拍情報の置き換え（`songMapTempoAt`）
 
@@ -287,7 +287,7 @@ class SongMapService {
 - 処理: `file.arrayBuffer()` → `AudioContext.decodeAudioData`（失敗は `'decode'`）→ 長さ判定（`MIN_DURATION_SEC` / `MAX_DURATION_SEC`）→ `OfflineAudioContext`（元のチャンネル数・サンプルレート）+ MFS ワークレット（songmap モード。ノードのチャンネル指定は Phase 16 §6.2 と同じ）→ 行データを `Float32Array(L·49)` に集める → `buildSongMap`
 - 進捗: ワークレット処理 0〜0.9（受信行数 / 予想ホップ数）、`buildSongMap` 完了で 1.0
 - 呼び出し元: `ui-controller._loadMediaFile` の読込完了後に `request`（自動演出が OFF でも実行する。解析結果は §4.4 で全体の拍精度向上に使うため）。スロットのファイルを差し替え・削除したら、旧ファイルを `cancel`
-- AudioWorklet が使えない環境（Phase 16 のフォールバック状態）では実行せず、状態を `unavailable` にする
+- AudioWorklet が使えない環境（Phase 16 のフォールバック状態）では実行せず、`request` は直ちに `SongMapError('unavailable')` で reject する（キャッシュしない）。可否は constructor の任意引数 `{ isAvailable: () => boolean }` で判定し、省略時は `typeof AudioWorkletNode !== 'undefined'` とする。ui-controller は `() => audioEngine.mfsStatus !== 'fallback' && typeof AudioWorkletNode !== 'undefined'` を渡す。`DirectorController.status` の `'unavailable'`（§6.8）はこの reject を受けて設定する（2026-10-03 明記）
 
 ---
 
@@ -598,7 +598,7 @@ truth = { boundariesBars: [0, 8, 16, 32, 40, 56, 64], kinds: [intro, build, drop
 
 | ID | ページ | 内容 | 合格基準 |
 |---|---|---|---|
-| B18-01 | ハーネス | `synthSong(48000, {bpm: 128})` を WAV にして `SongMapService.request`（`timeoutMs: 120000`） | 結果が U18-08 と同じ基準に合格。同じ PCM から Node の `MfsExtractor` で作った行による `buildSongMap` の結果と、`beats`（±1e-6 秒）・`sections` が一致 |
+| B18-01 | ハーネス | `synthSong(48000, {bpm: 128})` を WAV にして `SongMapService.request`（`timeoutMs: 120000`） | 結果が U18-08 と同じ基準に合格。同じ PCM から Node の `MfsExtractor` で作った行による `buildSongMap` の結果と、`beats`（±1e-6 秒）・`sections` が一致（小節番号・ラベル・種類は完全一致、実数は ±1e-9。ブラウザと Node の Math 実装差のため。2026-10-03 明記） |
 | B18-02 | アプリ | 同 WAV をスロット1に読み込み、自動演出 ON で再生 | 解析完了後に状態が「準備完了」、`section-strip` にセクションが6個、コンソールエラー 0 |
 | B18-03 | アプリ | B18-02 の状態で、ライブの `DirectorController` のタイムラインと、書き出しで生成されるタイムライン | 深く一致 |
 | B18-04 | アプリ | 同 WAV を自動演出 ON で書き出し（30fps。`{ slow: true, timeoutMs: 900000 }`） | 完了。デコードした映像で、2つ目のセクション境界（ビルド→ドロップ）の直前と直後のフレームの平均絶対差が、同一セクション内で隣り合うフレームの平均絶対差の 3 倍以上（場面転換が境界で起きている） |
