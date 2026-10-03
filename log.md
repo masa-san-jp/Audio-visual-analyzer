@@ -1,5 +1,35 @@
 # 開発ログ
 
+## 2026-10-03 — [T18-06] 拍情報の置き換え（関数のみ）
+
+### 作業内容
+- `js/songmap-analysis.js`: §4.4 の `songMapTempoAt(map, tSec, prevTSec, view)` を末尾に追加し Node 用に公開。既存関数は変更せず、拍区間・小節頭を二分探索し、tempo 関連の raw 8 値だけを上書き。毎フレームの配列・オブジェクト・クロージャ生成なし
+- `tests/unit/songmap-tempo.test.mjs`: U18-12 の 5 テストを追加。拍の直前・直後・拍上・小節頭・弱起・区間外・初回・逆行・1秒超・ちょうど1秒・区間の開閉端点を検証。格子 fixture と不均等 DP 拍を線形の参照実装と比較し、入力・view の参照・他の特徴値の保持も確認
+- ライブ・書き出しの呼び出しは §9 の T18-09 / T18-10 に委ね、接続していない
+
+### 検証
+- `node tests/run.mjs --unit --filter U18-12`: U18-12 の 5 件成功。ランナー表示は対象外ファイル19件を含む24件成功、0失敗、245ms
+- `node --test tests/unit/songmap-tempo.test.mjs`: 5件成功、0失敗、84.621459ms。比較2,000フレーム、最大位相誤差 `2.976397e-8`（Float32丸め）、raw / tempo の参照と tempo 以外の96値が不変
+- `node tests/run.mjs --unit`: 91件中90成功、0失敗、1スキップ（想定どおりの U15-00 異常系）、27,801ms
+- 全 `.js` / `.mjs` の `node --check`: 94ファイル成功、0失敗
+- `git diff --check`: 成功
+- ブラウザテストの追加なし。Chrome・ブラウザ全件・`file://` コンソール確認は追加ルールに従い未実行
+
+### spec.md 変更（あれば）
+- なし（§9 T18-06 は spec 更新不要、関数のみの追加）
+
+### 備考
+- 実装: Codex gpt-6.1-sol high
+- 定数・出力仕様の逸脱なし。二分探索は §4.4 の線形定義と比較して出力一致を確認
+- `DIRECTOR_CONST` は T18-07 の成果物で現 worktree には未配置。実装は指定の `DIRECTOR_CONST.SEEK_RESET_SEC` を直接参照し、テストだけで §6.2 の `SEEK_RESET_SEC: 1.0` を注入（本体に代替定数を追加していない）
+- レビュアー確認事項: T18-07 の実定数と統合後、呼び出し前の `DIRECTOR_CONST` 読込、ブラウザ全件と `file://` コンソールエラー0を確認してください
+- 変更は worktree 内の未コミットファイルとして残す。commit / push / PR は行っていない
+
+- レビューで修正（Claude）: T18-07 マージ後、テストの `DIRECTOR_CONST` 注入をやめて `js/director-timeline.js` の実物を読み込むよう変更。後続ファイルが `module.exports` を上書きするため、公開確認は `songmap-analysis.js` 単独読み込みで行うよう修正
+- レビュアーが macOS で `node tests/run.mjs` を全件実行（下記 PR 参照）
+
+---
+
 ## 2026-10-03 — [T18-07] シーンカタログとコンパイル
 
 ### 作業内容

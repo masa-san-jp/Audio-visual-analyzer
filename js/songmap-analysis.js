@@ -1,7 +1,8 @@
 // ソングマップ解析（前半: ① ODF・② 全体テンポ・③ DP 拍・④ 一定テンポ格子・⑤ 小節頭）— doc/20260928-plan-phase18-song-map-and-auto-director.md §4
 //
 // 純粋関数のみ（DOM・Web Audio に依存しない）。ファイル読込後に 1 回だけメインスレッドで実行する解析であり、
-// 毎フレーム経路ではないため配列の新規確保を許す（計画書 §2 / §5、ガイド §9.3 の例外）。
+// 解析関数は毎フレーム経路ではないため配列の新規確保を許す（計画書 §2 / §5、ガイド §9.3）。
+// 末尾の songMapTempoAt（§4.4）は毎フレーム呼ばれるため、新規確保せず view.raw を上書きする。
 // 決定的（乱数・時刻を使わない）。MFS_CONST / mfsDerived（js/mfs-const.js）を先に読み込んでおくこと。
 // 後半（⑥ 小節〜⑨ 展開の種類、validateSongMap）はファイル末尾に置く。
 
@@ -691,11 +692,58 @@ function validateSongMap(map) {
   return { ok: errors.length === 0, errors: errors };
 }
 
+// ── §4.4 ソングマップによる拍情報の置き換え（毎フレーム、割り当てなし）──
+// MFS_LAYOUT と、呼び出し時に DIRECTOR_CONST（js/director-timeline.js、§6.2）が必要。
+// 時刻区間は二分探索で求める。map・時刻以外の状態を保持せず、view.raw のみを変更する。
+function songMapTempoAt(map, tSec, prevTSec, view) {
+  if (view === null) return;
+  const raw = view.raw;
+  const beats = map.beats;
+  raw[MFS_LAYOUT.BPM] = map.bpm;
+  raw[MFS_LAYOUT.TEMPO_CONF] = map.tempoConfidence;
+  raw[MFS_LAYOUT.TEMPO_LOCKED] = 0;
+  raw[MFS_LAYOUT.BEAT_PHASE] = 0;
+  raw[MFS_LAYOUT.BAR_PHASE] = 0;
+  raw[MFS_LAYOUT.BEAT_IN_BAR] = 0;
+  raw[MFS_LAYOUT.BEAT_FLAG] = 0;
+  raw[MFS_LAYOUT.DOWNBEAT_FLAG] = 0;
+
+  // beats[i] ≤ tSec < beats[i+1]。最後の拍ちょうども区間外。
+  let lo = 0, hi = beats.length;
+  while (lo < hi) {
+    const mid = Math.floor((lo + hi) / 2);
+    if (beats[mid] <= tSec) lo = mid + 1;
+    else hi = mid;
+  }
+  const i = lo - 1;
+  if (i < 0 || i >= beats.length - 1) return;
+
+  const downbeatIndices = map.downbeatIndices;
+  const beatPhase = (tSec - beats[i]) / (beats[i + 1] - beats[i]);
+  const beatInBar = ((i - downbeatIndices[0]) % 4 + 4) % 4;
+  raw[MFS_LAYOUT.TEMPO_LOCKED] = 1;
+  raw[MFS_LAYOUT.BEAT_PHASE] = beatPhase;
+  raw[MFS_LAYOUT.BEAT_IN_BAR] = beatInBar;
+  raw[MFS_LAYOUT.BAR_PHASE] = (beatInBar + beatPhase) / 4;
+
+  if (prevTSec === null || tSec < prevTSec || tSec - prevTSec > DIRECTOR_CONST.SEEK_RESET_SEC) return;
+  // i は tSec 以下の最後の拍なので、それが prevTSec より後なら (prevTSec, tSec] に拍がある。
+  raw[MFS_LAYOUT.BEAT_FLAG] = beats[i] > prevTSec ? 1 : 0;
+  lo = 0;
+  hi = downbeatIndices.length;
+  while (lo < hi) {
+    const mid = Math.floor((lo + hi) / 2);
+    if (downbeatIndices[mid] <= i) lo = mid + 1;
+    else hi = mid;
+  }
+  if (lo > 0 && beats[downbeatIndices[lo - 1]] > prevTSec) raw[MFS_LAYOUT.DOWNBEAT_FLAG] = 1;
+}
+
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
     SONG_CONST, SongMapError, buildSongMap,
     songZ, songCos, songPct,
     songOdf, songGlobalTempo, songDpBeats, songGridBeats, songDownbeats,
-    songBars, songBoundaries, songSections, validateSongMap,
+    songBars, songBoundaries, songSections, validateSongMap, songMapTempoAt,
   };
 }
