@@ -1,4 +1,5 @@
-// オフライン書き出し — 音楽ファイルの信号を解析し、現在のビジュアライザー設定に
+// 目的 — 決定的なオフライン書き出しと自動演出 — Phase 18 計画書 §4.4・§5・§6.8。
+// 音楽ファイルの信号を解析し、現在のビジュアライザー設定に
 // 合わせて実時間に依存せず決定的にレンダリング・エンコードして動画ファイルを生成する。
 //
 // 処理の流れ:
@@ -69,7 +70,7 @@ class OfflineExporter {
   }
 
   // file: 音楽/動画ファイル（File）, settings: visualizer.settings のスナップショット,
-  // opts: { fps, quality }（quality: 'low' | 'standard' | 'high'）
+  // opts: { fps, quality, songMapService, presets }（presets は名前の昇順）
   async export(file, settings, opts) {
     this._cancelRequested = false;
     this.blob = null;
@@ -81,12 +82,25 @@ class OfflineExporter {
     try {
       this._setState('analyzing');
       this._setProgress(0);
+      // ON ならライブと同じサービスの解析完了を待つ（デコードは §5 の指定レート）。
+      // OFF でも既存マップがあれば拍を補強する。解析失敗時は従来経路で続行する。
+      let songMap = null;
+      const service = opts && opts.songMapService;
+      if (service) {
+        if (settings.directorEnabled) {
+          try { songMap = await service.request(file); } catch (_) { songMap = null; }
+        } else {
+          songMap = service.get(file);
+        }
+      }
+      this._checkCancelled();
       const analysis = await this._analyze(file, settings, fps);
       this._checkCancelled();
 
       this._setState('rendering');
       const blob = await this._renderAndEncode(analysis, settings, {
-        fps, width: res.width, height: res.height, file,
+        fps, width: res.width, height: res.height, file, songMap,
+        presets: opts && opts.presets,
       });
       this.blob = blob;
       this._setState('done');
@@ -364,7 +378,9 @@ class OfflineExporter {
     // selfClear タイプはアナライザー自身が全面を塗るため対象外（ライブ表示と同じ扱い）
     const selfClear = !!(entry.capabilities && entry.capabilities.selfClear);
     let compositeSource = null;
-    if (opts.file && settings.videoCompositeEnabled && !selfClear &&
+    // 演出ではタイプが切り替わるため、selfClear の判定は各 FramePipeline に任せる。
+    const useDirector = !!(settings.directorEnabled && opts.songMap);
+    if (opts.file && settings.videoCompositeEnabled && (useDirector || !selfClear) &&
         opts.file.type && opts.file.type.indexOf('video/') === 0) {
       compositeSource = await this._createDecoderCompositeSource(opts.file);
       if (!compositeSource) compositeSource = await this._createSeekCompositeSource(opts.file);
@@ -390,7 +406,17 @@ class OfflineExporter {
       drawBackground: compositeSource ? drawBackground : null,
     };
 
+    let director = null;
+    let prevSongTSec = null;
     try {
+      if (useDirector) {
+        director = new DirectorController(canvas, ctx);
+        // UIController._syncDirectorOptions と同じ引数でコンパイルする — §6.8。
+        director.setOptions({ intensity: settings.directorIntensity, pool: settings.directorPool,
+          flash: settings.directorFlash, seedOffset: settings.directorSeedOffset }, opts.presets);
+        director.setSongMap(opts.songMap);
+        director.setEnabled(true);
+      }
       for (let i = 0; i < totalFrames; i++) {
         this._checkCancelled();
         if (videoError) throw new Error('映像エンコードに失敗しました: ' + videoError.message);
@@ -398,7 +424,7 @@ class OfflineExporter {
         const nowMs = frameTimesMs[i];
 
         compositeDrawable = null;
-        if (!selfClear && compositeSource) {
+        if (compositeSource) {
           try {
             compositeDrawable = await compositeSource.frameAt(nowMs / 1000);
           } catch (_) {
@@ -415,7 +441,13 @@ class OfflineExporter {
         if (featureView) { featureView.setPacked(featureFrames[i]); input.features = featureView; }
         input.nowMs = nowMs;
         input.drawBackground = compositeSource ? drawBackground : null;
-        pipeline.render(input, settings);
+        const tSec = i / fps;
+        if (opts.songMap) {
+          songMapTempoAt(opts.songMap, tSec, prevSongTSec, input.features);
+          prevSongTSec = tSec;
+        }
+        if (director) director.render(input, settings, tSec);
+        else pipeline.render(input, settings);
 
         const vf = new VideoFrame(canvas, { timestamp: Math.round(nowMs * 1000), duration: Math.round(1e6 / fps) });
         videoEncoder.encode(vf, { keyFrame: (i % keyframeEveryN) === 0 });
@@ -428,6 +460,7 @@ class OfflineExporter {
       }
     } finally {
       if (compositeSource) compositeSource.dispose();
+      if (director) director.dispose();
       pipeline.dispose(); // 中断・失敗時もステートフルレンダラーを確実に破棄する
     }
 
@@ -746,4 +779,8 @@ class OfflineExporter {
     const ext = mime.indexOf('video/mp4') === 0 ? 'mp4' : 'webm';
     return `visualizer_offline_${ts}.${ext}`;
   }
+}
+
+if (typeof module !== 'undefined' && module.exports) {
+  module.exports = { OfflineExporter };
 }
