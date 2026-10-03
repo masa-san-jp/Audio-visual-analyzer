@@ -1,4 +1,4 @@
-// 目的 — 自動演出タイムラインの決定的コンパイルと変化 — Phase 18 計画書 §6.2・§6.4・§6.5。
+// 目的 — 自動演出タイムラインの決定的コンパイル・変化・状態評価 — Phase 18 計画書 §6.2・§6.4〜§6.6。
 
 const DIRECTOR_CONST = {
   KIND_CLASS: { intro: 'calm', break: 'calm', outro: 'calm', build: 'build', drop: 'drop' },
@@ -104,13 +104,90 @@ function compileDirectorTimeline(songMap, options, presets) {
       sceneId: scene.id, patch: scene.patch, variations, ramp, transitionIn });
     prevSceneId = scene.id;
   }
-  return { version: 1, seed, durationSec: songMap.durationSec, segments, flashes };
+  return { version: 1, seed, intensity: options.intensity, durationSec: songMap.durationSec, segments, flashes };
 }
 
-// ── T18-08 追記位置: directorStateAt（Phase 18 計画書 §6.6） ──
-// applyScenePatch / applyDirectorVariation を使い、呼び出し側の設定バッファへ上書きする。
+// 呼び出し側が初期化時に1回だけ確保する。非フェード中も secondary の設定を保持する。
+function createDirectorState() {
+  const secondary = { segmentIndex: -1, sceneId: null, settings: createDefaultSettings() };
+  return {
+    primary: { segmentIndex: -1, sceneId: null, settings: createDefaultSettings() },
+    secondary: null, mix: 1, flashAlpha: 0,
+    _secondary: secondary,
+  };
+}
+
+// layers の配列・要素を含め、呼び出し側で確保した設定へ値だけを複写する。
+function directorSegmentSettings(timeline, index, t, baseSettings, settings) {
+  for (const key in baseSettings) {
+    if (Object.hasOwn(baseSettings, key) && key !== 'layers') settings[key] = baseSettings[key];
+  }
+  for (let i = 0; i < baseSettings.layers.length; i++) {
+    const layer = baseSettings.layers[i];
+    const target = settings.layers[i];
+    for (const key in layer) {
+      if (Object.hasOwn(layer, key)) target[key] = layer[key];
+    }
+  }
+  const segment = timeline.segments[index];
+  applyScenePatch(settings, segment.patch);
+  for (let i = 0; i < segment.variations.length; i++) {
+    const variation = segment.variations[i];
+    if (variation.timeSec <= t) applyDirectorVariation(settings, variation.op, timeline.intensity);
+  }
+  if (segment.ramp) {
+    const u = clamp((t - segment.startSec) / (segment.endSec - segment.startSec), 0, 1);
+    settings.motionSpeed = clamp(settings.motionSpeed * lerp(1, segment.ramp.motionMul[1], u), 0.1, 3.0);
+    settings.afterimageIntensity = clamp(settings.afterimageIntensity + lerp(0, segment.ramp.afterimageAdd[1], u), 0, 10);
+    settings.particleAmount = clamp(Math.round(settings.particleAmount * lerp(1, segment.ramp.particleMul[1], u)), 10, 100);
+  }
+  return settings;
+}
+
+// 時刻のみから評価する。前回の評価時刻や拍フラグには依存しない（§6.6）。
+// out は createDirectorState()、または primary / secondary の設定を事前確保したもの。
+function directorStateAt(timeline, tSec, baseSettings, out) {
+  const t = clamp(tSec, 0, timeline.durationSec);
+  let index = timeline.segments.length - 1;
+  for (let i = 0; i < timeline.segments.length; i++) {
+    const segment = timeline.segments[i];
+    if (segment.startSec <= t && t < segment.endSec) {
+      index = i;
+      break;
+    }
+  }
+  const segment = timeline.segments[index];
+  out.primary.segmentIndex = index;
+  out.primary.sceneId = segment.sceneId;
+  directorSegmentSettings(timeline, index, t, baseSettings, out.primary.settings);
+  // 手動で確保した secondary も最初の呼び出しで保持し、null との切替で失わない。
+  if (out.secondary) out._secondary = out.secondary;
+  if (index > 0 && segment.transitionIn.type === 'fade'
+    && t < segment.startSec + segment.transitionIn.duration) {
+    out.secondary = out._secondary;
+    out.secondary.segmentIndex = index - 1;
+    out.secondary.sceneId = timeline.segments[index - 1].sceneId;
+    directorSegmentSettings(timeline, index - 1, t, baseSettings, out.secondary.settings);
+    out.mix = (t - segment.startSec) / segment.transitionIn.duration;
+  } else {
+    out.secondary = null;
+    out.mix = 1;
+  }
+  out.flashAlpha = 0;
+  for (let i = timeline.flashes.length - 1; i >= 0; i--) {
+    const flash = timeline.flashes[i];
+    if (flash > t) continue;
+    const elapsed = t - flash;
+    // 終端時刻で比較し、f + duration の減算丸めで終端に光が残るのを避ける。
+    if (t < flash + DIRECTOR_CONST.FLASH_DURATION_SEC) {
+      out.flashAlpha = DIRECTOR_CONST.FLASH_PEAK_ALPHA * Math.exp(-elapsed / DIRECTOR_CONST.FLASH_TAU_SEC);
+    }
+    break;
+  }
+  return out;
+}
 
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = { DIRECTOR_CONST, compileDirectorTimeline, fnv1a32,
-    directorVariationApplicable, applyDirectorVariation };
+    directorVariationApplicable, applyDirectorVariation, createDirectorState, directorStateAt };
 }
