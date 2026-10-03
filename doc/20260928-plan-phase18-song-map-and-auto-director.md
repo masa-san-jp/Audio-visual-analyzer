@@ -392,7 +392,7 @@ for (s, i) in songMap.sections（時刻順）:
   segments.push({ startSec: s.startSec, endSec: s.endSec, sectionIndex: i, kind: s.kind, cls,
                   sceneId: scene.id, patch: scene.patch, variations, ramp, transitionIn })
   prevSceneId = scene.id
-return { version: 1, seed, durationSec: songMap.durationSec, segments, flashes }
+return { version: 1, seed, intensity: options.intensity, durationSec: songMap.durationSec, segments, flashes }   // intensity は directorStateAt の変化適用（hueShift 等）で使う（2026-10-03 追加）
 ```
 
 - `fnv1a32(str)`: FNV-1a 32bit（初期値 `0x811c9dc5`、乗数 `0x01000193`、UTF-16 コード単位ごと、`Math.imul` と `>>> 0` で計算）
@@ -443,6 +443,9 @@ segmentSettings(j, t):
 ```
 
 ### 6.7 描画（`DirectorRenderer`、`js/director-renderer.js`）
+
+- 毎フレームの設定オブジェクト生成: 各 `FramePipeline.render` 内の `{...settings, hue}` は Phase 15 計画書 §4.3 で許容した例外のまま。DirectorRenderer 側では追加の生成をしない（2026-10-03 明記）
+- シーク検出と拍フラグの集約は §4.4 `songMapTempoAt` と DirectorController（§6.8）の責務。`directorStateAt` は時刻 → 状態の純関数とする（2026-10-03 明記）
 
 ```js
 class DirectorRenderer {

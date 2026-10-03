@@ -1,5 +1,47 @@
 # 開発ログ
 
+## 2026-10-03 — [T18-08] 状態の評価と描画
+
+### 着手前の設計要約（★3）
+- §6.6: 時刻からセグメントを選び、使い回す設定へユーザー設定・レイヤーを複写し、シーンパッチ・累積変化・ビルドのランプを適用する。フェード中は前セグメントの終端状態も評価し、新シーンの混合率と指数減衰するフラッシュ不透明度を返す。評価は前フレームに依存しない。
+- §6.7: オフスクリーン2枚と2つの FramePipeline をセグメント番号の偶奇で割り当て、割当変更時に初期化する。旧シーン、新シーン、背景と反対色のフラッシュの順に合成し、動画背景の入力は両パイプラインへ渡す。
+
+### 作業内容
+- `js/director-timeline.js`: 更新済み §6.4 の intensity をコンパイル結果へ保存。§6.6 の directorStateAt、使い回す out を初期確保する createDirectorState を追加。設定・レイヤーを生成せず複写し、パッチ・累積変化・ランプ・クロスフェード・フラッシュを評価。
+- `js/director-renderer.js`: §6.7 の DirectorRenderer を追加。2枚の canvas と2つの FramePipeline の割当・リセット・リサイズ・合成・破棄を実装。
+- `tests/unit/director-state.test.mjs`: U18-17・U18-18・U18-20（7ケース）。指定境界、全3強度のランプ、クランプと丸め、累積変化、逆行時刻、ユーザー設定の即時反映、1000回の参照維持を検証。
+- `tests/unit/director-renderer.test.mjs`: 同IDの補足3ケース。描画と合成の順序、設定/inputの同一参照、動画背景の両側への受け渡し、割当とreset、resize/disposeを検証。
+- `tests/unit/director-timeline.test.mjs`: 既存 U18-13 の30条件に intensity 保存のアサーション1行を追加。
+- `tests/browser/director-renderer.test.js`: 補足 B18-T18-08 を追加。実Canvasの合成色、黒白背景、16:9/1:1、動画背景、同タイプ別セグメントの固有状態破棄を確認する。T18-09の配線前でもfile://ハーネスで必要スクリプトを順に読み込む。
+
+### 検証
+- `node tests/run.mjs --unit --filter 'U18-(13|17|18|20)'`: 対象14ケース全成功。ランナー表示33成功（非対象19ファイルの表示を含む）、0失敗、1,285ms、終了コード0。
+- `node tests/run.mjs --unit`: 109件 / 108成功 / 0失敗 / 1スキップ（想定どおり U15-00 異常系）、108,885ms、終了コード0。
+- 全100個の `.js` / `.mjs` に対する `node --check`: 失敗0、終了コード0。`git diff --check`も成功。
+- U18-17: fixture のフェード3区間 × 開始/中央/終了で mix = 0/0.5/1（許容1e-9）、ドロップ2区間でsecondary=null。全3強度 × 0/50/100% のランプ9地点と上下限クランプ、粒子数の四捨五入、前シーンの終端ランプを確認。
+- U18-18: 発光時刻0/30/75.173秒で、経過0/0.12/0.4/0.5秒のalpha = 0.8/約0.294303553/0/0（許容1e-9、終端は厳密0）。fixtureと密なdrop入力の12条件で間隔8組すべて2秒以上、最短2秒。calmまたはflash=falseの8条件で発光なし。
+- U18-20: 1000回評価（うちフェード300回）でout・設定2個・レイヤー配列2個・要素8個の参照変更0。Rendererも同割当1000フレームでPipeline生成はconstructorの2個のみ、割当resetは初回1回。
+- B18-T18-08、既存ブラウザ全件、file://アプリのコンソール確認は CODEX_ADDENDUM.md に従い未実行。Chromeは起動していない。
+
+### spec.md 変更（あれば）
+- なし（チケット表の spec 更新は不要）。README.md・index.html は未変更。
+
+### 備考
+- 実装: Codex gpt-6.1-sol high
+- 前回停止の3点はアーキテクト決定と更新済み計画書で解決。FramePipelineの設定生成は既存例外のまま、本体は未変更。強度はtimeline.intensityから読み、シーク検出と拍フラグはsongMapTempoAt/DirectorControllerに委ねる。
+- 実装上の補助: createDirectorState() とout._secondaryで、公開secondaryをnullにしても事前確保した設定を保持する。T18-09はconstructorでこのヘルパーを1回呼び、同じoutを使い回す。手動でprimary/secondaryを事前確保したoutも対応する。
+- 実装上の判断: FramePipeline.reset()だけではタイプ固有インスタンスとcanvas上の残像が残るため、Rendererは公開dispose()とclearRectも使い、割当変更時にfillBackgroundで不透明な背景を初期化する。シーン切替時だけの下流初期化を除き、Renderer自身の毎フレーム経路に配列・オブジェクト・クロージャ生成はない。
+- 実装上の判断: フラッシュ終端はt < f + FLASH_DURATION_SECで比較する（式と数学的に同値）。f + durationからfを減算した際の丸めで0.4秒の終端に発光が残らないことを3時刻で確認。定数・受入閾値は変更していない。
+- レビュアー確認事項: `node tests/run.mjs --browser --filter B18-T18-08`、T18-09配線後のブラウザ全件・file://コンソールエラー0、同タイプ別セグメントとシーク時の履歴/残像の消去、ControllerのcreateDirectorState利用とシークreset呼出し。
+- 追加ルールに従い、コミット・push・PR作成は行っていない。開始時点で変更済みだった計画書は編集していない。
+
+### レビューでの対応（Claude）
+- アーキテクト判断（計画書 §6.4・§6.7 に明記）: ① FramePipeline の `{...settings, hue}` は Phase 15 §4.3 の例外のまま ② `intensity` をタイムラインに保存し `directorStateAt` が参照 ③ シーク検出・拍フラグは `songMapTempoAt`／DirectorController の責務で `directorStateAt` は純関数
+- ブラウザテスト: ID を予約済みの B18 系から `T18-08` に変更。実 Canvas の半透明合成で 1〜2 単位の丸め差が出るため（mix 0.5 で 126 vs 128）、ピクセル許容差を ±1 → ±3 に変更（計画書の受入基準 U18-17・18・20 は単体テストで合格）
+- 検証: macOS（Chrome 154 / Node 26）で `node tests/run.mjs` 全件 0 FAIL
+
+---
+
 ## 2026-10-03 — [T18-05] SongMapService
 
 ### 作業内容
