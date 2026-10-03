@@ -1,4 +1,4 @@
-// 目的 — ライブ表示の rAF ループと入力組み立て（描画本体は FramePipeline に委譲）— doc/20260928-plan-phase15-test-foundation-and-frame-pipeline.md §4.5
+// 目的 — ライブ表示の rAF ループと入力組み立て（描画本体は FramePipeline に委譲）— Phase 15 計画書 §4.5・Phase 18 計画書 §4.4・§6.8
 // 旧: 描画ループ v2 — doc/spec-phase6.md §4.1.3
 
 class VisualizerCore {
@@ -14,6 +14,13 @@ class VisualizerCore {
     this.pipeline = new FramePipeline(canvas, this.ctx);
     // Phase 10: 動画合成表示（動画ファイル読込時に UIController が設定する）
     this.videoElement = null;
+    // 音声・動画共通の再生時計と自動演出 — Phase 18 計画書 §4.4・§6.8
+    this.mediaElement = null;
+    this.director = new DirectorController(canvas, this.ctx);
+    this._prevSongTSec = null;
+    this._songTempoMap = null;
+    this._songTempoElement = null;
+    this._boundLoop = () => this._loop();
     // `?debug=1` のときだけ start() で生成される（無効時は null のまま）— 計画書 §5
     this.debugOverlay = null;
     // pipeline.render へ渡す input（毎フレーム使い回して値だけ更新する）
@@ -51,6 +58,7 @@ class VisualizerCore {
     }
 
     this.pipeline.resize();
+    this.director.resize();
     this._fillBackground();
   }
 
@@ -107,9 +115,17 @@ class VisualizerCore {
     ctx.globalCompositeOperation = prevOp;
   }
 
+  _render(input) {
+    if (this.settings.directorEnabled && this.director.isReady() && this.mediaElement) {
+      this.director.render(input, this.settings, this.mediaElement.currentTime);
+    } else {
+      this.pipeline.render(input, this.settings);
+    }
+  }
+
   _loop() {
     if (!this.running) return;
-    this.rafId = requestAnimationFrame(() => this._loop());
+    this.rafId = requestAnimationFrame(this._boundLoop);
 
     const now = performance.now();
     let dtMs = now - this._lastFrameMs;
@@ -126,16 +142,33 @@ class VisualizerCore {
     input.sampleRate = this.audioEngine.ctx ? this.audioEngine.ctx.sampleRate : 0;
     input.dtMs = dtMs;
     input.nowMs = now;
+    // 自動演出 OFF でもソングマップの拍精度を利用する。スロット変更では前時刻を捨てる。
+    const map = this.director.songMap;
+    const media = this.mediaElement;
+    if (map !== this._songTempoMap || media !== this._songTempoElement) {
+      this._prevSongTSec = null;
+      this._songTempoMap = map;
+      this._songTempoElement = media;
+    }
+    if (map && media) {
+      songMapTempoAt(map, media.currentTime, this._prevSongTSec, input.features);
+      this._prevSongTSec = media.currentTime;
+    }
     const overlay = this.debugOverlay;
     if (overlay) {
       // デバッグ表示時のみ描画時間を計測する（ガイド §9.1 の時刻規則の例外、計画書 §5）
       const t0 = performance.now();
-      this.pipeline.render(input, this.settings);
-      overlay.setField('type', this.settings.analyzerType);
+      this._render(input);
+      overlay.setField('type', this.settings.directorEnabled && this.director.isReady() && media
+        ? this.director.state.primary.settings.analyzerType : this.settings.analyzerType);
       overlay.recordFeatures(input.features, now);
       overlay.recordFrame(performance.now() - t0, now);
     } else {
-      this.pipeline.render(input, this.settings);
+      this._render(input);
     }
   }
+}
+
+if (typeof module !== 'undefined' && module.exports) {
+  module.exports = { VisualizerCore };
 }

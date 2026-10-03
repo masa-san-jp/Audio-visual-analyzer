@@ -98,6 +98,7 @@
         </div>
         <div id="seek-wrap" style="margin-top:8px;">
           <input type="range" id="seek-bar" min="0" max="1000" value="0" step="1" disabled style="width:100%;">
+          <div id="section-strip" hidden aria-label="曲のセクション"></div>
           <div id="time-display" class="label-text">0:00 / 0:00</div>
         </div>
         <label style="margin-top:4px;">
@@ -261,6 +262,24 @@
           </select>
         </label>
         <div id="layer-settings"></div>
+        <h3 class="director-heading">自動演出</h3>
+        <label><input type="checkbox" id="director-enabled"> 自動演出</label>
+        <label>演出の強さ
+          <select id="director-intensity">
+            <option value="calm">控えめ</option>
+            <option value="standard" selected>標準</option>
+            <option value="wild">激しい</option>
+          </select>
+        </label>
+        <label>シーン候補
+          <select id="director-pool">
+            <option value="builtin">内蔵シーン</option>
+            <option value="presets">マイプリセット</option>
+          </select>
+        </label>
+        <label><input type="checkbox" id="director-flash" checked> ドロップ時のフラッシュ（点滅を含みます）</label>
+        <div class="btn-row"><button id="director-shuffle">別の演出にする</button></div>
+        <p id="director-status" role="status" aria-live="polite"></p>
       </section>
 
       <section class="control-group">
@@ -409,6 +428,10 @@
   <!-- レジストリ（全レンダラー読み込み後・コアより前） -->
   <script src="js/renderer-registry.js"></script>
   <script src="js/frame-pipeline.js"></script>
+  <script src="js/director-scenes.js"></script>
+  <script src="js/director-timeline.js"></script>
+  <script src="js/director-renderer.js"></script>
+  <script src="js/director-controller.js"></script>
   <script src="js/debug-overlay.js"></script>
   <script src="js/visualizer-core.js"></script>
   <script src="js/webm-duration.js"></script>

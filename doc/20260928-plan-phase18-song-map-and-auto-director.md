@@ -475,7 +475,10 @@ class DirectorController {
   constructor(targetCanvas, targetCtx)
   setSongMap(songMap | null)          // アクティブスロットのソングマップ
   setOptions(options, presets)        // 変更時に再コンパイル
+  setEnabled(enabled)                 // settings.directorEnabled を渡す（2026-10-03 追加）
+  setAnalysisState(state, info)       // state: 'idle' | 'analyzing' | 'mic' | 'unavailable' | 'error'。info: { progress?: 0..1, code?: SongMapError の code }（2026-10-03 追加）
   get status()                        // 'off' | 'analyzing' | 'ready' | 'unavailable' | 'error'
+  get statusDetail()                  // { progress, code, reason }（reason: 'mic' | 'worklet' | null）。表示文言の決定に使う（2026-10-03 追加）
   isReady()                           // songMap とタイムラインがある
   render(input, baseSettings, tSec)   // directorStateAt → DirectorRenderer.render。シーク検出もここで行う
   resize(), dispose()
@@ -488,6 +491,15 @@ class DirectorController {
 | 書き出し（`offline-exporter.js`） | `export(file, settings, opts)` の `opts` に `songMapService`（`SongMapService`）と `presets`（`[{name, settings}]`、名前の昇順）を追加する（`UIController` が渡す。演出オプションは `settings` の `director*` から作る）。`settings.directorEnabled` なら、書き出し開始時に `opts.songMapService.request(file)` でソングマップを得て、ライブと**同じ引数**でタイムラインをコンパイルし、書き出し用 `DirectorController` で `t = i / fps` として描く。ソングマップ取得に失敗した場合は自動演出なしで書き出す |
 | 再コンパイルの契機 | 自動演出の ON、アクティブスロットのソングマップ確定、スロット切替、`directorIntensity`・`directorPool`・`directorFlash`・`directorSeedOffset` の変更、プリセットの保存・削除 |
 
+- 状態の決め方（2026-10-03 追加。上から最初に当てはまるもの）:
+  1. `enabled` が false → `'off'`（表示は空）
+  2. 解析状態 `'mic'` → `'unavailable'`、`reason: 'mic'`（`マイク入力では利用できません`）
+  3. 解析状態 `'unavailable'` → `'unavailable'`、`reason: 'worklet'`（`この環境では利用できません`）
+  4. 解析状態 `'error'` → `'error'`、`code` を保持（§7.2 の理由文）
+  5. `songMap` とタイムラインがある → `'ready'`
+  6. 解析状態 `'analyzing'` → `'analyzing'`、`progress` を保持（`曲を解析中… 42%`）
+  7. それ以外（`'idle'`: ファイル未選択・解析の中止直後）→ `'off'` と同じ扱い（表示は空）
+- `UIController` の配線: アクティブスロットのファイルについて、`request` 開始で `setAnalysisState('analyzing', {progress: 0})`、`onProgress` で progress を更新（アクティブスロットのキーのみ）、成功で `setSongMap(map)`（解析状態は `'idle'` に戻す）、`SongMapError('cancelled')` は無視、`'unavailable'` は `setAnalysisState('unavailable')`、その他は `setAnalysisState('error', {code})`。スロット切替時は `songMapService.get(file)` があれば `setSongMap`、無ければ `setSongMap(null)` と実行中なら `'analyzing'`。マイク入力開始で `setAnalysisState('mic')`、終了でアクティブスロットの状態に戻す。ファイル未選択は `setSongMap(null)`・`'idle'`
 - タイムラインは色などのユーザー設定を含まない（毎フレーム `baseSettings` に重ねる）。したがってユーザーが色を変えても再コンパイルは不要で、即座に反映される
 
 ---
