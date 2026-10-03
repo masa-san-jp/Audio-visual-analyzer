@@ -1,5 +1,40 @@
 # 開発ログ
 
+## 2026-10-03 — [T18-05] SongMapService
+
+### 作業内容
+- `js/songmap-service.js`（新規）: 計画書 §5 の SongMapService を実装。同一キーの実行中・待機中 Promise を共有し、FIFO で1件ずつ解析。最大6件のLRUキャッシュ、進捗、待機中・実行中の中止、各 SongMapError コードを接続
+- `js/songmap-service.js`: file.arrayBuffer → AudioContext.decodeAudioData → 長さ判定 → OfflineAudioContext / MFS songmap モード → rows の startHop/count/data に従った収集 → done 待機 → buildSongMap を実装。decode 用コンテキストを閉じ、worklet の port / node / source を解放
+- `js/ui-controller.js`: AudioEngine の fallback を含む isAvailable を渡してサービスを生成。読込成功後に全スロットで非同期 request、差し替え成功時・削除時に旧ファイルを cancel。ファイルは slot.file で保持。解析エラーの表示・DirectorController の接続は後続 T18-09
+- `index.html`: 計画書 §2.1 の指定どおり、mfs-view.js の直後に songmap-analysis.js → songmap-service.js の2タグを追加。他のタグ・順序は変更なし
+- `tests/browser/b18-songmap-service.test.js`（新規）: B18-01c〜g の5件を追加。全経路、U18-08 基準、Node の同一 PCM 結果との比較、FIFO・Promise 共有・LRU、中止・遅延 done、エラー・長さ境界・可否変更を検査
+- 既存のこのログエントリを更新。前回停止した §4.3 / §5 の利用不可契約は、アーキテクトが追加した unavailable と isAvailable に従って実装を再開
+
+### 検証
+- `node tests/run.mjs --unit`: 86件 / 85成功 / 0失敗 / 1予定SKIP（U15-00 異常系）、79,650ms、終了コード0。U18-08（6条件）・U18-09（2条件）を含む既存解析テストもすべて成功
+- 全 .js / .mjs の `node --check`: 最終コードで95ファイル / 95成功 / 0失敗、15.041秒。実装途中の確認も95成功（28.748秒）
+- `git diff --check`: 成功（空白エラーなし）
+- B18-01c〜g は追加済み・未実行。追加ルールにより Chrome を起動せず、ブラウザの実測値および file:// のコンソールエラー数は未計測
+
+### spec.md 変更（あれば）
+- なし（T18-05 の spec 更新列は「不要」。README.md も変更なし）
+
+### 備考
+- 実装: Codex gpt-6.1-sol high
+- 計画書の定数・アルゴリズム・受入閾値の変更なし。作業開始時から存在するアーキテクトの計画書変更は保持し、こちらでは計画書を編集していない
+- 実装上の判断: OfflineAudioContext に中止 API がないため、cancel は Promise を即 reject して以後の進捗・キャッシュを抑止し、実行中の描画の終了を待ってから後続を開始する。done 待機中の中止は待機を解放する
+- テスト上の判断: 同一 Float32 PCM の厳密比較に必要な IEEE float 32bit WAV をテスト内で作成。Node 比較対象は既存 tests/fixtures/songmap-128.json の beats / sections を埋め込み、file:// で fetch を使わない。fixture 自体は変更なし
+- レビュアー確認事項: `node tests/run.mjs --browser --filter B18-01` で既存の行データ部分と新しいサービス5件を実行。B18-01c はデコード後の sampleRate=48000、beats 差 ≤ 1e-6秒、sections の完全一致を検証する。UI のアクティブ・非アクティブ読込、成功した差し替え・削除の cancel、失敗した差し替えで旧ファイルを保持すること、fallback 時の request、および index.html の file:// 直開き・コンソールエラー0も確認
+- コミット・push・PR 作成なし。こちらの変更は指定 worktree 内のチケット対象ファイルと上記テスト・ログのみ
+
+### レビューでの修正（Claude）
+- アーキテクト判断: AudioWorklet 不可時は `SongMapError('unavailable')` で即 reject（計画書 §4.3・§5 に明記）
+- B18-01c: Node との `sections` 比較を、構造（小節番号・ラベル・種類）は完全一致、実数（秒・energy・slopePerSec）は ±1e-9 に変更。実測の差は `slopePerSec` の 2.4e-18（ブラウザと Node の Math 実装差による最下位ビット）。計画書 §8.3 B18-01 に明記
+- スロットのファイル参照は UI 側で書き込まず、`MediaManager.loadFile` がスロットに `file` を持つよう変更
+- 検証: macOS（Chrome 154 / Node 26）で `node tests/run.mjs` 119 PASS / 0 FAIL / 1 SKIP。`index.html` を `file://` で開きコンソールエラー 0
+
+---
+
 ## 2026-10-03 — [T18-04] 小節・境界・ラベル・種類・出力（⑥〜⑨、§4.3）
 
 ### 作業内容
