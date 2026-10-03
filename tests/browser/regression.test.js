@@ -42,7 +42,7 @@ avzTest('B15-02', 'B15-02 OfflineExporter の3秒WAV書き出しと映像フレ�
   avzAssert.close(parsed.chunks.length, 90, 1, '映像フレーム数が3秒・30fpsと一致しません');
 }, { slow: true, timeoutMs: 180000 });
 
-avzTest('B15-03', 'B15-03 WAV再生中の全14アナライザータイプ切替', async function () {
+avzTest('B15-03', 'B15-03 WAV再生中の全8アナライザータイプ切替', async function () {
   const pcm = sigDrumPattern(48000, 10, 120);
   const file = new File([encodeWav16(pcm)], 'b15-03-drum-pattern.wav', { type: 'audio/wav' });
   const app = window.__app;
@@ -60,8 +60,11 @@ avzTest('B15-03', 'B15-03 WAV再生中の全14アナライザータイプ切替'
       'WAVの再生状態になりませんでした',
     );
 
-    avzAssert.equal(types.length, 14, 'アナライザータイプ数');
-    avzAssert.equal(new Set(types).size, 14, 'アナライザータイプに重複があります');
+    avzAssert.equal(types.join(','), 'bar,radial,spectrogram,terrain,tunnel,bar3d,ring3d,lissajous', '残存8タイプの一覧');
+    avzAssert.equal(types.length, 8, 'アナライザータイプ数');
+    avzAssert.equal(document.getElementById('group-particles'), null, '要素量UIは削除済み');
+    avzAssert.equal(document.getElementById('group-petals'), null, '花弁数UIは削除済み');
+    avzAssert.equal(new Set(types).size, 8, 'アナライザータイプに重複があります');
     for (const type of types) {
       typeSelect.value = type;
       typeSelect.dispatchEvent(new Event('change'));

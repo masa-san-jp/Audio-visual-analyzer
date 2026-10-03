@@ -1,12 +1,12 @@
 // @page harness
-// 目的 — FramePipeline v2（features あり/なし・音量自動補正・レイヤー分割）で全14タイプが例外なく描画できることを確認する（計画書 §9.2 B16-05）。
+// 目的 — FramePipeline v2（features あり/なし・音量自動補正・レイヤー分割）で全8タイプが例外なく描画できることを確認する（計画書 §9.2 B16-05）。
 // autoGain = false でのゴールデン不変は B15-04（golden.test.js）が担う。
 
-avzTest('B16-05', 'B16-05 features あり・なしの input で全14タイプを描画でき、autoGain=false では freq が不変', async function () {
+avzTest('B16-05', 'B16-05 features あり・なしの input で全8タイプを描画でき、autoGain=false では freq が不変', async function () {
   const FREQ_LENGTH = 638;
   const TIME_LENGTH = 2048;
   const FRAMES = 6;
-  avzAssert.equal(GOLDEN_ANALYZER_TYPES.length, 14, 'タイプ数が14ではありません');
+  avzAssert.equal(GOLDEN_ANALYZER_TYPES.length, 8, 'タイプ数が8ではありません');
 
   const features = new MfsFrameView();
   const freq = new Uint8Array(FREQ_LENGTH);
@@ -60,7 +60,7 @@ avzTest('B16-05', 'B16-05 features あり・なしの input で全14タイプを
       }
     }
   }
-  avzAssert.equal(rendered, 14 * variants.length * FRAMES, '描画回数');
+  avzAssert.equal(rendered, 8 * variants.length * FRAMES, '描画回数');
 
   // ステートフルレンダラーへ渡る frame.features（null あり）
   const canvas = document.createElement('canvas');

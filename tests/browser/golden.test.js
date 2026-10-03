@@ -1,4 +1,4 @@
-// 目的 — FramePipeline の描画を66ケースで固定し、ゴールデン基準値と比較する（計画書 §3.6・§3.6.4 pipeline ドライバ）。
+// 目的 — FramePipeline の描画を42ケースで固定し、ゴールデン基準値と比較する（計画書 §3.6・§3.6.4 pipeline ドライバ）。
 // @page harness
 
 (function (global) {
@@ -168,7 +168,8 @@
     return frames;
   }
 
-  avzTest('B15-04', 'ゴールデン全66ケースが基準値と一致する', async function () {
+  avzTest('B15-04', 'ゴールデン全42ケースが基準値と一致する', async function () {
+    avzAssert.equal(goldenCases.length, 42, '基本32 + 追加10ケース');
     var renderedCases = {};
     var allFailures = [];
     var diffs = [];
