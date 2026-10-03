@@ -20,6 +20,26 @@
 ### spec.md 変更
 - §10.2 にレイヤー分割方式（均等 / 聴感）、§12.3 に音量自動補正を追記。version v2.12（v2.11 の次）、date 2026-10-03
 
+---
+
+## 2026-10-03 — [T15-11] テスト実行時間の短縮
+
+### 作業内容
+- `tests/lib/load-classic.mjs`: `vm.createContext` + ファイルごとの `runInContext` をやめ、全ファイルを 1 つの関数スコープに連結して `vm.runInThisContext` で評価する方式に変更（`globals` は仮引数、`get(name)` は同スコープの直接 `eval`、未定義は ReferenceError）。API `loadClassic(files, globals) -> { get, context }` は不変。トップレベル束縛と `Math` 等のグローバル参照がコンテキスト経由でなくなり、約 15 倍遅い問題を解消
+- `tests/run.mjs`: 単体テスト（`spawnSync` → 非同期 `spawn`）とブラウザテストを並行実行。出力順（単体 → ブラウザ）・report.json・終了コードは不変。`--serial` で従来の逐次実行
+- テストの assertion・閾値・サンプルレート・信号長・カバレッジは変更なし
+- `doc/20260928-plan-phase15-test-foundation-and-frame-pipeline.md` §3.1・§3.2、`README.md` を更新
+
+### 検証（CPU 時間 user 秒。測定時は他エージェントの実行でマシン負荷が高く、実時間は不安定だったため）
+| ファイル | 変更前 | 変更後 |
+|---|---|---|
+| mfs-tempo | 143.4 | 14.4 |
+| song-synth | 115.2 | 5.9 |
+| mfs-extractor | 49.3 | 5.2 |
+| mfs-onset | 5.4 | 0.7 |
+| その他 13 ファイル | 各 0.15〜0.38 | 変更なし |
+- 単体のみ（`--unit`）実時間 15.6 秒（65 件 / 64 成功 / 1 スキップ）。ブラウザのみ 50 秒（26 件）。全件（並行）53.7 秒・91 件 / 90 成功 / 0 失敗 / 1 スキップ（U15-00 異常系）、終了コード 0
+
 ### 備考
 - 実装: Sonnet サブエージェント
 

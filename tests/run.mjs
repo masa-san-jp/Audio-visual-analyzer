@@ -3,7 +3,7 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import { spawnSync } from 'node:child_process';
+import { spawn } from 'node:child_process';
 import { BrowserEnvironmentError, findChrome, launchChrome } from './lib/chrome.mjs';
 import { listSharedScripts, writeHarness } from './lib/harness-builder.mjs';
 import { encodeRgbaPng } from './lib/png.mjs';
@@ -13,7 +13,7 @@ const OUTPUT_DIR = path.join(ROOT, 'tests/output');
 const GOLDEN_PATH = path.join(ROOT, 'tests/golden/frames.json');
 const args = process.argv.slice(2);
 const options = {
-  unit: false, browser: false, headed: false, skipSlow: false, updateGolden: false, filter: null,
+  unit: false, browser: false, headed: false, skipSlow: false, updateGolden: false, serial: false, filter: null,
 };
 for (let i = 0; i < args.length; i += 1) {
   const arg = args[i];
@@ -22,9 +22,10 @@ for (let i = 0; i < args.length; i += 1) {
   else if (arg === '--headed') options.headed = true;
   else if (arg === '--skip-slow') options.skipSlow = true;
   else if (arg === '--update-golden') options.updateGolden = true;
+  else if (arg === '--serial') options.serial = true;
   else if (arg === '--filter') options.filter = args[++i];
   else if (arg === '--help') {
-    console.log('使い方: node tests/run.mjs [--unit] [--browser] [--update-golden] [--filter <正規表現>] [--headed] [--skip-slow]');
+    console.log('使い方: node tests/run.mjs [--unit] [--browser] [--update-golden] [--filter <正規表現>] [--headed] [--skip-slow] [--serial]');
     process.exit(0);
   } else {
     console.error(`不明なオプション: ${arg}`);
@@ -42,6 +43,13 @@ try {
 
 const results = [];
 const started = Date.now();
+// 単体テストとブラウザテストを並行実行するため、出力順（単体 → ブラウザ）を保つよう
+// ブラウザ側の記録は一度バッファし、両フェーズの完了後にまとめて出力する（T15-11）。
+let browserSink = null;
+function recordBrowser(...entry) {
+  if (browserSink) browserSink.push(entry);
+  else record(...entry);
+}
 function record(id, name, status, ms, error = null) {
   results.push({ id, name, status, ms, error });
   const mark = status === 'pass' ? 'PASS' : status === 'skip' ? 'SKIP' : 'FAIL';
@@ -61,11 +69,18 @@ async function runUnitTests() {
   if (options.filter && /U15-00.*(?:異常系|fail)/i.test(options.filter)) {
     env.AVZ_RUNNER_INCLUDE_EXPECTED_FAILURE = '1';
   }
-  const result = spawnSync(process.execPath, nodeArgs, {
-    cwd: ROOT, env, encoding: 'utf8', maxBuffer: 16 * 1024 * 1024
+  const result = await new Promise((resolve, reject) => {
+    const child = spawn(process.execPath, nodeArgs, { cwd: ROOT, env });
+    const out = [];
+    const err = [];
+    child.stdout.on('data', (chunk) => out.push(chunk));
+    child.stderr.on('data', (chunk) => err.push(chunk));
+    child.on('error', reject);
+    child.on('close', (status) => resolve({
+      status, stdout: Buffer.concat(out).toString('utf8'), stderr: Buffer.concat(err).toString('utf8')
+    }));
   });
-  if (result.error) throw result.error;
-  const output = `${result.stdout || ''}\n${result.stderr || ''}`;
+  const output = `${result.stdout}\n${result.stderr}`;
   const starts = [...output.matchAll(/^(ok|not ok) (\d+) - (.*)$/gm)];
   for (let index = 0; index < starts.length; index += 1) {
     const item = starts[index];
@@ -187,7 +202,7 @@ async function runBrowserPage(chrome, page, files, includeExpectedFailure) {
     await saveGoldenDiffs(goldenOutput.diffs || []);
   }
   for (const result of browserResults) {
-    record(result.id, result.name, result.status, result.ms, result.error);
+    recordBrowser(result.id, result.name, result.status, result.ms, result.error);
     await saveArtifacts(result);
   }
 }
@@ -230,17 +245,30 @@ async function runBrowserTests() {
   }
 }
 
-if (options.unit) await runUnitTests();
-if (options.browser) {
+async function runBrowserPhase() {
   try {
     await runBrowserTests();
   } catch (error) {
-    record('BROWSER', 'ブラウザテスト実行', 'fail', 0, error.message);
+    recordBrowser('BROWSER', 'ブラウザテスト実行', 'fail', 0, error.message);
     if (error instanceof BrowserEnvironmentError || !findChrome()) {
       console.error(`実行環境エラー: ${error.message}`);
       process.exitCode = 2;
     }
   }
+}
+
+if (options.unit && options.browser && !options.serial && !options.headed) {
+  // 単体テスト（別プロセス）とブラウザテスト（Chrome）は独立しているため並行実行する。
+  const browserRecords = [];
+  browserSink = browserRecords;
+  const browserPhase = runBrowserPhase();
+  await runUnitTests();
+  await browserPhase;
+  browserSink = null;
+  for (const entry of browserRecords) record(...entry);
+} else {
+  if (options.unit) await runUnitTests();
+  if (options.browser) await runBrowserPhase();
 }
 
 const failed = results.filter((result) => result.status === 'fail');

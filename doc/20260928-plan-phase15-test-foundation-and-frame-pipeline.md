@@ -67,6 +67,7 @@ tests/
 | `node tests/run.mjs --filter <正規表現>` | テスト ID または名前が一致するものだけ |
 | `node tests/run.mjs --update-golden` | ゴールデン基準値を再生成して `tests/golden/frames.json` を上書き |
 | `node tests/run.mjs --headed` | ブラウザを表示して実行（デバッグ用） |
+| `node tests/run.mjs --serial` | 単体テストとブラウザテストを順に実行する（既定は両方指定時に並行実行。出力順は単体 → ブラウザで不変） |
 | `node tests/run.mjs --skip-slow` | `slow: true` 指定のテスト（数分かかる書き出し系）を飛ばす（ローカル用。CI では全件実行） |
 
 - 終了コード: 全件成功 0 / 失敗あり 1 / 実行環境エラー（Chrome が見つからない等）2
@@ -82,7 +83,9 @@ export function loadClassic(files, globals = {}) -> { get(name), context }
 ```
 
 - コンテキストへの既定の注入: `console`、`performance`、`Blob`、`TextEncoder`、`TextDecoder`、`URL`（マルチプレクサ・設定入出力が使う）。`globals` 引数で追加・上書きできる
-- 実装: `node:vm` の `createContext` で1つのコンテキストを作り、各ファイルを `runInContext` で順に評価する。トップレベルの `class` / `const` は同一コンテキスト内の後続スクリプトから参照でき、`get(name)` は `vm.runInContext(name, context)` で取り出す（動作確認済み）
+- 実装（T15-11 で高速化）: 全ファイルのソースを連結し、1 つの関数スコープ（`globals` のキーを仮引数に持つ）で包んで `vm.runInThisContext` で評価する。トップレベルの `class` / `const` / `function` は関数内のローカル束縛になり、後続ファイルから参照できる。`get(name)` は同じスコープの直接 `eval(name)` を呼ぶクロージャで取り出す（未定義の名前は従来どおり `ReferenceError`）。`context` は注入グローバルを保持するプレーンオブジェクト
+  - 理由: `vm.createContext` + `runInContext` ではトップレベル束縛や `Math` / `Float32Array` などのグローバル参照が contextified global 経由になり、数値計算のホットパスが約 15 倍遅かった（単体テスト全体で約 4〜6 分 → 約 15 秒）
+  - 制約: 各ファイルが `'use strict'` を先頭に置かないこと（連結すると後続ファイルにも効くため）。暗黙のグローバル代入（`x = 1`）はメインのグローバルに漏れるので使わない
 - アプリ本体には手を入れない
 
 ### 3.3 `tests/lib/chrome.mjs`
