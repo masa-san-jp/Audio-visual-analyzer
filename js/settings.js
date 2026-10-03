@@ -35,6 +35,9 @@ const DEFAULT_SETTINGS = {
   videoCompositeBlendMode: 'source-over',
   // 背景色
   bgColor: '#000',             // '#000' | '#fff'
+  // Phase 16: 音楽特徴ストリーム関連 — doc/20260928-plan-phase16-music-feature-stream.md §7
+  autoGain: false,               // 音量自動補正（false で従来どおり）
+  layerSplit: 'linear',          // レイヤー分割方式 'linear'（均等）| 'mel'（聴感）
   // レイヤー
   layerCount: 1,
   layers: [
