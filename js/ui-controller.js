@@ -1,8 +1,12 @@
+// UI とメディア読込後のソングマップ解析の接続 — doc/20260928-plan-phase18-song-map-and-auto-director.md §2・§5
 class UIController {
   constructor(visualizer, mediaManager, audioEngine, recorder, micInput) {
     this.visualizer = visualizer;
     this.mediaManager = mediaManager;
     this.audioEngine = audioEngine;
+    this.songMapService = new SongMapService({
+      isAvailable: () => audioEngine.mfsStatus !== 'fallback' && typeof AudioWorkletNode !== 'undefined',
+    });
     this.recorder = recorder;
     this.micInput = micInput || new MicInputManager(audioEngine);
     this.mode = 'play'; // 'play' | 'rec'
@@ -120,7 +124,11 @@ class UIController {
     const isActive = index === this.mediaManager.activeIndex;
     if (isActive) fileNameEl.textContent = '読み込み中…';
     try {
+      const oldFile = this.mediaManager.slots[index]?.file;
       await this.mediaManager.loadFile(file, index);
+      if (oldFile) this.songMapService.cancel(oldFile);
+      // 解析は再生 UI の読込完了を待たせない。状態表示への接続は T18-09。
+      this.songMapService.request(file).catch(() => {});
       if (isActive) {
         // 読込完了後の解析リセットは connectMedia 内と _applyActiveSlot 先頭で行われる（計画書 §6.2）
         this._applyActiveSlot();
@@ -183,6 +191,8 @@ class UIController {
       row.querySelector('.slot-clear').addEventListener('click', () => {
         if (this.recorder.state === 'recording') return;
         const wasActive = idx === this.mediaManager.activeIndex;
+        const file = this.mediaManager.slots[idx]?.file;
+        if (file) this.songMapService.cancel(file);
         this.mediaManager.clearSlot(idx);
         if (wasActive) {
           this.visualizer.stop();
@@ -1187,4 +1197,8 @@ class UIController {
     if (el) el.currentTime = 0;
     this.mediaManager.play();
   }
+}
+
+if (typeof module !== 'undefined' && module.exports) {
+  module.exports = { UIController };
 }
