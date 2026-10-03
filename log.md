@@ -35,6 +35,65 @@
 
 ---
 
+## 2026-10-03 — [T18-06] 拍情報の置き換え（関数のみ）
+
+### 作業内容
+- `js/songmap-analysis.js`: §4.4 の `songMapTempoAt(map, tSec, prevTSec, view)` を末尾に追加し Node 用に公開。既存関数は変更せず、拍区間・小節頭を二分探索し、tempo 関連の raw 8 値だけを上書き。毎フレームの配列・オブジェクト・クロージャ生成なし
+- `tests/unit/songmap-tempo.test.mjs`: U18-12 の 5 テストを追加。拍の直前・直後・拍上・小節頭・弱起・区間外・初回・逆行・1秒超・ちょうど1秒・区間の開閉端点を検証。格子 fixture と不均等 DP 拍を線形の参照実装と比較し、入力・view の参照・他の特徴値の保持も確認
+- ライブ・書き出しの呼び出しは §9 の T18-09 / T18-10 に委ね、接続していない
+
+### 検証
+- `node tests/run.mjs --unit --filter U18-12`: U18-12 の 5 件成功。ランナー表示は対象外ファイル19件を含む24件成功、0失敗、245ms
+- `node --test tests/unit/songmap-tempo.test.mjs`: 5件成功、0失敗、84.621459ms。比較2,000フレーム、最大位相誤差 `2.976397e-8`（Float32丸め）、raw / tempo の参照と tempo 以外の96値が不変
+- `node tests/run.mjs --unit`: 91件中90成功、0失敗、1スキップ（想定どおりの U15-00 異常系）、27,801ms
+- 全 `.js` / `.mjs` の `node --check`: 94ファイル成功、0失敗
+- `git diff --check`: 成功
+- ブラウザテストの追加なし。Chrome・ブラウザ全件・`file://` コンソール確認は追加ルールに従い未実行
+
+### spec.md 変更（あれば）
+- なし（§9 T18-06 は spec 更新不要、関数のみの追加）
+
+### 備考
+- 実装: Codex gpt-6.1-sol high
+- 定数・出力仕様の逸脱なし。二分探索は §4.4 の線形定義と比較して出力一致を確認
+- `DIRECTOR_CONST` は T18-07 の成果物で現 worktree には未配置。実装は指定の `DIRECTOR_CONST.SEEK_RESET_SEC` を直接参照し、テストだけで §6.2 の `SEEK_RESET_SEC: 1.0` を注入（本体に代替定数を追加していない）
+- レビュアー確認事項: T18-07 の実定数と統合後、呼び出し前の `DIRECTOR_CONST` 読込、ブラウザ全件と `file://` コンソールエラー0を確認してください
+- 変更は worktree 内の未コミットファイルとして残す。commit / push / PR は行っていない
+
+- レビューで修正（Claude）: T18-07 マージ後、テストの `DIRECTOR_CONST` 注入をやめて `js/director-timeline.js` の実物を読み込むよう変更。後続ファイルが `module.exports` を上書きするため、公開確認は `songmap-analysis.js` 単独読み込みで行うよう修正
+- レビュアーが macOS で `node tests/run.mjs` を全件実行（下記 PR 参照）
+
+---
+
+## 2026-10-03 — [T18-07] シーンカタログとコンパイル
+
+### 作業内容
+- `js/director-scenes.js`: 計画書 §6.1・§6.3 の `DIRECTOR_MANAGED_KEYS`、内蔵14シーン、プリセットの系統分類・管理キー抽出・系統ごとの内蔵フォールバック・ID 昇順の候補生成、適用後の capabilities に従う `applyScenePatch` を追加
+- `js/director-timeline.js`: §6.2 の `DIRECTOR_CONST` を名前・値ともそのまま定義。§6.4 の UTF-16 単位の `fnv1a32` と `compileDirectorTimeline`、§6.5 の適用条件・累積効果の共通関数を追加。`directorStateAt` の T18-08 追記位置を明記
+- `tests/unit/director-timeline.test.mjs`: `tests/fixtures/songmap-128.json` を使用する U18-13〜U18-16・U18-19（13ケース）を追加。定数・14シーンの表との一致、FNV 既知値・サロゲート対、決定性、ラベル＋系統での再利用、連続回避、変化の累積・非対応 op のスキップ、プリセットの保護キーを検証
+
+### 検証
+- `node tests/run.mjs --unit`: 99件 / 98成功 / 0失敗 / 1スキップ（想定どおり U15-00 異常系）、34,908ms、終了コード0
+- 追加アサーション後の `node tests/run.mjs --unit --filter 'U18-(13|14|15|16|19)'`: 対象13ケースすべて成功。ランナー表示は32件成功（非対象19ファイルの表示を含む）、223ms、終了コード0
+- U18-13: 3強度 × seedOffset 0〜9 の30条件で同一入力の深い一致とシーン変更を確認。U18-14: 3強度 × 50 seed の150条件で2つのドロップのシーン再利用を確認
+- U18-15: fixture と同系統の新規ラベルの追加ケース × 内蔵/プリセット × 3強度 × seedOffset 0〜49、隣接3,000組すべてでシーンIDの重複なし
+- U18-16: 全14タイプで適用条件を確認し、opStart は4種類すべてを通過。3強度で各 op の累積・循環、小節時刻、範囲外小節の durationSec への置き換えを確認
+- U18-19: 内蔵14 + 全タイプのプリセット14シーン、プリセットコンパイル50条件で保護キーを保持。型を先に適用して capabilities を判定することも確認
+- 全96個の `.js` / `.mjs` に対する `node --check`: 失敗0。Chrome とブラウザ検証は CODEX_ADDENDUM.md に従い未実行。ブラウザテストの新規作成なし
+
+### spec.md 変更（あれば）
+- なし（チケット表の spec 更新は不要。README.md・index.html も未変更）
+
+### 備考
+- 実装: Codex gpt-6.1-sol high
+- 計画書の定数・アルゴリズム・受入基準からの変更なし。実装上の分割として `directorSceneCandidates`・`directorVariationApplicable`・`applyDirectorVariation` を公開。設定適用・変化の共通関数は配列/オブジェクトを生成せず、T18-08 の状態評価で利用できる
+- レビュアー確認事項: T18-08 は明記した位置に状態評価と Node 用公開を追記し、共通関数を利用してください。T18-09 の script 配線後にブラウザ全件・`file://` のコンソールエラー0を確認してください
+- 追加ルールに従い、コミット・push・PR作成は行っていない
+
+- レビュアーが macOS（Chrome 154 / Node 26）で `node tests/run.mjs` を全件実行: 127 PASS / 0 FAIL / 1 SKIP。`DIRECTOR_CONST` 15 項目が計画書 §6.2 の表と名前・値とも一致することを機械照合
+
+---
+
 ## 2026-10-03 — [T18-04] 小節・境界・ラベル・種類・出力（⑥〜⑨、§4.3）
 
 ### 作業内容
