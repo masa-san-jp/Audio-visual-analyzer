@@ -1,5 +1,47 @@
 # 開発ログ
 
+## 2026-10-03 — [T18-09] ライブへの組み込み（songMapTempoAt を含む）と UI
+
+### 作業内容
+- 更新された Phase 18 計画書 §6.8（setEnabled・setAnalysisState・statusDetail と7段階の状態優先順位）を再読し、前回の停止事項はアーキテクト決定で解消。
+- `js/director-controller.js`: タイムライン・使い回す状態・DirectorRendererを管理する公開API、再コンパイル、1秒超の時刻ジャンプ・逆行でのreset、resize/disposeを実装。
+- `js/visualizer-core.js`: 音声/動画共通のmediaElementとdirectorを追加。演出ON・準備完了・メディアありの描画分岐、OFFでも毎フレームsongMapTempoAtを呼ぶ経路、スロット変更時の前時刻破棄、実シーンのdebug表示を実装。rAFコールバックはconstructorで確保して使い回す。
+- `js/ui-controller.js`: アクティブキーのみの進捗・成功・エラー配線、取消・古い結果の無視、スロット/マイク/未選択の状態復帰、設定変更・ON・プリセット保存削除の再コンパイル、状態文言、管理操作の無効化とOFF復帰、セクション帯を実装。書き出し呼出しへsongMapServiceと名前順presetsを渡す（exporter本体は未変更）。
+- `js/settings.js`: §7.1の5項目を既定値どおり追加（directorEnabled=false）。既存JSON/プリセット機構で保存・旧JSON補完。
+- `index.html`・`style.css`: アナライザー末尾の自動演出UI、シークバー直下の高さ3pxの帯、指定CSS変数、§2.1順のscriptタグを追加。Phase 13のレイアウト規則は維持。
+- `tests/unit/director-controller.test.mjs`: 状態優先順位・再コンパイル・シーク・1000フレームの参照維持・ライブ拍更新・非同期配線・JSONの7ケースを追加。
+- `tests/browser/b18-live.test.js`: B18-02・B18-05〜07を追加。入力はB18-01と同じ量子化なしの32bit float WAV。B18-02には比例幅・12操作の保護/OFF復帰・3ランダムボタンの5設定維持も含める。
+- `tests/browser/b18-performance.test.js`: B18-08を追加。debug=1でフェードを含む10秒再生を計測し、フェード内外のp95・比率・フレーム数・再生秒数を出力。合格条件は計画書の2.5倍以下。
+- `README.md`: ライブでの自動演出の使い方・状態・操作・保存を追記。
+
+### 検証
+- `node tests/run.mjs --unit`: 121件 / 120成功 / 0失敗 / 1スキップ（想定のU15-00異常系）、112,557ms、終了コード0。
+- `node tests/run.mjs --unit --filter T18-09`: 新規7ケースすべて成功。最後のcancelled表示・unavailable詳細の調整後も再実行して成功。ランナー表示30成功（非対象23ファイルの表示を含む）、0失敗、1,987ms、終了コード0。
+- 全107個の.js/.mjsに対する`node --check`: 失敗0、終了コード0。最後の変更4ファイルも再チェック成功。`git diff --check`成功。
+- シーク確認: [1,2,2,3.001,3]秒の5地点でreset追加は2回（ちょうど1秒/同時刻では0回、1.001秒ジャンプ/逆行で各1回）。drop中央のsceneId一致。
+- 1000フレームでout・primary/secondaryのsettings・入力参照の変更0。ライブ経路ではOFFの2フレームで通常pipeline=2回、media切替後の拍フラグ=false、ONでdirector描画、features=nullを処理、media=nullで通常描画を確認。
+- B18-02・B18-05〜08、既存ブラウザ全件（B15-04含む）、file://コンソール確認はCODEX_ADDENDUM.mdに従い未実行。描画p95の実測なし。ゴールデン基準値は未変更。
+- Chrome起動・コミット・push・PR作成なし。
+
+### spec.md 変更（あれば）
+- v2.12 → v2.13、日付2026-10-03。§13.4自動演出と§15.1必須UIを追加。書き出しは同一タイムラインを用いる設計として記載し、経路の実装はT18-10であることを明記。
+
+### 備考
+- 実装: Codex gpt-6.1-sol high
+- 定数調整・アルゴリズム変更なし。解析進捗はUI側でキー別に保持し、切替時に復元する。古いPromiseの結果はエントリ同一性とアクティブキーで除外。section.kind=mainの帯は指定どおり--section-main、それ以外はKIND_CLASSを参照。
+- B18-07は共有ページに永続fallbackを残さないよう別iframeの実アプリを使い、AudioContext未生成を確認してMFS起動前に強制失敗フラグを設定する。
+- 検証出力を一時的にworktree外の`/tmp/T18-09-unit.txt`へ保存した点は作業場所制約からの逸脱。報告数値を転記後に削除。ソース・テスト・文書の編集は本worktreeのみ。
+- 着手時に存在した計画書§6.8のアーキテクト変更は保持し、こちらでは編集していない。`js/offline-exporter.js`も未変更。
+- レビュアー確認: `node tests/run.mjs --browser --filter 'B18-(02|05|06|07|08)'`（--skip-slowなし）、ブラウザ全件とB15-04、file://コンソールエラー0、Phase 13の狭幅レイアウト・チェックボックス/セレクト/ボタンのタッチ操作。B18-08が基準を満たさなければ、定数を調整せず計画書§8.3に従って報告する。
+- §8.4手動確認はすべて未実施: (1)ジャンルの異なるオーナー提供の実楽曲5曲で切替を○/△/×と一言コメントで評価、(2)フラッシュの快適性・危険感と控えめで発光なし、(3)書き出しとライブの演出一致（T18-10と連携）、(4)OFF時にすべての操作が元どおり使えること。
+
+### レビューでの対応（Claude）
+- アーキテクト判断: DirectorController に `setEnabled`・`setAnalysisState`・`statusDetail` を追加し、状態の決め方（7段階）と UIController の配線を計画書 §6.8 に明記
+- B18-02: セクション帯の幅の比較許容差を 1e-6 → 0.01（%）に変更（ブラウザが CSS の % 値を小数第3位で丸めるため。12.506 vs 12.505955）
+- 検証（macOS / Chrome 154 / Node 26）: `node tests/run.mjs` 全件で失敗 0（B18-02・B18-05〜08 PASS、B15-04 ゴールデン不変）。`file://` でコンソールエラー 0。375px 幅で横スクロールなし（自動演出 UI 7 要素あり）
+
+---
+
 ## 2026-10-03 — [T18-08] 状態の評価と描画
 
 ### 着手前の設計要約（★3）
