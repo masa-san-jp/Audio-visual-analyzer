@@ -31,6 +31,28 @@
 
 ---
 
+## 2026-10-03 — [T16-10] 設定・UI（音量自動補正・レイヤー分割）
+
+### 作業内容
+- `js/settings.js`: `DEFAULT_SETTINGS` に `autoGain: false`・`layerSplit: 'linear'` を追加（計画書 §7。既定値のためゴールデン B15-04 は不変）。`settings-io.js` は既存の汎用処理で往復・旧形式 JSON の既定値補完に対応（変更なし）
+- `index.html`: 「感度・形状」セクション先頭にチェックボックス「音量自動補正」（`chk-auto-gain`）、レイヤー数ボタンの下にセレクト「レイヤー分割」（`layer-split`: 均等 / 聴感。`group-layer-split`）を追加
+- `js/ui-controller.js`: 2 項目の change ハンドラ、`_syncControlsFromSettings()` への同期（不正値は既定値扱い）、`_updateLayerSplitVisibility()`（layers 対応タイプかつ `layerCount >= 2` のときだけ表示。`_renderLayerSettings`・`_applyCapabilities` から呼ぶ）。ランダムボタンは 2 項目を変更しない
+- `tests/browser/b16-07-09.test.js`（新規）: B16-07・B16-09
+- `tests/unit/settings-io.test.mjs`: U15-01 に 2 キーの往復・旧形式・型不一致フォールバックを追加
+- `doc/spec.md`（v2.12、2026-10-03）§10.2・§12.3、`README.md`
+
+### 検証
+- `node tests/run.mjs` 全件: 94 件 / 93 成功 / 0 失敗 / 1 スキップ（U15-00 異常系）。B15-04 ゴールデン・B16-05 合格。なお別のエージェントとの並行実行中の 1 回目で 1 件失敗が出たが、再実行（2 回）で再現せず全件成功
+- B16-07: 10 秒時点の lastFreq 全ビン平均 — OFF: -30LUFS 14.74 / -10LUFS 68.22（差 53.48）、ON: 73.39 / 61.15（差 12.24）。差の縮小 77.1%（基準 70% 以上）
+- B16-09: プリセット保存/読込、JSON 書き出し/読込、旧形式 JSON（2 項目なし）で既定値、UI 同期を確認
+- 狭幅（375px）・広幅（1280px）の headless 表示: 横スクロールなし（documentElement.scrollWidth = 375）、追加コントロール幅 351px で収まる。layers 非対応タイプ（spectrogram）でレイヤー分割は非表示
+- `node --check` 全 js/mjs 通過、`index.html` を `file://` で開いてコンソールエラー 0
+
+### spec.md 変更
+- §10.2 にレイヤー分割方式（均等 / 聴感）、§12.3 に音量自動補正を追記。version v2.12（v2.11 の次）、date 2026-10-03
+
+---
+
 
 ## 2026-10-03 — U16-17 の計測を CPU 時間に変更
 

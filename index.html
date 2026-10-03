@@ -253,6 +253,13 @@
             <button id="btn-layer-4" class="layer-btn">4</button>
           </div>
         </div>
+        <label id="group-layer-split" style="display:none;">
+          レイヤー分割
+          <select id="layer-split">
+            <option value="linear">均等</option>
+            <option value="mel">聴感</option>
+          </select>
+        </label>
         <div id="layer-settings"></div>
       </section>
 
@@ -291,6 +298,12 @@
 
       <section class="control-group">
         <h2>感度・形状</h2>
+        <label>
+          <span class="toggle-row">
+            <span>音量自動補正</span>
+            <input type="checkbox" id="chk-auto-gain">
+          </span>
+        </label>
         <label>
           感度&ensp;<span id="val-sensitivity">1.0</span>
           <input type="range" id="slider-sensitivity" min="0.1" max="3.0" step="0.1" value="1.0">

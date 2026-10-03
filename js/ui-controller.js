@@ -670,6 +670,12 @@ class UIController {
     if (activeLayerBtn) activeLayerBtn.classList.add('active');
     this._renderLayerSettings(s.layerCount);
 
+    // Phase 16: 音量自動補正・レイヤー分割（計画書 §7）。不正な値は既定値として扱う
+    const chkAutoGain = document.getElementById('chk-auto-gain');
+    if (chkAutoGain) chkAutoGain.checked = s.autoGain === true;
+    const layerSplitSelect = document.getElementById('layer-split');
+    if (layerSplitSelect) layerSplitSelect.value = s.layerSplit === 'mel' ? 'mel' : 'linear';
+
     const chk = document.getElementById('chk-hue-continuous');
     chk.checked = s.hueContinuousMode;
     document.getElementById('hue-speed-group').style.display = s.hueContinuousMode ? '' : 'none';
@@ -860,6 +866,18 @@ class UIController {
     this._renderLayerSettings(1);
     this._applyCapabilities(this.visualizer.settings.analyzerType);
 
+    // Phase 16: 音量自動補正・レイヤー分割（アナライザーランダムは変更しない）
+    const chkAutoGain = document.getElementById('chk-auto-gain');
+    chkAutoGain.checked = this.visualizer.settings.autoGain === true;
+    chkAutoGain.addEventListener('change', () => {
+      this.visualizer.settings.autoGain = chkAutoGain.checked;
+    });
+    const layerSplitSelect = document.getElementById('layer-split');
+    layerSplitSelect.value = this.visualizer.settings.layerSplit === 'mel' ? 'mel' : 'linear';
+    layerSplitSelect.addEventListener('change', () => {
+      this.visualizer.settings.layerSplit = layerSplitSelect.value === 'mel' ? 'mel' : 'linear';
+    });
+
     document.getElementById('btn-analyzer-randomize').addEventListener('click', () => {
       const rInt = (min, max) => min + Math.floor(Math.random() * (max - min + 1));
       const pick = (arr) => arr[Math.floor(Math.random() * arr.length)];
@@ -955,6 +973,7 @@ class UIController {
       this.visualizer.settings.layerCount = 1;
     }
     document.getElementById('layer-settings').style.display = caps.layers ? '' : 'none';
+    this._updateLayerSplitVisibility();
 
     // 追加スライダー（sliders 宣言 + physics）
     const sliders = caps.sliders || [];
@@ -966,7 +985,17 @@ class UIController {
     show('group-physics',   !!caps.physics);
   }
 
+  // レイヤー分割セレクトは、layers 対応タイプかつ layerCount >= 2 のときだけ表示（計画書 §7）
+  _updateLayerSplitVisibility() {
+    const group = document.getElementById('group-layer-split');
+    if (!group) return;
+    const layersGroup = document.getElementById('group-layers');
+    const layersOk = !layersGroup || layersGroup.style.display !== 'none';   // layers 非対応タイプでは group-layers が非表示
+    group.style.display = (layersOk && this.visualizer.settings.layerCount >= 2) ? '' : 'none';
+  }
+
   _renderLayerSettings(count) {
+    this._updateLayerSplitVisibility();
     const container = document.getElementById('layer-settings');
     container.innerHTML = '';
 
