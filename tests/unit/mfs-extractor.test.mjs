@@ -327,12 +327,14 @@ test('U16-17 性能: 60 秒ステレオ 48kHz の処理時間 ≤ 6 秒', () => 
   let hops = 0;
   ex.onHop = () => { hops++; };
   const [cl, cr] = sig.channels;
-  const t0 = process.hrtime.bigint();
+  // 並列実行時の CPU 取り合いで実時間が伸びても誤判定しないよう、このプロセスの CPU 時間（user + system）で測る
+  const c0 = process.cpuUsage();
   for (let i = 0; i < cl.length; i += 128) {
     const n = Math.min(128, cl.length - i);
     ex.pushSamples(cl.subarray(i, i + n), cr.subarray(i, i + n), n);
   }
-  const sec = Number(process.hrtime.bigint() - t0) / 1e9;
+  const cpu = process.cpuUsage(c0);
+  const sec = (cpu.user + cpu.system) / 1e6;
   console.log(`U16-17 60秒ステレオ 48kHz: ${sec.toFixed(2)} 秒 (${hops} ホップ, リアルタイム比 ${(60 / sec).toFixed(1)}x)`);
   assert.equal(hops, Math.floor(60 * sr / H));
   assert.ok(sec <= 6);
