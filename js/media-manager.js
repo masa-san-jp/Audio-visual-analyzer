@@ -48,7 +48,7 @@ class MediaManager {
         el.addEventListener('ended', () => {
           if (this.onEnded && this.mediaElement === el) this.onEnded();
         });
-        this.slots[index] = { element: el, url, name: file.name, isVideo };
+        this.slots[index] = { element: el, url, name: file.name, isVideo, file }; // file は SongMapService の cancel 用（T18-05）
         if (index === this.activeIndex) {
           this.audioEngine.connectMedia(el);
         }
