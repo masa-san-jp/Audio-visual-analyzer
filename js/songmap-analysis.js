@@ -3,7 +3,7 @@
 // 純粋関数のみ（DOM・Web Audio に依存しない）。ファイル読込後に 1 回だけメインスレッドで実行する解析であり、
 // 毎フレーム経路ではないため配列の新規確保を許す（計画書 §2 / §5、ガイド §9.3 の例外）。
 // 決定的（乱数・時刻を使わない）。MFS_CONST / mfsDerived（js/mfs-const.js）を先に読み込んでおくこと。
-// 後半（⑥ 小節〜⑨ 展開の種類、validateSongMap）は T18-04 でこのファイルの末尾（「後半」の位置）に追記する。
+// 後半（⑥ 小節〜⑨ 展開の種類、validateSongMap）はファイル末尾に置く。
 
 // §4.1 定数表。値の唯一の正は計画書（ガイド §2.2）。後半（⑥〜⑨）で使う定数もここに揃えておく
 const SONG_CONST = {
@@ -295,7 +295,7 @@ function songDownbeats(beatHops, oL, rows, L) {
 
 // ── buildSongMap（骨格）──
 // T18-03 時点では ①〜⑤ の結果（SongMap v1 のうち beats までのフィールド）を返す。
-// ⑥〜⑨（bars・sections）と validateSongMap は T18-04 で後半に追記し、この関数の末尾で続きを呼ぶ。
+// ⑥〜⑨（bars・sections）と validateSongMap は関数末尾で呼び出す。
 function buildSongMap(rows, meta) {
   const sampleRate = meta.sampleRate;
   const durationSec = meta.durationSec;
@@ -320,16 +320,382 @@ function buildSongMap(rows, meta) {
     beats: grid.beats,
     downbeatIndices: downbeatIndices,
   };
-  // ── 後半（T18-04）: ⑥〜⑨ をここから呼び、bars / sections を map に加えて返す ──
+  const barData = songBars(grid.beatHops, grid.beats, downbeatIndices, rows, L, durationSec); // ⑥
+  const boundaries = barData.v.length < 2
+    ? [0, barData.v.length]
+    : songBoundaries(barData.v, barData.E, tempo.bpm); // ⑦
+  const sections = songSections(boundaries, barData.bars, barData.v, barData.E, tempo.bpm); // ⑧⑨
+  map.bars = barData.bars;
+  map.sections = sections;
+  // 解析結果は常に v1 の出力契約を満たす。異常な入力はテンポ解析段階で no-rhythm になる。
+  const validation = validateSongMap(map);
+  if (!validation.ok) throw new SongMapError('no-rhythm');
   return map;
 }
 
-// ── 後半（⑥〜⑨・validateSongMap）は T18-04 でここに追記する ──
+// ── ⑥ 小節 ──
+
+// 拍列と小節頭から、小節特徴ベクトルと正規化エネルギーを作る。
+function songBars(beatHops, beats, downbeatIndices, rows, L, durationSec) {
+  const R = _songRow();
+  const LEN = R.LENGTH;
+  const starts = [];
+  const startBeatIndices = [];
+  for (let j = 0; j < downbeatIndices.length; j++) {
+    const beatIndex = downbeatIndices[j];
+    const startHop = Math.round(beatHops[beatIndex]);
+    if (startHop >= L - 1) continue;
+    starts.push(startHop);
+    startBeatIndices.push(beatIndex);
+  }
+
+  const nbar = starts.length;
+  const rawV = [];
+  const barLufs = new Float64Array(nbar);
+  const bars = [];
+  for (let j = 0; j < nbar; j++) {
+    const h0 = j === 0 ? 0 : starts[j];
+    const h1 = j + 1 < nbar ? starts[j + 1] : L;
+    const count = Math.max(0, h1 - h0);
+    const mean = new Float64Array(44);
+    let energy = 0;
+    for (let h = h0; h < h1; h++) {
+      const base = h * LEN;
+      for (let k = 0; k < 32; k++) mean[k] += rows[base + R.BANDS + k];
+      for (let k = 0; k < 12; k++) mean[32 + k] += SONG_CONST.CHROMA_WEIGHT * rows[base + R.CHROMA + k];
+      energy += rows[base + R.ENERGY];
+    }
+    if (count > 0) {
+      for (let k = 0; k < mean.length; k++) mean[k] /= count;
+      energy /= count;
+    }
+    rawV.push(mean);
+    barLufs[j] = MFS_CONST.LOUD_OFFSET + 10 * Math.log10(energy + MFS_CONST.EPS);
+    const startSec = j === 0 ? 0 : beats[startBeatIndices[j]];
+    const endSec = j + 1 < nbar ? beats[startBeatIndices[j + 1]] : durationSec;
+    bars.push({ startSec: startSec, endSec: endSec, energy: 0 });
+  }
+
+  const v = [];
+  for (let k = 0; k < 44; k++) {
+    const column = new Float64Array(nbar);
+    for (let j = 0; j < nbar; j++) column[j] = rawV[j][k];
+    const z = songZ(column);
+    for (let j = 0; j < nbar; j++) {
+      if (!v[j]) v[j] = new Float64Array(44);
+      v[j][k] = z[j];
+    }
+  }
+
+  const p5 = songPct(barLufs, 0.05);
+  const p95 = songPct(barLufs, 0.95);
+  const spread = p95 - p5;
+  const E = new Float64Array(nbar);
+  for (let j = 0; j < nbar; j++) {
+    E[j] = spread < 1 ? 0.5 : Math.max(0, Math.min(1, (barLufs[j] - p5) / spread));
+    bars[j].energy = E[j];
+  }
+  return { bars: bars, v: v, E: E };
+}
+
+// ── ⑦ 境界（小節間の新規性ピーク）──
+
+function songBoundaries(v, E, bpm) {
+  const S = SONG_CONST;
+  const nbar = Math.min(v.length, E.length);
+  if (nbar < 2) return [0, nbar];
+  const barSecA = 4 * 60 / bpm;
+  const K = Math.max(4, Math.round(S.KERNEL_SEC / barSecA));
+  const sigma = K / 2;
+  const MINS = Math.max(2, Math.round(S.MIN_SECTION_SEC / barSecA));
+  const NB = Math.max(1, Math.round(S.PEAK_NEIGHBOR_SEC / barSecA));
+  const offsets = [];
+  for (let a = -K; a <= K; a++) if (a !== 0) offsets.push(a);
+
+  const sim = (i, k) => {
+    if (i < 0 || i >= nbar || k < 0 || k >= nbar) return 0;
+    return songCos(v[i], v[k]);
+  };
+  const nov = new Float64Array(nbar - 1);
+  const en = new Float64Array(nbar - 1);
+  for (let j = 1; j < nbar; j++) {
+    let total = 0;
+    for (let ai = 0; ai < offsets.length; ai++) {
+      const a = offsets[ai];
+      const ia = a < 0 ? j + a : j + a - 1;
+      const sa = a < 0 ? -1 : 1;
+      for (let bi = 0; bi < offsets.length; bi++) {
+        const b = offsets[bi];
+        const ib = b < 0 ? j + b : j + b - 1;
+        const sb = b < 0 ? -1 : 1;
+        total += sa * sb * Math.exp(-(a * a + b * b) / (2 * sigma * sigma)) * sim(ia, ib);
+      }
+    }
+    nov[j - 1] = Math.max(0, total);
+    en[j - 1] = Math.abs(E[j] - E[j - 1]);
+  }
+
+  let maxNov = 0, maxEn = 0;
+  for (let i = 0; i < nov.length; i++) {
+    if (nov[i] > maxNov) maxNov = nov[i];
+    if (en[i] > maxEn) maxEn = en[i];
+  }
+  const N = new Float64Array(nbar - 1);
+  for (let i = 0; i < N.length; i++) {
+    N[i] = nov[i] / (maxNov > 0 ? maxNov : 1)
+      + S.ENERGY_NOVELTY_WEIGHT * en[i] / (maxEn > 0 ? maxEn : 1);
+  }
+  let mean = 0;
+  for (let i = 0; i < N.length; i++) mean += N[i];
+  mean /= N.length;
+  let variance = 0;
+  for (let i = 0; i < N.length; i++) variance += (N[i] - mean) * (N[i] - mean);
+  const threshold = mean + S.PEAK_K * Math.sqrt(variance / N.length);
+
+  const candidates = [];
+  for (let j = MINS; j <= nbar - MINS; j++) {
+    const value = N[j - 1];
+    if (value < threshold) continue;
+    let local = true;
+    for (let d = -NB; d <= NB && local; d++) {
+      if (d === 0 || j + d < 1 || j + d >= nbar) continue;
+      if (value < N[j + d - 1]) local = false;
+    }
+    if (local) candidates.push(j);
+  }
+  candidates.sort((a, b) => {
+    const diff = N[b - 1] - N[a - 1];
+    return diff !== 0 ? diff : a - b;
+  });
+  const chosen = [0, nbar];
+  for (let i = 0; i < candidates.length; i++) {
+    const candidate = candidates[i];
+    let separated = true;
+    for (let j = 0; j < chosen.length; j++) {
+      if (Math.abs(candidate - chosen[j]) < MINS) { separated = false; break; }
+    }
+    if (separated) chosen.push(candidate);
+  }
+  chosen.sort((a, b) => a - b);
+  return chosen;
+}
+
+// 0=A, 25=Z, 26=AA の順でラベルを生成する。
+function _songLabel(index) {
+  let n = index + 1;
+  let label = '';
+  while (n > 0) {
+    n--;
+    label = String.fromCharCode(65 + (n % 26)) + label;
+    n = Math.floor(n / 26);
+  }
+  return label;
+}
+
+// ── ⑧⑨ セクションのラベルと展開の種類 ──
+
+function songSections(boundaries, bars, v, E, bpm) {
+  const nbar = Math.min(v.length, E.length, bars.length);
+  const barSecA = 4 * 60 / bpm;
+  if (nbar < 2) {
+    if (nbar === 0) return [];
+    return [{
+      startBar: 0,
+      endBar: nbar,
+      startSec: bars[0].startSec,
+      endSec: bars[nbar - 1].endSec,
+      label: 'A',
+      kind: 'main',
+      energy: E[0],
+      slopePerSec: 0,
+    }];
+  }
+
+  const count = boundaries.length - 1;
+  const sectionInfo = [];
+  for (let s = 0; s < count; s++) {
+    const startBar = boundaries[s];
+    const endBar = boundaries[s + 1];
+    const length = Math.max(0, endBar - startBar);
+    const meanV = new Float64Array(44);
+    let energy = 0;
+    for (let j = startBar; j < endBar; j++) {
+      for (let k = 0; k < 44; k++) meanV[k] += v[j][k];
+      energy += E[j];
+    }
+    if (length > 0) {
+      for (let k = 0; k < 44; k++) meanV[k] /= length;
+      energy /= length;
+    }
+    let slope = 0;
+    if (length > 1) {
+      let meanX = 0;
+      for (let j = startBar; j < endBar; j++) meanX += j;
+      meanX /= length;
+      let meanY = 0;
+      for (let j = startBar; j < endBar; j++) meanY += E[j];
+      meanY /= length;
+      let numerator = 0, denominator = 0;
+      for (let j = startBar; j < endBar; j++) {
+        const dx = j - meanX;
+        numerator += dx * (E[j] - meanY);
+        denominator += dx * dx;
+      }
+      if (denominator > MFS_CONST.EPS) slope = numerator / denominator / barSecA;
+    }
+    sectionInfo.push({ startBar, endBar, meanV, energy, slope });
+  }
+
+  const representatives = [];
+  let nextLabel = 0;
+  for (let s = 0; s < sectionInfo.length; s++) {
+    const info = sectionInfo[s];
+    let best = -Infinity;
+    let bestIndex = -1;
+    for (let r = 0; r < representatives.length; r++) {
+      const similarity = songCos(info.meanV, representatives[r].vector);
+      if (similarity > best) {
+        best = similarity;
+        bestIndex = r;
+      }
+    }
+    if (bestIndex >= 0 && best >= SONG_CONST.LABEL_SIM) {
+      info.label = representatives[bestIndex].label;
+    } else {
+      info.label = _songLabel(nextLabel++);
+      representatives.push({ label: info.label, vector: info.meanV });
+    }
+  }
+
+  for (let s = 0; s < sectionInfo.length; s++) {
+    const info = sectionInfo[s];
+    let kind = 'main';
+    if (s === 0 && info.energy < SONG_CONST.EDGE_MAX_ENERGY && sectionInfo.length >= 3) {
+      kind = 'intro';
+    } else if (s === sectionInfo.length - 1
+      && info.energy < SONG_CONST.EDGE_MAX_ENERGY && sectionInfo.length >= 3) {
+      kind = 'outro';
+    } else if (s > 0 && s < sectionInfo.length - 1
+      && info.energy <= SONG_CONST.BREAK_MAX_ENERGY
+      && sectionInfo[s - 1].energy - info.energy >= SONG_CONST.BREAK_DROP) {
+      kind = 'break';
+    } else if (s < sectionInfo.length - 1
+      && info.slope >= SONG_CONST.BUILD_SLOPE_PER_SEC
+      && sectionInfo[s + 1].energy > info.energy) {
+      kind = 'build';
+    } else if (info.energy >= SONG_CONST.DROP_MIN_ENERGY
+      && (s === 0 || info.energy - sectionInfo[s - 1].energy >= SONG_CONST.DROP_JUMP
+        || sectionInfo[s - 1].kind === 'build')) {
+      kind = 'drop';
+    }
+    info.kind = kind;
+  }
+
+  return sectionInfo.map((info) => ({
+    startBar: info.startBar,
+    endBar: info.endBar,
+    startSec: bars[info.startBar].startSec,
+    endSec: bars[info.endBar - 1].endSec,
+    label: info.label,
+    kind: info.kind,
+    energy: info.energy,
+    slopePerSec: info.slope,
+  }));
+}
+
+// ── SongMap v1 の出力検証 ──
+
+function validateSongMap(map) {
+  const errors = [];
+  const isArrayLike = (value) => Array.isArray(value) || ArrayBuffer.isView(value);
+  const finite = (value) => typeof value === 'number' && Number.isFinite(value);
+  const add = (condition, message) => { if (!condition) errors.push(message); };
+  if (!map || typeof map !== 'object') return { ok: false, errors: ['map is not an object'] };
+  add(map.version === 1, 'version must be 1');
+  add(finite(map.durationSec) && map.durationSec >= 0, 'durationSec must be non-negative');
+  add(finite(map.sampleRate) && map.sampleRate > 0, 'sampleRate must be positive');
+  add(finite(map.bpm) && map.bpm > 0, 'bpm must be positive');
+  add(finite(map.tempoConfidence) && map.tempoConfidence >= 0 && map.tempoConfidence <= 1,
+    'tempoConfidence must be in [0, 1]');
+  add(map.beatSource === 'grid' || map.beatSource === 'dp', 'beatSource must be grid or dp');
+  add(isArrayLike(map.beats), 'beats must be an array');
+  if (isArrayLike(map.beats)) {
+    for (let i = 0; i < map.beats.length; i++) {
+      add(finite(map.beats[i]), 'beats[' + i + '] must be finite');
+      if (i > 0) add(map.beats[i] > map.beats[i - 1], 'beats must be strictly ascending');
+      add(map.beats[i] >= 0, 'beats[' + i + '] must be non-negative');
+      if (finite(map.durationSec)) add(map.beats[i] <= map.durationSec, 'beats[' + i + '] exceeds durationSec');
+    }
+  }
+  add(isArrayLike(map.downbeatIndices), 'downbeatIndices must be an array');
+  if (isArrayLike(map.downbeatIndices) && isArrayLike(map.beats)) {
+    for (let i = 0; i < map.downbeatIndices.length; i++) {
+      const index = map.downbeatIndices[i];
+      add(Number.isInteger(index) && index >= 0 && index < map.beats.length,
+        'downbeatIndices[' + i + '] is out of range');
+      if (i > 0) add(index > map.downbeatIndices[i - 1], 'downbeatIndices must be ascending');
+      if (i > 0) add(index - map.downbeatIndices[i - 1] === 4, 'downbeatIndices must advance by 4');
+    }
+  }
+  add(isArrayLike(map.bars) && map.bars.length > 0, 'bars must not be empty');
+  if (isArrayLike(map.bars)) {
+    for (let i = 0; i < map.bars.length; i++) {
+      const bar = map.bars[i];
+      add(bar && finite(bar.startSec) && finite(bar.endSec), 'bars[' + i + '] times must be finite');
+      if (bar && finite(bar.startSec) && finite(bar.endSec)) {
+        add(bar.startSec >= 0 && bar.endSec <= map.durationSec && bar.endSec >= bar.startSec,
+          'bars[' + i + '] time range is invalid');
+        if (i === 0) add(bar.startSec === 0, 'bars must start at 0');
+        if (i > 0) add(bar.startSec === map.bars[i - 1].endSec, 'bars must be contiguous');
+      }
+      add(bar && finite(bar.energy) && bar.energy >= 0 && bar.energy <= 1,
+        'bars[' + i + '] energy must be in [0, 1]');
+    }
+    if (map.bars.length > 0) add(map.bars[map.bars.length - 1].endSec === map.durationSec,
+      'bars must end at durationSec');
+  }
+  const kinds = new Set(['intro', 'build', 'drop', 'break', 'outro', 'main']);
+  add(isArrayLike(map.sections) && map.sections.length > 0, 'sections must not be empty');
+  if (isArrayLike(map.sections)) {
+    for (let i = 0; i < map.sections.length; i++) {
+      const section = map.sections[i];
+      add(section && Number.isInteger(section.startBar) && Number.isInteger(section.endBar),
+        'sections[' + i + '] bar range must be integers');
+      if (section && Number.isInteger(section.startBar) && Number.isInteger(section.endBar)) {
+        add(section.startBar >= 0 && section.endBar <= map.bars.length && section.endBar > section.startBar,
+          'sections[' + i + '] bar range is invalid');
+        if (i === 0) add(section.startBar === 0, 'sections must start at bar 0');
+        if (i > 0) add(section.startBar === map.sections[i - 1].endBar, 'sections must be contiguous by bars');
+      }
+      add(section && finite(section.startSec) && finite(section.endSec),
+        'sections[' + i + '] times must be finite');
+      if (section && finite(section.startSec) && finite(section.endSec)) {
+        add(section.startSec >= 0 && section.endSec <= map.durationSec && section.endSec >= section.startSec,
+          'sections[' + i + '] time range is invalid');
+        if (i === 0) add(section.startSec === 0, 'sections must start at 0 seconds');
+        if (i > 0) add(section.startSec === map.sections[i - 1].endSec, 'sections must be contiguous in time');
+      }
+      add(typeof (section && section.label) === 'string' && section.label.length > 0,
+        'sections[' + i + '] label is invalid');
+      add(kinds.has(section && section.kind), 'sections[' + i + '] kind is invalid');
+      add(finite(section && section.energy) && section.energy >= 0 && section.energy <= 1,
+        'sections[' + i + '] energy must be in [0, 1]');
+      add(finite(section && section.slopePerSec), 'sections[' + i + '] slopePerSec must be finite');
+    }
+    if (map.sections.length > 0) {
+      const last = map.sections[map.sections.length - 1];
+      add(last.endBar === map.bars.length, 'sections must end at the last bar');
+      add(last.endSec === map.durationSec, 'sections must end at durationSec');
+    }
+  }
+  return { ok: errors.length === 0, errors: errors };
+}
 
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
     SONG_CONST, SongMapError, buildSongMap,
     songZ, songCos, songPct,
     songOdf, songGlobalTempo, songDpBeats, songGridBeats, songDownbeats,
+    songBars, songBoundaries, songSections, validateSongMap,
   };
 }
