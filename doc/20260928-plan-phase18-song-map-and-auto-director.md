@@ -106,6 +106,7 @@ DirectorController.setSongMap → compileDirectorTimeline(SongMap, 演出オプ�
 | `DROP_JUMP` | 0.2 | ドロップ判定に必要な直前セクションからのエネルギー上昇 |
 | `MIN_DURATION_SEC` | 20 | これより短い音声は解析しない |
 | `MAX_DURATION_SEC` | 1200 | これより長い音声は解析しない（メモリ保護） |
+| `DECODE_SAMPLE_RATE` | 48000 | SongMapService がデコードに使う AudioContext のサンプルレート（端末の出力レートに依らず同じソングマップを得るため。2026-10-03 追加） |
 
 Phase 16 の定数（`MFS_CONST`・`mfsDerived`）もそのまま使う（`fr`、`hopSec`、`eventLatencySec`、テンポ推定の定数）。
 
@@ -284,7 +285,7 @@ class SongMapService {
 ```
 
 - 実行は**1件ずつ**（待機列、先着順）。キャッシュは最大 6 件（最も古く参照されたものから捨てる）
-- 処理: `file.arrayBuffer()` → `AudioContext.decodeAudioData`（失敗は `'decode'`）→ 長さ判定（`MIN_DURATION_SEC` / `MAX_DURATION_SEC`）→ `OfflineAudioContext`（元のチャンネル数・サンプルレート）+ MFS ワークレット（songmap モード。ノードのチャンネル指定は Phase 16 §6.2 と同じ）→ 行データを `Float32Array(L·49)` に集める → `buildSongMap`
+- 処理: `file.arrayBuffer()` → `new AudioContext({ sampleRate: DECODE_SAMPLE_RATE }).decodeAudioData`（指定レートの生成に失敗した場合は既定の AudioContext。失敗は `'decode'`）→ 長さ判定（`MIN_DURATION_SEC` / `MAX_DURATION_SEC`）→ `OfflineAudioContext`（元のチャンネル数・サンプルレート）+ MFS ワークレット（songmap モード。ノードのチャンネル指定は Phase 16 §6.2 と同じ）→ 行データを `Float32Array(L·49)` に集める → `buildSongMap`
 - 進捗: ワークレット処理 0〜0.9（受信行数 / 予想ホップ数）、`buildSongMap` 完了で 1.0
 - 呼び出し元: `ui-controller._loadMediaFile` の読込完了後に `request`（自動演出が OFF でも実行する。解析結果は §4.4 で全体の拍精度向上に使うため）。スロットのファイルを差し替え・削除したら、旧ファイルを `cancel`
 - AudioWorklet が使えない環境（Phase 16 のフォールバック状態）では実行せず、`request` は直ちに `SongMapError('unavailable')` で reject する（キャッシュしない）。可否は constructor の任意引数 `{ isAvailable: () => boolean }` で判定し、省略時は `typeof AudioWorkletNode !== 'undefined'` とする。ui-controller は `() => audioEngine.mfsStatus !== 'fallback' && typeof AudioWorkletNode !== 'undefined'` を渡す。`DirectorController.status` の `'unavailable'`（§6.8）はこの reject を受けて設定する（2026-10-03 明記）

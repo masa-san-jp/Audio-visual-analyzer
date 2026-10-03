@@ -31,6 +31,7 @@ const SONG_CONST = {
   DROP_JUMP: 0.2,
   MIN_DURATION_SEC: 20,
   MAX_DURATION_SEC: 1200,
+  DECODE_SAMPLE_RATE: 48000,
 };
 
 // §3 の行配置は js/mfs-const.js の SONGMAP_ROW（SSOT）を使う。そのため mfs-const.js を先に読み込むこと

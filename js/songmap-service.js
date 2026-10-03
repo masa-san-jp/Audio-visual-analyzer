@@ -87,7 +87,12 @@ class SongMapService {
       const bytes = await job.file.arrayBuffer();
       this._check(job);
       const Context = typeof AudioContext !== 'undefined' ? AudioContext : webkitAudioContext;
-      probe = new Context();
+      // 解析はデバイスのサンプルレートに依存させず常に同じレートで行う（計画書 §4.1 DECODE_SAMPLE_RATE、§5）
+      try {
+        probe = new Context({ sampleRate: SONG_CONST.DECODE_SAMPLE_RATE });
+      } catch (_) {
+        probe = new Context();
+      }
       buffer = await probe.decodeAudioData(bytes);
     } catch (error) {
       this._check(job);

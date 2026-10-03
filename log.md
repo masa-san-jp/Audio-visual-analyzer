@@ -32,6 +32,7 @@
 - B18-01c: Node との `sections` 比較を、構造（小節番号・ラベル・種類）は完全一致、実数（秒・energy・slopePerSec）は ±1e-9 に変更。実測の差は `slopePerSec` の 2.4e-18（ブラウザと Node の Math 実装差による最下位ビット）。計画書 §8.3 B18-01 に明記
 - スロットのファイル参照は UI 側で書き込まず、`MediaManager.loadFile` がスロットに `file` を持つよう変更
 - 検証: macOS（Chrome 154 / Node 26）で `node tests/run.mjs` 119 PASS / 0 FAIL / 1 SKIP。`index.html` を `file://` で開きコンソールエラー 0
+- CI（44.1kHz の Chrome）で B18-01c が失敗（デコード時に端末レートへリサンプルされ 48kHz の参照と不一致）。アーキテクト判断で SongMapService のデコードを `SONG_CONST.DECODE_SAMPLE_RATE = 48000` の AudioContext で行うよう変更（端末に依らず同じソングマップになる）。計画書 §4.1・§5 に反映
 
 ---
 
