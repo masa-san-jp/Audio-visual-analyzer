@@ -64,6 +64,7 @@ test('U18-13 同じ入力の深い一致・seedOffset 0〜9 によるシーン�
     for (let seedOffset = 0; seedOffset <= 9; seedOffset++) {
       const opts = { ...options, intensity, seedOffset };
       const first = compileDirectorTimeline(map, opts);
+      assert.equal(first.intensity, intensity);
       assert.deepEqual(first, compileDirectorTimeline(map, opts));
       assert.deepEqual(opts, { ...options, intensity, seedOffset });
       assert.equal(first.seed, fnv1a32(`120.000|127.75|6|${seedOffset}`));
