@@ -13,13 +13,12 @@ void main(){
  // 星雲は遠景だけに置き、dropの焦点面を霞で覆わない。
  float quiet=worldKind(0.)+worldKind(3.)*.2;
  if(quiet>.001){
-  for(int i=0;i<3;i++){
-   float depth=3.+float(i)*4.;
+  for(int i=0;i<2;i++){
+   float depth=3.+float(i)*5.;
    vec2 q=worldPosition(vUv)+eye.xy/depth;
    q*=1.+float(i)*.45;
    float cloud=worldNebula(q,depth);
    // 最近の雲だけに細部を加える。全画面のぼかし・同心円・波紋は使わない。
-   if(i==0)cloud+=exp(-abs(noise3(vec3(q*43.,depth+sin(clock.x)))-.5)*65.)*cloud*.7;
    mist+=worldColor(float(i%2))*cloud*exp(-depth*.12);
   }
  }

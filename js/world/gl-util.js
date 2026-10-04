@@ -102,13 +102,18 @@ vec2 worldFlow(vec2 p){
  return mix(f,flowFor(p,3.,2.),transition.y)*(1.+audio.x*.35+environment.z*.25);
 }
 // 角度の反復や水平な正弦波の列を使わず、雲の密度境界に細い筋を置く。
+// 回転させながら重ねる fbm（格子方向の癖を消す）
+float worldFbm(vec3 p){float a=.5,s=0.;mat2 R=mat2(.8,.6,-.6,.8);
+ for(int i=0;i<3;i++){s+=a*noise3(p);p.xy=R*p.xy*2.03;p.z+=1.7;a*=.5;}return s*1.14;}
+// 星雲: ドメインワープした fbm の柔らかい雲と、流れに沿う細い筋。
+// 値ノイズの等高線（網目・水面の揺らぎに見える）は使わない。周期写像で継ぎ目なし
 float worldNebula(vec2 p,float depth){
  float t=clock.x;vec2 drift=vec2(sin(t),cos(t))*.12;
  vec2 q=sin(p/worldExtent()*6.283185)*worldExtent()*.5;
- float cloud=noise3(vec3(q*2.7+drift,depth+sin(t)*.25));
- float detail=noise3(vec3(q*17.+vec2(cloud*2.),depth*3.+cos(t)*.2));
- float ridge=exp(-abs(detail-.5)*45.);
- return smoothstep(.35,.72,cloud)*(.008+ridge*.14);
+ vec2 w=vec2(worldFbm(vec3(q*1.6,depth)),worldFbm(vec3(q*1.6+5.2,depth+3.)));
+ float n=worldFbm(vec3(q*2.2+w*1.8+drift,depth+t*.05));
+ float wisp=pow(worldFbm(vec3(q*6.+w*3.,depth*2.+t*.03)),3.);
+ return smoothstep(.42,.85,n)*(.03+wisp*.25);
 }
 float filamentFor(vec2 p,float id,float a){
  float t=worldSlowPhase();
@@ -127,8 +132,11 @@ float filamentFor(vec2 p,float id,float a){
 }
 float worldFilament(vec2 p){
  p=worldDomainPosition(fract(worldUv(p)));
- float f=mix(filamentFor(p,oldComposition.x,oldComposition.w),filamentFor(p,composition.x,composition.w),transition.x);
- return mix(f,filamentFor(p,3.,0.),transition.y);
+ // 遷移中だけ両方を評価する（常時3回の評価が GPU 時間の大半を占めていた）
+ float f=filamentFor(p,composition.x,composition.w);
+ if(transition.x<.999)f=mix(filamentFor(p,oldComposition.x,oldComposition.w),f,transition.x);
+ if(transition.y>.001)f=mix(f,filamentFor(p,3.,0.),transition.y);
+ return f;
 }
 vec2 emitterWorld(int i){
  vec2 p=emitters[i].xy;
