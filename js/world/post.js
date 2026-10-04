@@ -43,7 +43,7 @@ void main(){
   q=mix(q,vec2(cos(folded),sin(folded))*length(q),hit.w*.8);
  }
  vec2 uv=q/vec2(screen.x/screen.y,1.)+.5;
- uv+=texture(flow,vUv).xy*dt*.0002;
+ uv+=texture(flow,worldUv(worldPosition(vUv))).xy*dt*.0002;
  uv+=vec2(sin(q.y*9.+clock.x),cos(q.x*7.-clock.x))*dt*.006;
  // 画面外へ出た残像は硬く切らず、端で滑らかに消す（縦の境目を出さない）
  float valid=smoothstep(0.,.06,uv.x)*smoothstep(1.,.94,uv.x)*smoothstep(0.,.06,uv.y)*smoothstep(1.,.94,uv.y);

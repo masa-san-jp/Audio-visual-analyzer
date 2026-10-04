@@ -8,7 +8,7 @@ void main(){
  vec2 dx=1./vec2(textureSize(field,0)), uv=vUv;
  vec4 c=texture(field,uv),l=texture(field,uv-vec2(dx.x,0)),r=texture(field,uv+vec2(dx.x,0));
  vec4 b=texture(field,uv-vec2(0,dx.y)),t=texture(field,uv+vec2(0,dx.y));
- vec2 q=(uv-.5)*vec2(screen.x/screen.y,1.);
+ vec2 q=worldDomainPosition(uv);
  if(mode==0){ // 半ラグランジュ移流。速度は格子セル/秒。
    frag=texture(field,clamp(uv-clock.y*texture(velocity,uv).xy*dx,dx*.5,1.-dx*.5));
    frag.xy*=exp(-clock.y*(.12+story.w*1.8));
@@ -17,7 +17,7 @@ void main(){
    vec2 d=q-shot.yz;float distance=max(.002,length(d));
    vec2 desired=worldFlow(q)*(story.x==2.?1.6:story.x==0.?.12:story.x==3.?.18:story.x==4.?.08:.65);
    // 速度格子のセル/秒へ変換。投影後も渦ペア間の剪断を維持する。
-   vec2 cells=vec2(textureSize(velocity,0))/vec2(screen.x/screen.y,1.);
+   vec2 cells=vec2(textureSize(velocity,0))/worldExtent();
    v+=clock.y*(desired*cells-v)*(story.x==2.?5.:1.4);
    if(story.x==2.)v+=clock.y*d/distance*(worldShock(q)*180.+hit.x*100.*exp(-distance*12.));
    if(uv.x<dx.x||uv.x>1.-dx.x) v.x=0.; if(uv.y<dx.y||uv.y>1.-dx.y) v.y=0.;
@@ -67,8 +67,8 @@ class WorldFluid {
       g.releaseTarget(this.dye.read); g.releaseTarget(this.dye.write);
       g.releaseTarget(this.curl); g.releaseTarget(this.divergence); g.releaseTarget(this.base);
     }
-    const fw = Math.max(2, Math.ceil(w / 4)), fh = Math.max(2, Math.ceil(h / 4));
-    const dw = Math.max(2, Math.ceil(w / 2)), dh = Math.max(2, Math.ceil(h / 2)); // 染料は画面の1/2（細部を保つ）
+    const fw = Math.max(2, Math.ceil(w * OVERSCAN / 4)), fh = Math.max(2, Math.ceil(h * OVERSCAN / 4));
+    const dw = Math.max(2, Math.ceil(w * OVERSCAN / 2)), dh = Math.max(2, Math.ceil(h * OVERSCAN / 2)); // 染料は画面の1/2×オーバースキャン（世界単位の細部を保つ）
     this.velocity = g.pair(fw, fh); this.pressure = g.pair(fw, fh); this.dye = g.pair(dw, dh);
     this.curl = g.target(fw, fh); this.divergence = g.target(fw, fh); this.base = g.target(fw, fh);
   }

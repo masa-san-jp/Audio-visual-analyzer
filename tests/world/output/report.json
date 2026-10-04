@@ -4,13 +4,13 @@
     "shells": [
       {
         "tSec": 30.60644166470972,
-        "maximumAliveDifference": 1.79638671875,
+        "maximumAliveDifference": 3.8291015625,
         "expiredDifference": 0,
         "pass": true
       },
       {
         "tSec": 75.6043281617743,
-        "maximumAliveDifference": 2.291015625,
+        "maximumAliveDifference": 5.025390625,
         "expiredDifference": 0,
         "pass": true
       }
@@ -18,29 +18,25 @@
   },
   "BW-4-intro": {
     "pass": true,
-    "revealedPixels": 95397,
-    "fogGain": 31.929661536517997
+    "revealedPixels": 1654602,
+    "fogGain": 1323.7097059012244
   },
   "BW-5-light": {
-    "pass": false,
+    "pass": true,
     "samples": [
       {
         "tSec": 45.00573716373124,
         "keyRole": "accent",
-        "trailPixels": 0,
-        "trailEnergy": 9542.1225871774,
-        "flareEnergy": 57156.7467148304,
+        "flareEnergy": 34749.61234974861,
         "flaredClippedFraction": 0,
-        "pass": false
+        "pass": true
       },
       {
         "tSec": 90.00362366079582,
         "keyRole": "secondary",
-        "trailPixels": 0,
-        "trailEnergy": 32210.29751125976,
-        "flareEnergy": 157674.41839116812,
+        "flareEnergy": 133099.44447422028,
         "flaredClippedFraction": 0,
-        "pass": false
+        "pass": true
       }
     ]
   },
@@ -97,621 +93,663 @@
     ],
     "raymarchSteps": 0
   },
-  "BW-4-sparks": {
-    "pass": false,
-    "maximum": 0.4477242476851852,
+  "BW-7-composition": {
+    "pass": true,
+    "repeatPass": true,
     "sections": [
       {
-        "sectionIndex": 0,
         "kind": "intro",
-        "visiblePixels": 6376,
-        "fraction": 0.0030748456790123456,
-        "peakHdrContribution": 0.0020057744979858397,
-        "meanHdrContribution": 0.0000015659525075432997,
-        "particleEnergyFraction": 0.12736615150098818
+        "variation": 1,
+        "composition": "horizon",
+        "tiles": [
+          0.8302039930555556,
+          0.7940538194444444,
+          0.7997873263888889,
+          0.8783072916666667,
+          0.8956553819444445,
+          0.8479600694444445,
+          0.7744661458333333,
+          0.8556901041666667,
+          0.8523871527777778
+        ],
+        "occupied": 9,
+        "camera": [
+          -0.07858802378177643,
+          -0.07122303545475006,
+          1.0800000429153442,
+          0.08500000089406967
+        ]
       },
       {
-        "sectionIndex": 1,
         "kind": "build",
-        "visiblePixels": 4807,
-        "fraction": 0.002318190586419753,
-        "peakHdrContribution": 3.7647820312499998,
-        "meanHdrContribution": 0.0012552475408221038,
-        "particleEnergyFraction": 0.9010880312140253
+        "variation": 1,
+        "composition": "arms",
+        "tiles": [
+          0.9525694444444445,
+          0.9846831597222222,
+          0.9699088541666666,
+          0.9659635416666666,
+          1,
+          0.9684982638888889,
+          0.9159331597222222,
+          0.9644053819444445,
+          0.9651345486111111
+        ],
+        "occupied": 9,
+        "camera": [
+          -0.06223955750465393,
+          -0.09769626706838608,
+          1.274999976158142,
+          0.23000000417232513
+        ]
       },
       {
-        "sectionIndex": 2,
         "kind": "drop",
-        "visiblePixels": 676892,
-        "fraction": 0.3264332561728395,
-        "peakHdrContribution": 0.743432174396515,
-        "meanHdrContribution": 0.007283303878523478,
-        "particleEnergyFraction": 0.8303786243204515
+        "variation": 1,
+        "composition": "vortices",
+        "tiles": [
+          0.08400173611111111,
+          0.7434982638888888,
+          0.13305555555555557,
+          0.3090190972222222,
+          0.9437152777777778,
+          0.8272092013888889,
+          0.35141927083333335,
+          0.9761545138888889,
+          0.8355772569444444
+        ],
+        "occupied": 9,
+        "camera": [
+          -0.08425857126712799,
+          0,
+          1.0544731616973877,
+          -0.29309794306755066
+        ]
       },
       {
-        "sectionIndex": 3,
         "kind": "break",
-        "visiblePixels": 105234,
-        "fraction": 0.050749421296296296,
-        "peakHdrContribution": 0.03691744681596756,
-        "meanHdrContribution": 0.00009038912057746462,
-        "particleEnergyFraction": 0.36581599857440467
+        "variation": 1,
+        "composition": "ribbons",
+        "tiles": [
+          0.40331163194444447,
+          0.39991319444444445,
+          0.5939800347222223,
+          0.5355078125,
+          0.6180685763888889,
+          0.588203125,
+          0.6199956597222223,
+          0.5847092013888889,
+          0.3559071180555556
+        ],
+        "occupied": 9,
+        "camera": [
+          0.047338105738162994,
+          0.03163166716694832,
+          1.0800000429153442,
+          -0.12999999523162842
+        ]
       },
       {
-        "sectionIndex": 4,
         "kind": "drop",
-        "visiblePixels": 928401,
-        "fraction": 0.4477242476851852,
-        "peakHdrContribution": 1.210447488117218,
-        "meanHdrContribution": 0.027956905211400068,
-        "particleEnergyFraction": 0.9259219024119171
+        "variation": 2,
+        "composition": "ribbons",
+        "tiles": [
+          0.9860763888888889,
+          0.9982769097222223,
+          1,
+          0.7399739583333333,
+          0.9992534722222223,
+          1,
+          0.9503515625,
+          1,
+          1
+        ],
+        "occupied": 9,
+        "camera": [
+          -0.07505480945110321,
+          -1.8372553478585019e-9,
+          1.2144731283187866,
+          0.46778494119644165
+        ]
       },
       {
-        "sectionIndex": 5,
         "kind": "outro",
-        "visiblePixels": 90098,
-        "fraction": 0.043450038580246916,
-        "peakHdrContribution": 0.07221542358398438,
-        "meanHdrContribution": 0.0001264003303358227,
-        "particleEnergyFraction": 0.9999989141346903
-      },
-      {
-        "tSec": 7,
-        "kind": "intro",
-        "visiblePixels": 6553,
-        "fraction": 0.003160204475308642,
-        "peakHdrContribution": 0.00212325439453125,
-        "meanHdrContribution": 0.0000014664559147182825,
-        "particleEnergyFraction": 0.13257915150679536
-      },
-      {
-        "tSec": 20,
-        "kind": "build",
-        "visiblePixels": 15321,
-        "fraction": 0.007388599537037037,
-        "peakHdrContribution": 1.0255617401003838,
-        "meanHdrContribution": 0.0013221864941175214,
-        "particleEnergyFraction": 0.8953802857368657
-      },
-      {
-        "tSec": 30.3,
-        "kind": "drop",
-        "visiblePixels": 595860,
-        "fraction": 0.28735532407407405,
-        "peakHdrContribution": 3.0293422088623045,
-        "meanHdrContribution": 0.02334291051646638,
-        "particleEnergyFraction": 0.46749316507553185
-      },
-      {
-        "tSec": 45,
-        "kind": "drop",
-        "visiblePixels": 676892,
-        "fraction": 0.3264332561728395,
-        "peakHdrContribution": 0.743432174396515,
-        "meanHdrContribution": 0.007283303878523478,
-        "particleEnergyFraction": 0.8303786243204515
-      },
-      {
-        "tSec": 62,
-        "kind": "break",
-        "visiblePixels": 104920,
-        "fraction": 0.050597993827160494,
-        "peakHdrContribution": 0.04462087368965149,
-        "meanHdrContribution": 0.00009001878968666814,
-        "particleEnergyFraction": 0.2771278758706388
-      },
-      {
-        "tSec": 90,
-        "kind": "drop",
-        "visiblePixels": 928401,
-        "fraction": 0.4477242476851852,
-        "peakHdrContribution": 1.210447488117218,
-        "meanHdrContribution": 0.027956905211400068,
-        "particleEnergyFraction": 0.9259219024119171
+        "variation": 1,
+        "composition": "streams",
+        "tiles": [
+          0.019071180555555556,
+          0.025590277777777778,
+          0.026571180555555556,
+          0.014153645833333334,
+          0.0237890625,
+          0.0265625,
+          0.01631076388888889,
+          0.018355034722222222,
+          0.021575520833333334
+        ],
+        "occupied": 9,
+        "camera": [
+          0.07009819895029068,
+          -0.031086137518286705,
+          1.0800000429153442,
+          0.23000000417232513
+        ]
       }
     ]
   },
-  "BW-4-accent": {
-    "pass": false,
-    "maximum": 0.3141531635802469,
-    "frames": [
+  "BW-7-camera": {
+    "pass": true,
+    "sections": [
       {
-        "tSec": 7.503573082844096,
         "kind": "intro",
-        "fraction": 0
+        "changedFraction": 0.9043696952160494,
+        "meanChannelDifference": 0.09386162425361091
       },
       {
-        "tSec": 22.506793915198955,
         "kind": "build",
-        "fraction": 0.000008198302469135803
+        "changedFraction": 0.7436231674382716,
+        "meanChannelDifference": 0.023136940334261277
       },
+      {
+        "kind": "drop",
+        "changedFraction": 0.7368161651234568,
+        "meanChannelDifference": 0.06431486209452918
+      },
+      {
+        "kind": "break",
+        "changedFraction": 0.600853587962963,
+        "meanChannelDifference": 0.0172494868575002
+      },
+      {
+        "kind": "drop",
+        "changedFraction": 0.9948717206790123,
+        "meanChannelDifference": 0.19329380812252886
+      },
+      {
+        "kind": "outro",
+        "changedFraction": 0.06495949074074074,
+        "meanChannelDifference": 0.0012251958010570483
+      }
+    ]
+  },
+  "BW-7-motion": {
+    "pass": true,
+    "drops": [
       {
         "tSec": 45.00573716373124,
-        "kind": "drop",
-        "fraction": 0.012505304783950618
-      },
-      {
-        "tSec": 67.50468041226354,
-        "kind": "break",
-        "fraction": 0.0009399112654320988
+        "meanParticleSpeed": 0.13783328065410944,
+        "kickCountBefore": 32,
+        "kickCountAfter": 32,
+        "changedFraction": 0.5105044367283951,
+        "meanChannelDifference": 0.04325942631424998,
+        "pass": true
       },
       {
         "tSec": 90.00362366079582,
-        "kind": "drop",
-        "fraction": 0.15063994984567902
+        "meanParticleSpeed": 0.834048571192053,
+        "kickCountBefore": 33,
+        "kickCountAfter": 33,
+        "changedFraction": 0.9594897762345679,
+        "meanChannelDifference": 0.1547175257705963,
+        "pass": true
+      }
+    ]
+  },
+  "BW-7-intro": {
+    "pass": false,
+    "sections": [
+      {
+        "tSec": 7.503573082844096,
+        "variation": 1,
+        "mean": 0.12657710811910142
+      }
+    ]
+  },
+  "BW-8-edges": {
+    "pass": false,
+    "frames": [
+      {
+        "sectionIndex": 0,
+        "tSec": 7.503573082844096,
+        "kind": "intro",
+        "cameraMargin": 0.09840722195278645,
+        "pass": false,
+        "outerMean": 0.051494249651014,
+        "innerMean": 0.11218239828604443,
+        "ratio": 0.4590225421969778,
+        "outerPixels": 318196,
+        "innerPixels": 291708,
+        "sides": [
+          {
+            "side": "left",
+            "outerMean": 0.042208427081268055,
+            "innerMean": 0.09671927673559884
+          },
+          {
+            "side": "right",
+            "outerMean": 0.056750370823070335,
+            "innerMean": 0.13184590668588383
+          },
+          {
+            "side": "bottom",
+            "outerMean": 0.046936971956222255,
+            "innerMean": 0.058370814095982056
+          },
+          {
+            "side": "top",
+            "outerMean": 0.06366407685438266,
+            "innerMean": 0.13496080371256677
+          }
+        ]
       },
       {
+        "sectionIndex": 1,
+        "tSec": 22.506793915198955,
+        "kind": "build",
+        "cameraMargin": 0.07435678869013773,
+        "pass": false,
+        "outerMean": 0.02401025673898678,
+        "innerMean": 0.06869117643828258,
+        "ratio": 0.349539169132726,
+        "outerPixels": 318196,
+        "innerPixels": 291708,
+        "sides": [
+          {
+            "side": "left",
+            "outerMean": 0.01936448028369126,
+            "innerMean": 0.07199302124887415
+          },
+          {
+            "side": "right",
+            "outerMean": 0.010800824142449301,
+            "innerMean": 0.023656005008062832
+          },
+          {
+            "side": "bottom",
+            "outerMean": 0.04734476202690345,
+            "innerMean": 0.09943955791156554
+          },
+          {
+            "side": "top",
+            "outerMean": 0.015955841170773772,
+            "innerMean": 0.05964071604726034
+          }
+        ]
+      },
+      {
+        "sectionIndex": 2,
+        "tSec": 45.00573716373124,
+        "kind": "drop",
+        "cameraMargin": 0.03500066313603156,
+        "pass": true,
+        "outerMean": 0.016244141433098873,
+        "innerMean": 0.023527492698159506,
+        "ratio": 0.6904323227935635,
+        "outerPixels": 318196,
+        "innerPixels": 291708,
+        "sides": [
+          {
+            "side": "left",
+            "outerMean": 0.0005551789604732636,
+            "innerMean": 0.003542689368003041
+          },
+          {
+            "side": "right",
+            "outerMean": 0.017298320817886924,
+            "innerMean": 0.01739522452347518
+          },
+          {
+            "side": "bottom",
+            "outerMean": 0.01104234633872326,
+            "innerMean": 0.019501989578572965
+          },
+          {
+            "side": "top",
+            "outerMean": 0.03428024797650586,
+            "innerMean": 0.04578892570108421
+          }
+        ]
+      },
+      {
+        "sectionIndex": 3,
+        "tSec": 67.50468041226354,
+        "kind": "break",
+        "cameraMargin": 0.10174477270378968,
+        "pass": true,
+        "outerMean": 0.003956387408521084,
+        "innerMean": 0.009513763032429573,
+        "ratio": 0.41585936027993786,
+        "outerPixels": 318196,
+        "innerPixels": 291708,
+        "sides": [
+          {
+            "side": "left",
+            "outerMean": 0.0028767594714658165,
+            "innerMean": 0.006471691141101795
+          },
+          {
+            "side": "right",
+            "outerMean": 0.0042205395976570095,
+            "innerMean": 0.010664720840522208
+          },
+          {
+            "side": "bottom",
+            "outerMean": 0.004532434735521584,
+            "innerMean": 0.009650403176774115
+          },
+          {
+            "side": "top",
+            "outerMean": 0.004578191157469719,
+            "innerMean": 0.008352847877714497
+          }
+        ]
+      },
+      {
+        "sectionIndex": 4,
+        "tSec": 90.00362366079582,
+        "kind": "drop",
+        "cameraMargin": 0.03500066666666668,
+        "pass": true,
+        "outerMean": 0.2342700821345332,
+        "innerMean": 0.22738286920273967,
+        "ratio": 1.0302890580805044,
+        "outerPixels": 318196,
+        "innerPixels": 291708,
+        "sides": [
+          {
+            "side": "left",
+            "outerMean": 0.16217725498695204,
+            "innerMean": 0.16340533285236905
+          },
+          {
+            "side": "right",
+            "outerMean": 0.2551982414056607,
+            "innerMean": 0.2507335964877653
+          },
+          {
+            "side": "bottom",
+            "outerMean": 0.2637493120345015,
+            "innerMean": 0.24115076482938044
+          },
+          {
+            "side": "top",
+            "outerMean": 0.2462825118274071,
+            "innerMean": 0.2461959686787568
+          }
+        ]
+      },
+      {
+        "sectionIndex": 5,
         "tSec": 112.50145957990867,
         "kind": "outro",
-        "fraction": 0.001281346450617284
+        "cameraMargin": 0.053671055958472824,
+        "pass": true,
+        "outerMean": 0.0003872530187953967,
+        "innerMean": 0.0003713329445480299,
+        "ratio": 1.0428727762540542,
+        "outerPixels": 318196,
+        "innerPixels": 291708,
+        "sides": [
+          {
+            "side": "left",
+            "outerMean": 0.00020394769355554037,
+            "innerMean": 0.00022648097218685406
+          },
+          {
+            "side": "right",
+            "outerMean": 0.0006020965396259471,
+            "innerMean": 0.0006233637684029585
+          },
+          {
+            "side": "bottom",
+            "outerMean": 0.00024620975832193183,
+            "innerMean": 0.00039461398958805883
+          },
+          {
+            "side": "top",
+            "outerMean": 0.0004975990367076957,
+            "innerMean": 0.0007986968004255958
+          }
+        ]
       },
       {
         "tSec": 7,
         "kind": "reference",
-        "fraction": 0
+        "cameraMargin": 0.10257588215767904,
+        "pass": false,
+        "outerMean": 0.05318577993485457,
+        "innerMean": 0.11453806543317074,
+        "ratio": 0.4643502553820132,
+        "outerPixels": 318196,
+        "innerPixels": 291708,
+        "sides": [
+          {
+            "side": "left",
+            "outerMean": 0.044085850295673384,
+            "innerMean": 0.10142129816370007
+          },
+          {
+            "side": "right",
+            "outerMean": 0.05840122772071167,
+            "innerMean": 0.13667612456966993
+          },
+          {
+            "side": "bottom",
+            "outerMean": 0.04565613643790715,
+            "innerMean": 0.05962327194481873
+          },
+          {
+            "side": "top",
+            "outerMean": 0.06756583044535078,
+            "innerMean": 0.1364981160225625
+          }
+        ]
       },
       {
         "tSec": 20,
         "kind": "reference",
-        "fraction": 0.000009162808641975309
+        "cameraMargin": 0.06648110592969814,
+        "pass": false,
+        "outerMean": 0.02501638222238434,
+        "innerMean": 0.07388150343737054,
+        "ratio": 0.3386014233398859,
+        "outerPixels": 318196,
+        "innerPixels": 291708,
+        "sides": [
+          {
+            "side": "left",
+            "outerMean": 0.022212356157277003,
+            "innerMean": 0.11473338707335404
+          },
+          {
+            "side": "right",
+            "outerMean": 0.00930036513595547,
+            "innerMean": 0.023515235954311396
+          },
+          {
+            "side": "bottom",
+            "outerMean": 0.03732115868673044,
+            "innerMean": 0.06028652682779124
+          },
+          {
+            "side": "top",
+            "outerMean": 0.02894611470208461,
+            "innerMean": 0.07204959325125466
+          }
+        ]
       },
       {
         "tSec": 30.3,
         "kind": "reference",
-        "fraction": 0.27253809799382717
+        "cameraMargin": 0.03500066534557722,
+        "pass": true,
+        "outerMean": 0.07697701980699595,
+        "innerMean": 0.10515040127964952,
+        "ratio": 0.7320658682250207,
+        "outerPixels": 318196,
+        "innerPixels": 291708,
+        "sides": [
+          {
+            "side": "left",
+            "outerMean": 0.017042260164671974,
+            "innerMean": 0.021852805194805553
+          },
+          {
+            "side": "right",
+            "outerMean": 0.16538856258193047,
+            "innerMean": 0.21602958629242044
+          },
+          {
+            "side": "bottom",
+            "outerMean": 0.06743041915565295,
+            "innerMean": 0.08472091426317553
+          },
+          {
+            "side": "top",
+            "outerMean": 0.049485050824592876,
+            "innerMean": 0.06805124659902836
+          }
+        ]
       },
       {
         "tSec": 45,
         "kind": "reference",
-        "fraction": 0.012505304783950618
+        "cameraMargin": 0.03500066516222161,
+        "pass": true,
+        "outerMean": 0.016298355244834688,
+        "innerMean": 0.02351077897933722,
+        "ratio": 0.6932290614087576,
+        "outerPixels": 318196,
+        "innerPixels": 291708,
+        "sides": [
+          {
+            "side": "left",
+            "outerMean": 0.0005629888426753003,
+            "innerMean": 0.0035886534438690013
+          },
+          {
+            "side": "right",
+            "outerMean": 0.01744725184619009,
+            "innerMean": 0.017299256929703324
+          },
+          {
+            "side": "bottom",
+            "outerMean": 0.011236970151232588,
+            "innerMean": 0.01946010290316639
+          },
+          {
+            "side": "top",
+            "outerMean": 0.03408157401389778,
+            "innerMean": 0.045912287914186625
+          }
+        ]
       },
       {
         "tSec": 62,
         "kind": "reference",
-        "fraction": 0.0007600308641975309
+        "cameraMargin": 0.06756336808756447,
+        "pass": true,
+        "outerMean": 0.0027950144700531697,
+        "innerMean": 0.008529637257451313,
+        "ratio": 0.3276826886877872,
+        "outerPixels": 318196,
+        "innerPixels": 291708,
+        "sides": [
+          {
+            "side": "left",
+            "outerMean": 0.0015675467655068736,
+            "innerMean": 0.005925210282092923
+          },
+          {
+            "side": "right",
+            "outerMean": 0.0028919181544674777,
+            "innerMean": 0.0068743384640027215
+          },
+          {
+            "side": "bottom",
+            "outerMean": 0.002897917008663873,
+            "innerMean": 0.0051806469923233265
+          },
+          {
+            "side": "top",
+            "outerMean": 0.003606273569311274,
+            "innerMean": 0.013609250835986925
+          }
+        ]
       },
       {
         "tSec": 90,
         "kind": "reference",
-        "fraction": 0.15063994984567902
-      },
-      {
-        "tSec": 29.55,
-        "kind": "drop-window",
-        "fraction": 0
-      },
-      {
-        "tSec": 29.566666666666666,
-        "kind": "drop-window",
-        "fraction": 0
-      },
-      {
-        "tSec": 29.583333333333332,
-        "kind": "drop-window",
-        "fraction": 0
-      },
-      {
-        "tSec": 29.6,
-        "kind": "drop-window",
-        "fraction": 0
-      },
-      {
-        "tSec": 29.616666666666667,
-        "kind": "drop-window",
-        "fraction": 0
-      },
-      {
-        "tSec": 29.633333333333333,
-        "kind": "drop-window",
-        "fraction": 0
-      },
-      {
-        "tSec": 29.65,
-        "kind": "drop-window",
-        "fraction": 0
-      },
-      {
-        "tSec": 29.666666666666668,
-        "kind": "drop-window",
-        "fraction": 0
-      },
-      {
-        "tSec": 29.683333333333334,
-        "kind": "drop-window",
-        "fraction": 0
-      },
-      {
-        "tSec": 29.7,
-        "kind": "drop-window",
-        "fraction": 0
-      },
-      {
-        "tSec": 29.716666666666665,
-        "kind": "drop-window",
-        "fraction": 0
-      },
-      {
-        "tSec": 29.733333333333334,
-        "kind": "drop-window",
-        "fraction": 0
-      },
-      {
-        "tSec": 29.75,
-        "kind": "drop-window",
-        "fraction": 0
-      },
-      {
-        "tSec": 29.766666666666666,
-        "kind": "drop-window",
-        "fraction": 0
-      },
-      {
-        "tSec": 29.783333333333335,
-        "kind": "drop-window",
-        "fraction": 0
-      },
-      {
-        "tSec": 29.8,
-        "kind": "drop-window",
-        "fraction": 0
-      },
-      {
-        "tSec": 29.816666666666666,
-        "kind": "drop-window",
-        "fraction": 0
-      },
-      {
-        "tSec": 29.833333333333332,
-        "kind": "drop-window",
-        "fraction": 0
-      },
-      {
-        "tSec": 29.85,
-        "kind": "drop-window",
-        "fraction": 0
-      },
-      {
-        "tSec": 29.866666666666667,
-        "kind": "drop-window",
-        "fraction": 0
-      },
-      {
-        "tSec": 29.883333333333333,
-        "kind": "drop-window",
-        "fraction": 0
-      },
-      {
-        "tSec": 29.9,
-        "kind": "drop-window",
-        "fraction": 0
-      },
-      {
-        "tSec": 29.916666666666668,
-        "kind": "drop-window",
-        "fraction": 0
-      },
-      {
-        "tSec": 29.933333333333334,
-        "kind": "drop-window",
-        "fraction": 0
-      },
-      {
-        "tSec": 29.95,
-        "kind": "drop-window",
-        "fraction": 0
-      },
-      {
-        "tSec": 29.966666666666665,
-        "kind": "drop-window",
-        "fraction": 0
-      },
-      {
-        "tSec": 29.983333333333334,
-        "kind": "drop-window",
-        "fraction": 0
-      },
-      {
-        "tSec": 30,
-        "kind": "drop-window",
-        "fraction": 0
-      },
-      {
-        "tSec": 30.016666666666666,
-        "kind": "drop-window",
-        "fraction": 0.030698784722222223
-      },
-      {
-        "tSec": 30.033333333333335,
-        "kind": "drop-window",
-        "fraction": 0.04238233024691358
-      },
-      {
-        "tSec": 30.05,
-        "kind": "drop-window",
-        "fraction": 0.050220871913580246
-      },
-      {
-        "tSec": 30.066666666666666,
-        "kind": "drop-window",
-        "fraction": 0.05918981481481481
-      },
-      {
-        "tSec": 30.083333333333332,
-        "kind": "drop-window",
-        "fraction": 0.06966628086419753
-      },
-      {
-        "tSec": 30.1,
-        "kind": "drop-window",
-        "fraction": 0.08071566358024691
-      },
-      {
-        "tSec": 30.116666666666667,
-        "kind": "drop-window",
-        "fraction": 0.09307581018518518
-      },
-      {
-        "tSec": 30.133333333333333,
-        "kind": "drop-window",
-        "fraction": 0.10658661265432098
-      },
-      {
-        "tSec": 30.15,
-        "kind": "drop-window",
-        "fraction": 0.12099488811728396
-      },
-      {
-        "tSec": 30.166666666666668,
-        "kind": "drop-window",
-        "fraction": 0.1369892939814815
-      },
-      {
-        "tSec": 30.183333333333334,
-        "kind": "drop-window",
-        "fraction": 0.1525636574074074
-      },
-      {
-        "tSec": 30.2,
-        "kind": "drop-window",
-        "fraction": 0.16864776234567902
-      },
-      {
-        "tSec": 30.216666666666665,
-        "kind": "drop-window",
-        "fraction": 0.18543547453703704
-      },
-      {
-        "tSec": 30.233333333333334,
-        "kind": "drop-window",
-        "fraction": 0.20215952932098766
-      },
-      {
-        "tSec": 30.25,
-        "kind": "drop-window",
-        "fraction": 0.21937885802469137
-      },
-      {
-        "tSec": 74.55,
-        "kind": "drop-window",
-        "fraction": 0
-      },
-      {
-        "tSec": 74.56666666666666,
-        "kind": "drop-window",
-        "fraction": 0
-      },
-      {
-        "tSec": 74.58333333333333,
-        "kind": "drop-window",
-        "fraction": 0
-      },
-      {
-        "tSec": 74.6,
-        "kind": "drop-window",
-        "fraction": 0
-      },
-      {
-        "tSec": 74.61666666666666,
-        "kind": "drop-window",
-        "fraction": 0
-      },
-      {
-        "tSec": 74.63333333333334,
-        "kind": "drop-window",
-        "fraction": 0
-      },
-      {
-        "tSec": 74.65,
-        "kind": "drop-window",
-        "fraction": 0
-      },
-      {
-        "tSec": 74.66666666666667,
-        "kind": "drop-window",
-        "fraction": 0
-      },
-      {
-        "tSec": 74.68333333333334,
-        "kind": "drop-window",
-        "fraction": 0
-      },
-      {
-        "tSec": 74.7,
-        "kind": "drop-window",
-        "fraction": 0
-      },
-      {
-        "tSec": 74.71666666666667,
-        "kind": "drop-window",
-        "fraction": 0
-      },
-      {
-        "tSec": 74.73333333333333,
-        "kind": "drop-window",
-        "fraction": 0
-      },
-      {
-        "tSec": 74.75,
-        "kind": "drop-window",
-        "fraction": 0
-      },
-      {
-        "tSec": 74.76666666666667,
-        "kind": "drop-window",
-        "fraction": 0
-      },
-      {
-        "tSec": 74.78333333333333,
-        "kind": "drop-window",
-        "fraction": 0
-      },
-      {
-        "tSec": 74.8,
-        "kind": "drop-window",
-        "fraction": 0
-      },
-      {
-        "tSec": 74.81666666666666,
-        "kind": "drop-window",
-        "fraction": 0
-      },
-      {
-        "tSec": 74.83333333333333,
-        "kind": "drop-window",
-        "fraction": 0
-      },
-      {
-        "tSec": 74.85,
-        "kind": "drop-window",
-        "fraction": 0
-      },
-      {
-        "tSec": 74.86666666666666,
-        "kind": "drop-window",
-        "fraction": 0
-      },
-      {
-        "tSec": 74.88333333333334,
-        "kind": "drop-window",
-        "fraction": 0
-      },
-      {
-        "tSec": 74.9,
-        "kind": "drop-window",
-        "fraction": 0
-      },
-      {
-        "tSec": 74.91666666666667,
-        "kind": "drop-window",
-        "fraction": 0
-      },
-      {
-        "tSec": 74.93333333333334,
-        "kind": "drop-window",
-        "fraction": 0
-      },
-      {
-        "tSec": 74.95,
-        "kind": "drop-window",
-        "fraction": 0
-      },
-      {
-        "tSec": 74.96666666666667,
-        "kind": "drop-window",
-        "fraction": 0
-      },
-      {
-        "tSec": 74.98333333333333,
-        "kind": "drop-window",
-        "fraction": 0
-      },
-      {
-        "tSec": 75,
-        "kind": "drop-window",
-        "fraction": 0
-      },
-      {
-        "tSec": 75.01666666666667,
-        "kind": "drop-window",
-        "fraction": 0.09453800154320988
-      },
-      {
-        "tSec": 75.03333333333333,
-        "kind": "drop-window",
-        "fraction": 0.1104880401234568
-      },
-      {
-        "tSec": 75.05,
-        "kind": "drop-window",
-        "fraction": 0.12209008487654321
-      },
-      {
-        "tSec": 75.06666666666666,
-        "kind": "drop-window",
-        "fraction": 0.13361159336419753
-      },
-      {
-        "tSec": 75.08333333333333,
-        "kind": "drop-window",
-        "fraction": 0.1471484375
-      },
-      {
-        "tSec": 75.1,
-        "kind": "drop-window",
-        "fraction": 0.162007137345679
-      },
-      {
-        "tSec": 75.11666666666666,
-        "kind": "drop-window",
-        "fraction": 0.1788917824074074
-      },
-      {
-        "tSec": 75.13333333333334,
-        "kind": "drop-window",
-        "fraction": 0.19419367283950617
-      },
-      {
-        "tSec": 75.15,
-        "kind": "drop-window",
-        "fraction": 0.21065055941358024
-      },
-      {
-        "tSec": 75.16666666666667,
-        "kind": "drop-window",
-        "fraction": 0.22690393518518517
-      },
-      {
-        "tSec": 75.18333333333334,
-        "kind": "drop-window",
-        "fraction": 0.24347945601851853
-      },
-      {
-        "tSec": 75.2,
-        "kind": "drop-window",
-        "fraction": 0.26110243055555554
-      },
-      {
-        "tSec": 75.21666666666667,
-        "kind": "drop-window",
-        "fraction": 0.2783232060185185
-      },
-      {
-        "tSec": 75.23333333333333,
-        "kind": "drop-window",
-        "fraction": 0.2962191358024691
-      },
-      {
-        "tSec": 75.25,
-        "kind": "drop-window",
-        "fraction": 0.3141531635802469
+        "cameraMargin": 0.035000666093912,
+        "pass": true,
+        "outerMean": 0.21315735561188498,
+        "innerMean": 0.23117489980717756,
+        "ratio": 0.9220609840846866,
+        "outerPixels": 318196,
+        "innerPixels": 291708,
+        "sides": [
+          {
+            "side": "left",
+            "outerMean": 0.18673400494205689,
+            "innerMean": 0.2158817320638834
+          },
+          {
+            "side": "right",
+            "outerMean": 0.18058006768902896,
+            "innerMean": 0.19804022836204174
+          },
+          {
+            "side": "bottom",
+            "outerMean": 0.20936858471087139,
+            "innerMean": 0.2528157992951105
+          },
+          {
+            "side": "top",
+            "outerMean": 0.28382556838045714,
+            "innerMean": 0.26994410281767217
+          }
+        ]
+      },
+      {
+        "tSec": 112,
+        "kind": "reference",
+        "cameraMargin": 0.057427999165409804,
+        "pass": true,
+        "outerMean": 0.000478490061249713,
+        "innerMean": 0.0004432863914141489,
+        "ratio": 1.079415182864647,
+        "outerPixels": 318196,
+        "innerPixels": 291708,
+        "sides": [
+          {
+            "side": "left",
+            "outerMean": 0.00023947010723481107,
+            "innerMean": 0.0002765814446990854
+          },
+          {
+            "side": "right",
+            "outerMean": 0.0006722531571551099,
+            "innerMean": 0.0006665035131897566
+          },
+          {
+            "side": "bottom",
+            "outerMean": 0.0003164177021583741,
+            "innerMean": 0.0005417262026903736
+          },
+          {
+            "side": "top",
+            "outerMean": 0.0008677374316005331,
+            "innerMean": 0.000672081091351271
+          }
+        ]
       }
     ]
   },
   "W-1": {
     "pass": true,
-    "maxHdrRatio": 3764782.03125,
+    "maxHdrRatio": 83965.0634765625,
     "hdrMin": 0,
-    "hdrMax": 3.7647820312499998
+    "hdrMax": 0.08396506347656249
   },
   "W-2": {
     "pass": false,
@@ -722,16 +760,16 @@
         "capturedSec": 7.503573082844096,
         "environment": "mist",
         "energies": {
-          "low": 0.027910269139068432,
-          "middle": 0.008506033677552453,
-          "high": 0.0009465713211600421
+          "low": 751.7705734167359,
+          "middle": 715.6709339239245,
+          "high": 58.41029626714956
         },
         "fractions": {
-          "low": 0.7470054106690329,
-          "middle": 0.22766004687394337,
-          "high": 0.025334542457023657
+          "low": 0.4926891141323209,
+          "middle": 0.4690304341691322,
+          "high": 0.038280451698546984
         },
-        "mean": 0.00007149734552771809
+        "mean": 0.12657710811924816
       },
       {
         "sectionIndex": 1,
@@ -739,16 +777,16 @@
         "capturedSec": 22.506793915198955,
         "environment": "convergence",
         "energies": {
-          "low": 512.8848572955205,
-          "middle": 48.56492395845313,
-          "high": 12.918054246239219
+          "low": 404.6766055328129,
+          "middle": 34.38343332615954,
+          "high": 52.24953407281784
         },
         "fractions": {
-          "low": 0.8929553947756367,
-          "middle": 0.08455369705052909,
-          "high": 0.022490908173834243
+          "low": 0.8236692867960771,
+          "middle": 0.06998323505276596,
+          "high": 0.10634747815115698
         },
-        "mean": 0.0226541607082783
+        "mean": 0.05157048796182207
       },
       {
         "sectionIndex": 2,
@@ -756,16 +794,16 @@
         "capturedSec": 45.00573716373124,
         "environment": "explosion",
         "energies": {
-          "low": 317.4793062497564,
-          "middle": 43.08730876973404,
-          "high": 91.63646566777632
+          "low": 419.3482931196627,
+          "middle": 67.94614182738488,
+          "high": 66.2569832721234
         },
         "fractions": {
-          "low": 0.7020724090761288,
-          "middle": 0.09528309427757355,
-          "high": 0.2026444966462977
+          "low": 0.7575597845431363,
+          "middle": 0.12274585447901888,
+          "high": 0.11969436097784485
         },
-        "mean": 0.04884185911250443
+        "mean": 0.0405611692004776
       },
       {
         "sectionIndex": 3,
@@ -773,16 +811,16 @@
         "capturedSec": 67.50468041226354,
         "environment": "drift",
         "energies": {
-          "low": 12.275605089176398,
-          "middle": 2.63261805383834,
-          "high": 0.34445313121113796
+          "low": 31.800033002543145,
+          "middle": 9.771479502319409,
+          "high": 0.9349426898867852
         },
         "fractions": {
-          "low": 0.8048164707933805,
-          "middle": 0.17260040182502032,
-          "high": 0.02258312738159914
+          "low": 0.7481224406233546,
+          "middle": 0.22988224865023427,
+          "high": 0.021995310726411154
         },
-        "mean": 0.0029563447965836377
+        "mean": 0.014303464738408277
       },
       {
         "sectionIndex": 4,
@@ -790,16 +828,16 @@
         "capturedSec": 90.00362366079582,
         "environment": "explosion",
         "energies": {
-          "low": 898.951357483033,
-          "middle": 122.24536069662544,
-          "high": 479.10568643703886
+          "low": 1286.780980618784,
+          "middle": 341.70464196659253,
+          "high": 238.93167644666298
         },
         "fractions": {
-          "low": 0.5991801084346727,
-          "middle": 0.08148048041545139,
-          "high": 0.3193394111498758
+          "low": 0.6890698620419637,
+          "middle": 0.1829824764629268,
+          "high": 0.12794766149510947
         },
-        "mean": 0.12989405920516883
+        "mean": 0.25229073983978606
       },
       {
         "sectionIndex": 5,
@@ -807,16 +845,16 @@
         "capturedSec": 112.50145957990867,
         "environment": "dissipation",
         "energies": {
-          "low": 0.25368409231066646,
-          "middle": 0.4098446465068884,
-          "high": 0.4005414119874951
+          "low": 0.03954815062247157,
+          "middle": 0.048791556212408806,
+          "high": 0.08517581969414247
         },
         "fractions": {
-          "low": 0.23840918018303134,
-          "middle": 0.3851669424208637,
-          "high": 0.37642387739610506
+          "low": 0.22792283442056466,
+          "middle": 0.2811941800738376,
+          "high": 0.4908829855055976
         },
-        "mean": 0.0006205791292211311
+        "mean": 0.000345191709785761
       }
     ]
   },
@@ -828,7 +866,7 @@
         "beforeN": 28,
         "afterN": 15,
         "beforeMean": 0,
-        "afterMean": 0.15891445536426566,
+        "afterMean": 0.10400644872145783,
         "ratio": "Infinity",
         "pass": true
       },
@@ -837,7 +875,7 @@
         "beforeN": 28,
         "afterN": 15,
         "beforeMean": 0,
-        "afterMean": 0.20990919540847777,
+        "afterMean": 0.14893245431034713,
         "ratio": "Infinity",
         "pass": true
       }
@@ -851,73 +889,79 @@
         "tSec": 7.503573082844096,
         "kind": "intro",
         "clippedFraction": 0,
-        "mean": 0.00007149734552772181
+        "mean": 0.12657710811910142
       },
       {
         "tSec": 22.506793915198955,
         "kind": "build",
         "clippedFraction": 0,
-        "mean": 0.02265416070825983
+        "mean": 0.05157048796171824
       },
       {
         "tSec": 45.00573716373124,
         "kind": "drop",
         "clippedFraction": 0,
-        "mean": 0.04884185911224562
+        "mean": 0.04056116920041468
       },
       {
         "tSec": 67.50468041226354,
         "kind": "break",
         "clippedFraction": 0,
-        "mean": 0.0029563447965779473
+        "mean": 0.014303464738436937
       },
       {
         "tSec": 90.00362366079582,
         "kind": "drop",
         "clippedFraction": 0,
-        "mean": 0.12989405920517214
+        "mean": 0.25229073983969585
       },
       {
         "tSec": 112.50145957990867,
         "kind": "outro",
         "clippedFraction": 0,
-        "mean": 0.000620579129221
+        "mean": 0.00034519170978537003
       },
       {
         "tSec": 7,
         "kind": "reference",
         "clippedFraction": 0,
-        "mean": 0.00005897454687120253
+        "mean": 0.1284200920863182
       },
       {
         "tSec": 20,
         "kind": "reference",
         "clippedFraction": 0,
-        "mean": 0.02431252007908078
+        "mean": 0.05577209509226838
       },
       {
         "tSec": 30.3,
         "kind": "reference",
         "clippedFraction": 0,
-        "mean": 0.22315464328048945
+        "mean": 0.15327372450301852
       },
       {
         "tSec": 45,
         "kind": "reference",
         "clippedFraction": 0,
-        "mean": 0.04884185911224562
+        "mean": 0.040564064137322345
       },
       {
         "tSec": 62,
         "kind": "reference",
         "clippedFraction": 0,
-        "mean": 0.006243645031492128
+        "mean": 0.016127963893450163
       },
       {
         "tSec": 90,
         "kind": "reference",
         "clippedFraction": 0,
-        "mean": 0.12989405920517214
+        "mean": 0.2532807007490152
+      },
+      {
+        "tSec": 112,
+        "kind": "reference",
+        "clippedFraction": 0,
+        "mean": 0.0004181332122967893
       },
       {
         "tSec": 29.55,
@@ -1091,91 +1135,91 @@
         "tSec": 30.016666666666666,
         "kind": "drop-window",
         "clippedFraction": 0,
-        "mean": 0.09571346072833015
+        "mean": 0.06313336123335152
       },
       {
         "tSec": 30.033333333333335,
         "kind": "drop-window",
         "clippedFraction": 0,
-        "mean": 0.1053052168436644
+        "mean": 0.06552083174893514
       },
       {
         "tSec": 30.05,
         "kind": "drop-window",
         "clippedFraction": 0,
-        "mean": 0.11284902798692331
+        "mean": 0.06933314927307412
       },
       {
         "tSec": 30.066666666666666,
         "kind": "drop-window",
         "clippedFraction": 0,
-        "mean": 0.12135806203322659
+        "mean": 0.07432235291207386
       },
       {
         "tSec": 30.083333333333332,
         "kind": "drop-window",
         "clippedFraction": 0,
-        "mean": 0.13157718754347628
+        "mean": 0.08047415562584953
       },
       {
         "tSec": 30.1,
         "kind": "drop-window",
         "clippedFraction": 0,
-        "mean": 0.14236659855738037
+        "mean": 0.08731109484496036
       },
       {
         "tSec": 30.116666666666667,
         "kind": "drop-window",
         "clippedFraction": 0,
-        "mean": 0.15314336501297782
+        "mean": 0.09486547559112112
       },
       {
         "tSec": 30.133333333333333,
         "kind": "drop-window",
         "clippedFraction": 0,
-        "mean": 0.16313658872507794
+        "mean": 0.1028686658295303
       },
       {
         "tSec": 30.15,
         "kind": "drop-window",
         "clippedFraction": 0,
-        "mean": 0.1724518997688504
+        "mean": 0.1110794265975622
       },
       {
         "tSec": 30.166666666666668,
         "kind": "drop-window",
         "clippedFraction": 0,
-        "mean": 0.18073141632656112
+        "mean": 0.11893005907229509
       },
       {
         "tSec": 30.183333333333334,
         "kind": "drop-window",
         "clippedFraction": 0,
-        "mean": 0.18839385401523664
+        "mean": 0.12643434992270028
       },
       {
         "tSec": 30.2,
         "kind": "drop-window",
         "clippedFraction": 0,
-        "mean": 0.19549477331775753
+        "mean": 0.13365981355220558
       },
       {
         "tSec": 30.216666666666665,
         "kind": "drop-window",
         "clippedFraction": 0,
-        "mean": 0.20165669249924473
+        "mean": 0.1397069986665831
       },
       {
         "tSec": 30.233333333333334,
         "kind": "drop-window",
         "clippedFraction": 0,
-        "mean": 0.20729415223419673
+        "mean": 0.14434157154534838
       },
       {
         "tSec": 30.25,
         "kind": "drop-window",
         "clippedFraction": 0,
-        "mean": 0.2122445348710808
+        "mean": 0.1481154244062768
       },
       {
         "tSec": 74.55,
@@ -1349,91 +1393,91 @@
         "tSec": 75.01666666666667,
         "kind": "drop-window",
         "clippedFraction": 0,
-        "mean": 0.16124335244010135
+        "mean": 0.09905178319037129
       },
       {
         "tSec": 75.03333333333333,
         "kind": "drop-window",
         "clippedFraction": 0,
-        "mean": 0.1696146440038931
+        "mean": 0.10286686212400917
       },
       {
         "tSec": 75.05,
         "kind": "drop-window",
         "clippedFraction": 0,
-        "mean": 0.17805893363337724
+        "mean": 0.10834893791328612
       },
       {
         "tSec": 75.06666666666666,
         "kind": "drop-window",
         "clippedFraction": 0,
-        "mean": 0.1855070321684721
+        "mean": 0.11528779324187013
       },
       {
         "tSec": 75.08333333333333,
         "kind": "drop-window",
         "clippedFraction": 0,
-        "mean": 0.1931737184721712
+        "mean": 0.12301221796196098
       },
       {
         "tSec": 75.1,
         "kind": "drop-window",
         "clippedFraction": 0,
-        "mean": 0.20043947384546232
+        "mean": 0.13186106627014044
       },
       {
         "tSec": 75.11666666666666,
         "kind": "drop-window",
         "clippedFraction": 0,
-        "mean": 0.20799463513705452
+        "mean": 0.14104212824713794
       },
       {
         "tSec": 75.13333333333334,
         "kind": "drop-window",
         "clippedFraction": 0,
-        "mean": 0.21497232975402786
+        "mean": 0.14995022294127347
       },
       {
         "tSec": 75.15,
         "kind": "drop-window",
         "clippedFraction": 0,
-        "mean": 0.22095498144748868
+        "mean": 0.1586896897388633
       },
       {
         "tSec": 75.16666666666667,
         "kind": "drop-window",
         "clippedFraction": 0,
-        "mean": 0.22636670950641943
+        "mean": 0.16706967410703452
       },
       {
         "tSec": 75.18333333333334,
         "kind": "drop-window",
         "clippedFraction": 0,
-        "mean": 0.23110453401635822
+        "mean": 0.174465785993826
       },
       {
         "tSec": 75.2,
         "kind": "drop-window",
         "clippedFraction": 0,
-        "mean": 0.23528662823703703
+        "mean": 0.18173277290857995
       },
       {
         "tSec": 75.21666666666667,
         "kind": "drop-window",
         "clippedFraction": 0,
-        "mean": 0.2387261620262884
+        "mean": 0.18871503136716328
       },
       {
         "tSec": 75.23333333333333,
         "kind": "drop-window",
         "clippedFraction": 0,
-        "mean": 0.24151654990505317
+        "mean": 0.19403211555612535
       },
       {
         "tSec": 75.25,
         "kind": "drop-window",
         "clippedFraction": 0,
-        "mean": 0.2436782465339612
+        "mean": 0.1978607330935647
       }
     ]
   },
@@ -1448,285 +1492,179 @@
       {
         "sectionIndex": 0,
         "kind": "intro",
-        "visiblePixels": 6376,
-        "fraction": 0.0030748456790123456,
-        "peakHdrContribution": 0.0020057744979858397,
-        "meanHdrContribution": 0.0000015659525075432997,
-        "particleEnergyFraction": 0.12736615150098818
+        "visiblePixels": 12168,
+        "fraction": 0.005868055555555555,
+        "peakHdrContribution": 0.011237601923942566,
+        "meanHdrContribution": 0.0000071238687332822615,
+        "particleEnergyFraction": 0.004920181396609945
       },
       {
         "sectionIndex": 1,
         "kind": "build",
-        "visiblePixels": 4807,
-        "fraction": 0.002318190586419753,
-        "peakHdrContribution": 3.7647820312499998,
-        "meanHdrContribution": 0.0012552475408221038,
-        "particleEnergyFraction": 0.9010880312140253
+        "visiblePixels": 73985,
+        "fraction": 0.03567949459876543,
+        "peakHdrContribution": 2.3201039314270018,
+        "meanHdrContribution": 0.0030935091011866675,
+        "particleEnergyFraction": 0.6167174505289523
       },
       {
         "sectionIndex": 2,
         "kind": "drop",
-        "visiblePixels": 676892,
-        "fraction": 0.3264332561728395,
-        "peakHdrContribution": 0.743432174396515,
-        "meanHdrContribution": 0.007283303878523478,
-        "particleEnergyFraction": 0.8303786243204515
+        "visiblePixels": 315860,
+        "fraction": 0.15232445987654322,
+        "peakHdrContribution": 2.4556136108398436,
+        "meanHdrContribution": 0.0037744022187496617,
+        "particleEnergyFraction": 0.49146990009641983
       },
       {
         "sectionIndex": 3,
         "kind": "break",
-        "visiblePixels": 105234,
-        "fraction": 0.050749421296296296,
-        "peakHdrContribution": 0.03691744681596756,
-        "meanHdrContribution": 0.00009038912057746462,
-        "particleEnergyFraction": 0.36581599857440467
+        "visiblePixels": 195217,
+        "fraction": 0.09414400077160494,
+        "peakHdrContribution": 0.05708581428527832,
+        "meanHdrContribution": 0.00015473685854175615,
+        "particleEnergyFraction": 0.11285041325467589
       },
       {
         "sectionIndex": 4,
         "kind": "drop",
-        "visiblePixels": 928401,
-        "fraction": 0.4477242476851852,
-        "peakHdrContribution": 1.210447488117218,
-        "meanHdrContribution": 0.027956905211400068,
-        "particleEnergyFraction": 0.9259219024119171
+        "visiblePixels": 389416,
+        "fraction": 0.18779706790123457,
+        "peakHdrContribution": 3.3067641113281248,
+        "meanHdrContribution": 0.018001002543251467,
+        "particleEnergyFraction": 0.35903415343199707
       },
       {
         "sectionIndex": 5,
         "kind": "outro",
-        "visiblePixels": 90098,
-        "fraction": 0.043450038580246916,
-        "peakHdrContribution": 0.07221542358398438,
-        "meanHdrContribution": 0.0001264003303358227,
-        "particleEnergyFraction": 0.9999989141346903
+        "visiblePixels": 112427,
+        "fraction": 0.05421826774691358,
+        "peakHdrContribution": 0.07877904663085937,
+        "meanHdrContribution": 0.00008541338574510162,
+        "particleEnergyFraction": 1
       }
     ]
   },
   "BW-6-coverage": {
     "pass": true,
-    "meanCoverage": 0.16636746881430042,
+    "meanCoverage": 0.0974367506528965,
     "sections": [
       {
         "sectionIndex": 0,
         "kind": "intro",
-        "visiblePixels": 6376,
-        "fraction": 0.0030748456790123456,
-        "peakHdrContribution": 0.0020057744979858397,
-        "meanHdrContribution": 0.0000015659525075432997,
-        "particleEnergyFraction": 0.12736615150098818
+        "visiblePixels": 12168,
+        "fraction": 0.005868055555555555,
+        "peakHdrContribution": 0.011237601923942566,
+        "meanHdrContribution": 0.0000071238687332822615,
+        "particleEnergyFraction": 0.004920181396609945
       },
       {
         "sectionIndex": 1,
         "kind": "build",
-        "visiblePixels": 4807,
-        "fraction": 0.002318190586419753,
-        "peakHdrContribution": 3.7647820312499998,
-        "meanHdrContribution": 0.0012552475408221038,
-        "particleEnergyFraction": 0.9010880312140253
+        "visiblePixels": 73985,
+        "fraction": 0.03567949459876543,
+        "peakHdrContribution": 2.3201039314270018,
+        "meanHdrContribution": 0.0030935091011866675,
+        "particleEnergyFraction": 0.6167174505289523
       },
       {
         "sectionIndex": 2,
         "kind": "drop",
-        "visiblePixels": 676892,
-        "fraction": 0.3264332561728395,
-        "peakHdrContribution": 0.743432174396515,
-        "meanHdrContribution": 0.007283303878523478,
-        "particleEnergyFraction": 0.8303786243204515
+        "visiblePixels": 315860,
+        "fraction": 0.15232445987654322,
+        "peakHdrContribution": 2.4556136108398436,
+        "meanHdrContribution": 0.0037744022187496617,
+        "particleEnergyFraction": 0.49146990009641983
       },
       {
         "sectionIndex": 3,
         "kind": "break",
-        "visiblePixels": 105234,
-        "fraction": 0.050749421296296296,
-        "peakHdrContribution": 0.03691744681596756,
-        "meanHdrContribution": 0.00009038912057746462,
-        "particleEnergyFraction": 0.36581599857440467
+        "visiblePixels": 195217,
+        "fraction": 0.09414400077160494,
+        "peakHdrContribution": 0.05708581428527832,
+        "meanHdrContribution": 0.00015473685854175615,
+        "particleEnergyFraction": 0.11285041325467589
       },
       {
         "sectionIndex": 4,
         "kind": "drop",
-        "visiblePixels": 928401,
-        "fraction": 0.4477242476851852,
-        "peakHdrContribution": 1.210447488117218,
-        "meanHdrContribution": 0.027956905211400068,
-        "particleEnergyFraction": 0.9259219024119171
+        "visiblePixels": 389416,
+        "fraction": 0.18779706790123457,
+        "peakHdrContribution": 3.3067641113281248,
+        "meanHdrContribution": 0.018001002543251467,
+        "particleEnergyFraction": 0.35903415343199707
       },
       {
         "sectionIndex": 5,
         "kind": "outro",
-        "visiblePixels": 90098,
-        "fraction": 0.043450038580246916,
-        "peakHdrContribution": 0.07221542358398438,
-        "meanHdrContribution": 0.0001264003303358227,
-        "particleEnergyFraction": 0.9999989141346903
+        "visiblePixels": 112427,
+        "fraction": 0.05421826774691358,
+        "peakHdrContribution": 0.07877904663085937,
+        "meanHdrContribution": 0.00008541338574510162,
+        "particleEnergyFraction": 1
       },
       {
         "tSec": 7,
         "kind": "intro",
-        "visiblePixels": 6553,
-        "fraction": 0.003160204475308642,
-        "peakHdrContribution": 0.00212325439453125,
-        "meanHdrContribution": 0.0000014664559147182825,
-        "particleEnergyFraction": 0.13257915150679536
+        "visiblePixels": 12163,
+        "fraction": 0.005865644290123457,
+        "peakHdrContribution": 0.007867487335205078,
+        "meanHdrContribution": 0.000006967827552044211,
+        "particleEnergyFraction": 0.004934502944145213
       },
       {
         "tSec": 20,
         "kind": "build",
-        "visiblePixels": 15321,
-        "fraction": 0.007388599537037037,
-        "peakHdrContribution": 1.0255617401003838,
-        "meanHdrContribution": 0.0013221864941175214,
-        "particleEnergyFraction": 0.8953802857368657
+        "visiblePixels": 93649,
+        "fraction": 0.04516251929012346,
+        "peakHdrContribution": 0.9538847814559936,
+        "meanHdrContribution": 0.0030584433452103123,
+        "particleEnergyFraction": 0.5974496139745584
       },
       {
         "tSec": 30.3,
         "kind": "drop",
-        "visiblePixels": 595860,
-        "fraction": 0.28735532407407405,
-        "peakHdrContribution": 3.0293422088623045,
-        "meanHdrContribution": 0.02334291051646638,
-        "particleEnergyFraction": 0.46749316507553185
+        "visiblePixels": 548006,
+        "fraction": 0.26427758487654324,
+        "peakHdrContribution": 1.3646407897949218,
+        "meanHdrContribution": 0.006191622490956275,
+        "particleEnergyFraction": 0.2293087762336667
       },
       {
         "tSec": 45,
         "kind": "drop",
-        "visiblePixels": 676892,
-        "fraction": 0.3264332561728395,
-        "peakHdrContribution": 0.743432174396515,
-        "meanHdrContribution": 0.007283303878523478,
-        "particleEnergyFraction": 0.8303786243204515
+        "visiblePixels": 315498,
+        "fraction": 0.15214988425925927,
+        "peakHdrContribution": 2.6309094682693477,
+        "meanHdrContribution": 0.003781600530188034,
+        "particleEnergyFraction": 0.4918451920406639
       },
       {
         "tSec": 62,
         "kind": "break",
-        "visiblePixels": 104920,
-        "fraction": 0.050597993827160494,
-        "peakHdrContribution": 0.04462087368965149,
-        "meanHdrContribution": 0.00009001878968666814,
-        "particleEnergyFraction": 0.2771278758706388
+        "visiblePixels": 159552,
+        "fraction": 0.07694444444444444,
+        "peakHdrContribution": 0.04846596240997314,
+        "meanHdrContribution": 0.00011974056742767803,
+        "particleEnergyFraction": 0.09186069302317344
       },
       {
         "tSec": 90,
         "kind": "drop",
-        "visiblePixels": 928401,
-        "fraction": 0.4477242476851852,
-        "peakHdrContribution": 1.210447488117218,
-        "meanHdrContribution": 0.027956905211400068,
-        "particleEnergyFraction": 0.9259219024119171
-      }
-    ]
-  },
-  "BW-3-coverage": {
-    "pass": false,
-    "meanCoverage": 0.16636746881430042,
-    "maximum": 0.4477242476851852,
-    "sections": [
-      {
-        "sectionIndex": 0,
-        "kind": "intro",
-        "visiblePixels": 6376,
-        "fraction": 0.0030748456790123456,
-        "peakHdrContribution": 0.0020057744979858397,
-        "meanHdrContribution": 0.0000015659525075432997,
-        "particleEnergyFraction": 0.12736615150098818
+        "visiblePixels": 283438,
+        "fraction": 0.13668885030864197,
+        "peakHdrContribution": 2.4823391662597656,
+        "meanHdrContribution": 0.012582117200270143,
+        "particleEnergyFraction": 0.26654649648190404
       },
       {
-        "sectionIndex": 1,
-        "kind": "build",
-        "visiblePixels": 4807,
-        "fraction": 0.002318190586419753,
-        "peakHdrContribution": 3.7647820312499998,
-        "meanHdrContribution": 0.0012552475408221038,
-        "particleEnergyFraction": 0.9010880312140253
-      },
-      {
-        "sectionIndex": 2,
-        "kind": "drop",
-        "visiblePixels": 676892,
-        "fraction": 0.3264332561728395,
-        "peakHdrContribution": 0.743432174396515,
-        "meanHdrContribution": 0.007283303878523478,
-        "particleEnergyFraction": 0.8303786243204515
-      },
-      {
-        "sectionIndex": 3,
-        "kind": "break",
-        "visiblePixels": 105234,
-        "fraction": 0.050749421296296296,
-        "peakHdrContribution": 0.03691744681596756,
-        "meanHdrContribution": 0.00009038912057746462,
-        "particleEnergyFraction": 0.36581599857440467
-      },
-      {
-        "sectionIndex": 4,
-        "kind": "drop",
-        "visiblePixels": 928401,
-        "fraction": 0.4477242476851852,
-        "peakHdrContribution": 1.210447488117218,
-        "meanHdrContribution": 0.027956905211400068,
-        "particleEnergyFraction": 0.9259219024119171
-      },
-      {
-        "sectionIndex": 5,
+        "tSec": 112,
         "kind": "outro",
-        "visiblePixels": 90098,
-        "fraction": 0.043450038580246916,
-        "peakHdrContribution": 0.07221542358398438,
-        "meanHdrContribution": 0.0001264003303358227,
-        "particleEnergyFraction": 0.9999989141346903
-      },
-      {
-        "tSec": 7,
-        "kind": "intro",
-        "visiblePixels": 6553,
-        "fraction": 0.003160204475308642,
-        "peakHdrContribution": 0.00212325439453125,
-        "meanHdrContribution": 0.0000014664559147182825,
-        "particleEnergyFraction": 0.13257915150679536
-      },
-      {
-        "tSec": 20,
-        "kind": "build",
-        "visiblePixels": 15321,
-        "fraction": 0.007388599537037037,
-        "peakHdrContribution": 1.0255617401003838,
-        "meanHdrContribution": 0.0013221864941175214,
-        "particleEnergyFraction": 0.8953802857368657
-      },
-      {
-        "tSec": 30.3,
-        "kind": "drop",
-        "visiblePixels": 595860,
-        "fraction": 0.28735532407407405,
-        "peakHdrContribution": 3.0293422088623045,
-        "meanHdrContribution": 0.02334291051646638,
-        "particleEnergyFraction": 0.46749316507553185
-      },
-      {
-        "tSec": 45,
-        "kind": "drop",
-        "visiblePixels": 676892,
-        "fraction": 0.3264332561728395,
-        "peakHdrContribution": 0.743432174396515,
-        "meanHdrContribution": 0.007283303878523478,
-        "particleEnergyFraction": 0.8303786243204515
-      },
-      {
-        "tSec": 62,
-        "kind": "break",
-        "visiblePixels": 104920,
-        "fraction": 0.050597993827160494,
-        "peakHdrContribution": 0.04462087368965149,
-        "meanHdrContribution": 0.00009001878968666814,
-        "particleEnergyFraction": 0.2771278758706388
-      },
-      {
-        "tSec": 90,
-        "kind": "drop",
-        "visiblePixels": 928401,
-        "fraction": 0.4477242476851852,
-        "peakHdrContribution": 1.210447488117218,
-        "meanHdrContribution": 0.027956905211400068,
-        "particleEnergyFraction": 0.9259219024119171
+        "visiblePixels": 115204,
+        "fraction": 0.05555748456790124,
+        "peakHdrContribution": 0.08396506347656249,
+        "meanHdrContribution": 0.0000975976553417045,
+        "particleEnergyFraction": 0.999980725820467
       }
     ]
   },
@@ -1736,47 +1674,47 @@
       {
         "sectionIndex": 2,
         "kind": "drop",
-        "visiblePixels": 676892,
-        "fraction": 0.3264332561728395,
-        "peakHdrContribution": 0.743432174396515,
-        "meanHdrContribution": 0.007283303878523478,
-        "particleEnergyFraction": 0.8303786243204515
+        "visiblePixels": 315860,
+        "fraction": 0.15232445987654322,
+        "peakHdrContribution": 2.4556136108398436,
+        "meanHdrContribution": 0.0037744022187496617,
+        "particleEnergyFraction": 0.49146990009641983
       },
       {
         "sectionIndex": 4,
         "kind": "drop",
-        "visiblePixels": 928401,
-        "fraction": 0.4477242476851852,
-        "peakHdrContribution": 1.210447488117218,
-        "meanHdrContribution": 0.027956905211400068,
-        "particleEnergyFraction": 0.9259219024119171
+        "visiblePixels": 389416,
+        "fraction": 0.18779706790123457,
+        "peakHdrContribution": 3.3067641113281248,
+        "meanHdrContribution": 0.018001002543251467,
+        "particleEnergyFraction": 0.35903415343199707
       },
       {
         "tSec": 30.3,
         "kind": "drop",
-        "visiblePixels": 595860,
-        "fraction": 0.28735532407407405,
-        "peakHdrContribution": 3.0293422088623045,
-        "meanHdrContribution": 0.02334291051646638,
-        "particleEnergyFraction": 0.46749316507553185
+        "visiblePixels": 548006,
+        "fraction": 0.26427758487654324,
+        "peakHdrContribution": 1.3646407897949218,
+        "meanHdrContribution": 0.006191622490956275,
+        "particleEnergyFraction": 0.2293087762336667
       },
       {
         "tSec": 45,
         "kind": "drop",
-        "visiblePixels": 676892,
-        "fraction": 0.3264332561728395,
-        "peakHdrContribution": 0.743432174396515,
-        "meanHdrContribution": 0.007283303878523478,
-        "particleEnergyFraction": 0.8303786243204515
+        "visiblePixels": 315498,
+        "fraction": 0.15214988425925927,
+        "peakHdrContribution": 2.6309094682693477,
+        "meanHdrContribution": 0.003781600530188034,
+        "particleEnergyFraction": 0.4918451920406639
       },
       {
         "tSec": 90,
         "kind": "drop",
-        "visiblePixels": 928401,
-        "fraction": 0.4477242476851852,
-        "peakHdrContribution": 1.210447488117218,
-        "meanHdrContribution": 0.027956905211400068,
-        "particleEnergyFraction": 0.9259219024119171
+        "visiblePixels": 283438,
+        "fraction": 0.13668885030864197,
+        "peakHdrContribution": 2.4823391662597656,
+        "meanHdrContribution": 0.012582117200270143,
+        "particleEnergyFraction": 0.26654649648190404
       }
     ]
   },
@@ -1787,7 +1725,7 @@
         "tSec": 30.60644166470972,
         "immediateAge": 0,
         "advancedAge": 0.11999999731779099,
-        "changedPixels": 1464249,
+        "changedPixels": 920105,
         "anchorDrift": 0,
         "pass": true
       },
@@ -1795,7 +1733,7 @@
         "tSec": 75.6043281617743,
         "immediateAge": 0,
         "advancedAge": 0.11999999731779099,
-        "changedPixels": 1656216,
+        "changedPixels": 1738894,
         "anchorDrift": 0,
         "pass": true
       }
@@ -1816,37 +1754,43 @@
     {
       "tSec": 7,
       "environment": "mist",
-      "mean": 0.00005897454687120253,
+      "mean": 0.1284200920863182,
       "clippedFraction": 0
     },
     {
       "tSec": 20,
       "environment": "convergence",
-      "mean": 0.02431252007908078,
+      "mean": 0.05577209509226838,
       "clippedFraction": 0
     },
     {
       "tSec": 30.3,
       "environment": "explosion",
-      "mean": 0.22315464328048945,
+      "mean": 0.15327372450301852,
       "clippedFraction": 0
     },
     {
       "tSec": 45,
       "environment": "explosion",
-      "mean": 0.04884185911224562,
+      "mean": 0.040564064137322345,
       "clippedFraction": 0
     },
     {
       "tSec": 62,
       "environment": "drift",
-      "mean": 0.006243645031492128,
+      "mean": 0.016127963893450163,
       "clippedFraction": 0
     },
     {
       "tSec": 90,
       "environment": "explosion",
-      "mean": 0.12989405920517214,
+      "mean": 0.2532807007490152,
+      "clippedFraction": 0
+    },
+    {
+      "tSec": 112,
+      "environment": "dissipation",
+      "mean": 0.0004181332122967893,
       "clippedFraction": 0
     }
   ],
@@ -1855,21 +1799,25 @@
     "width": 1920,
     "height": 1080,
     "particleCount": 262144,
-    "fluidWidth": 480,
-    "fluidHeight": 270,
+    "fluidWidth": 720,
+    "fluidHeight": 405,
+    "overscan": 1.5,
+    "domainMargin": 0.035,
+    "dyeWidth": 1440,
+    "dyeHeight": 810,
     "feedbackWidth": 960,
     "feedbackHeight": 540,
     "hdrFormat": "RGBA16F",
-    "cpuP95Ms": 0.3000001907348633,
-    "gpuP95Ms": 10.610124,
-    "renderP95Ms": 10.610124,
-    "frameP95Ms": 14.29999999993015,
-    "timingSamples": 8843,
-    "submittedFrames": 8844,
+    "cpuP95Ms": 0.10000038146972656,
+    "gpuP95Ms": 9.091958,
+    "renderP95Ms": 9.091958,
+    "frameP95Ms": 14.299999999988358,
+    "timingSamples": 8847,
+    "submittedFrames": 8848,
     "timerAvailable": true,
     "timerDisjoints": 0,
-    "mfsFrames": 8989,
-    "responseCount": 677,
+    "mfsFrames": 8983,
+    "responseCount": 651,
     "environment": "dissipation",
     "layers": [
       "ABSTRACT",
@@ -1879,10 +1827,18 @@
       "FEEDBACK"
     ],
     "formation": "dissipation",
+    "composition": "streams",
+    "camera2D": [
+      0.15009820461273193,
+      0.01198710035532713,
+      1.0800000429153442,
+      0.30000001192092896
+    ],
+    "kickCount": 0,
     "dropKeyRole": null,
     "raymarchSteps": 0,
-    "previewSteps": 6,
-    "frame": 8997,
+    "previewSteps": 0,
+    "frame": 9004,
     "tSec": 120,
     "sectionIndex": 5,
     "boundaryCount": 6,
@@ -1890,7 +1846,7 @@
   },
   "W-4": {
     "pass": true,
-    "checked": 677,
+    "checked": 651,
     "maxDelayFrames": 0,
     "uniformFailures": 0
   },
@@ -1912,79 +1868,79 @@
         "type": "boundary",
         "sectionIndex": 1,
         "action": "converge",
-        "firedFrame": 1129,
-        "firedSec": 15.017333
+        "firedFrame": 1133,
+        "firedSec": 15.018667
       },
       {
         "tSec": 26.24910311285062,
         "type": "foreshadow",
         "sectionIndex": 1,
         "action": "",
-        "firedFrame": 1969,
-        "firedSec": 26.262916
+        "firedFrame": 1975,
+        "firedSec": 26.250592
       },
       {
         "tSec": 29.53677434572733,
         "type": "silence",
         "sectionIndex": 1,
         "action": "",
-        "firedFrame": 2215,
-        "firedSec": 29.544115
+        "firedFrame": 2222,
+        "firedSec": 29.545119
       },
       {
         "tSec": 30.00644166470972,
         "type": "boundary",
         "sectionIndex": 2,
         "action": "phase-transition",
-        "firedFrame": 2250,
-        "firedSec": 30.009333
+        "firedFrame": 2257,
+        "firedSec": 30.010667
       },
       {
         "tSec": 60.00503266275277,
         "type": "boundary",
         "sectionIndex": 3,
         "action": "drift",
-        "firedFrame": 4499,
-        "firedSec": 60.00869
+        "firedFrame": 4506,
+        "firedSec": 60.009544
       },
       {
         "tSec": 71.2469896099152,
         "type": "foreshadow",
         "sectionIndex": 3,
         "action": "",
-        "firedFrame": 5342,
-        "firedSec": 71.252
+        "firedFrame": 5349,
+        "firedSec": 71.253333
       },
       {
         "tSec": 74.53466084279192,
         "type": "silence",
         "sectionIndex": 3,
         "action": "",
-        "firedFrame": 5589,
-        "firedSec": 74.547382
+        "firedFrame": 5596,
+        "firedSec": 74.547202
       },
       {
         "tSec": 75.00432816177431,
         "type": "boundary",
         "sectionIndex": 4,
         "action": "phase-transition",
-        "firedFrame": 5624,
-        "firedSec": 75.012
+        "firedFrame": 5631,
+        "firedSec": 75.013333
       },
       {
         "tSec": 105.00291915981735,
         "type": "boundary",
         "sectionIndex": 5,
         "action": "extinguish",
-        "firedFrame": 7873,
-        "firedSec": 105.011545
+        "firedFrame": 7880,
+        "firedSec": 105.012646
       },
       {
         "tSec": 120,
         "type": "end",
         "sectionIndex": 5,
         "action": "",
-        "firedFrame": 8997,
+        "firedFrame": 9004,
         "firedSec": 120
       }
     ]
@@ -2038,32 +1994,42 @@
   },
   "W-8": {
     "pass": true,
-    "p95Ms": 10.610124,
-    "cpuP95Ms": 0.3000001907348633,
-    "gpuP95Ms": 10.610124,
-    "samples": 8843,
-    "submittedFrames": 8844,
+    "p95Ms": 9.091958,
+    "cpuP95Ms": 0.10000038146972656,
+    "gpuP95Ms": 9.091958,
+    "samples": 8847,
+    "submittedFrames": 8848,
     "disjoints": 0
+  },
+  "BW-7-performance": {
+    "pass": true,
+    "gpuP95Ms": 9.091958,
+    "budgetMs": 14,
+    "samples": 8847
   },
   "metrics": {
     "width": 1920,
     "height": 1080,
     "particleCount": 262144,
-    "fluidWidth": 480,
-    "fluidHeight": 270,
+    "fluidWidth": 720,
+    "fluidHeight": 405,
+    "overscan": 1.5,
+    "domainMargin": 0.035,
+    "dyeWidth": 1440,
+    "dyeHeight": 810,
     "feedbackWidth": 960,
     "feedbackHeight": 540,
     "hdrFormat": "RGBA16F",
-    "cpuP95Ms": 0.3000001907348633,
-    "gpuP95Ms": 10.610124,
-    "renderP95Ms": 10.610124,
-    "frameP95Ms": 14.29999999993015,
-    "timingSamples": 8843,
-    "submittedFrames": 8844,
+    "cpuP95Ms": 0.10000038146972656,
+    "gpuP95Ms": 9.091958,
+    "renderP95Ms": 9.091958,
+    "frameP95Ms": 14.299999999988358,
+    "timingSamples": 8847,
+    "submittedFrames": 8848,
     "timerAvailable": true,
     "timerDisjoints": 0,
-    "mfsFrames": 8989,
-    "responseCount": 677,
+    "mfsFrames": 8983,
+    "responseCount": 651,
     "environment": "dissipation",
     "layers": [
       "ABSTRACT",
@@ -2073,10 +2039,18 @@
       "FEEDBACK"
     ],
     "formation": "dissipation",
+    "composition": "streams",
+    "camera2D": [
+      0.15009820461273193,
+      0.01198710035532713,
+      1.0800000429153442,
+      0.30000001192092896
+    ],
+    "kickCount": 0,
     "dropKeyRole": null,
     "raymarchSteps": 0,
-    "previewSteps": 6,
-    "frame": 8997,
+    "previewSteps": 0,
+    "frame": 9004,
     "tSec": 120,
     "sectionIndex": 5,
     "boundaryCount": 6,

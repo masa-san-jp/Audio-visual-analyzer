@@ -1,4 +1,7 @@
 // 目的 — WebGL2 の資源・全画面パス・共通uniformを管理する — doc/20261004-concept-world-mode.md §2.6・§5
+// WORLD-8: 計算領域だけを拡張し、画面座標・構図の世界単位は維持する。
+const OVERSCAN = 1.5;
+const WORLD_DOMAIN_MARGIN = .035; // 3%以上、既存の安全用フェード幅も避ける
 const WORLD_VERTEX = `#version 300 es
 precision highp float;
 out vec2 vUv;
@@ -51,7 +54,11 @@ float noise3(vec3 p){vec3 i=floor(p),f=fract(p);f=f*f*(3.-2.*f);
   mix(mix(hash31(i+vec3(0,0,1)),hash31(i+vec3(1,0,1)),f.x),mix(hash31(i+vec3(0,1,1)),hash31(i+vec3(1,1,1)),f.x),f.y),f.z);}
 mat2 rot(float a){ return mat2(cos(a),sin(a),-sin(a),cos(a)); }
 // 粒子と染料は同じ世界に置き、表示時だけ共通のカメラを適用する。
-vec2 worldUv(vec2 p){return p/vec2(screen.x/screen.y,1.)+.5;}
+const float OVERSCAN = ${OVERSCAN};
+vec2 worldExtent(){return vec2(screen.x/screen.y,1.)*OVERSCAN;}
+vec2 worldUv(vec2 p){return p/worldExtent()+.5;}
+vec2 worldDomainPosition(vec2 uv){return (uv-.5)*worldExtent();}
+vec2 worldScreenUv(vec2 p){return p/vec2(screen.x/screen.y,1.)+.5;}
 vec2 worldView(vec2 p){return rot(-lens.w)*(p-lens.xy)*lens.z;}
 vec2 worldPosition(vec2 uv){return rot(lens.w)*((uv-.5)*vec2(screen.x/screen.y,1.))/lens.z+lens.xy;}
 vec2 worldCenter(int i){
@@ -184,4 +191,4 @@ class WorldGL {
     gl.deleteBuffer(this.ubo); gl.deleteVertexArray(this.vao);
   }
 }
-if (typeof module !== 'undefined' && module.exports) { module.exports = { WorldGL }; }
+if (typeof module !== 'undefined' && module.exports) { module.exports = { WorldGL, OVERSCAN, WORLD_DOMAIN_MARGIN }; }

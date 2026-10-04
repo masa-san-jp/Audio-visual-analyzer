@@ -152,8 +152,8 @@ test('UW-06 GPU命令: 流体射影20反復・全粒子・同時合成・MFS即�
   engine.render(score.durationSec, null, 0);
   assert.equal(engine.events.filter(e => e.type === 'boundary' && e.firedFrame >= 0).length, fixture.sections.length);
   assert.equal(engine.events.at(-1).type, 'end'); assert.ok(engine.events.at(-1).firedFrame >= 0);
-  assert.equal(engine.metrics().particleCount, 262144); assert.equal(engine.metrics().fluidWidth, 480);
-  console.log('UW-06 pressureIterations=20 particles=262144 fluid=480x270 boundaryCoverage=6/6 mockUniformLatencyFrames=0');
+  assert.equal(engine.metrics().particleCount, 262144); assert.equal(engine.metrics().fluidWidth, 720);
+  console.log('UW-06 pressureIterations=20 particles=262144 fluid=720x405 boundaryCoverage=6/6 mockUniformLatencyFrames=0');
 });
 
 test('UW-07 曲の三色だけで全抽象状態を配色・種別をまたぐラベルの独立変奏', () => {
@@ -418,8 +418,8 @@ test('UW-21 WORLD-6 履歴: 毎simulationステップで進む・再描画は不
   engine._step(1 / 60, null, 1 / 60); assert.notEqual(engine.post.feedback.read, first); assert.equal(updates, 2);
   engine._step(.017, null, 0); assert.equal(updates, 2);
   engine.setScore(engine.score); assert.equal(resets, 1);
-  engine.resize(1280, 720); assert.equal(engine.post.feedback.read.width, 640); assert.equal(engine.fluid.velocity.read.width, 320);
-  console.log('UW-21 historyUpdates=2 repeatedDrawUpdates=0 resetCalls=1 resizedFluid=320x180 feedback=640x360');
+  engine.resize(1280, 720); assert.equal(engine.post.feedback.read.width, 640); assert.equal(engine.fluid.velocity.read.width, 480);
+  console.log('UW-21 historyUpdates=2 repeatedDrawUpdates=0 resetCalls=1 resizedFluid=480x270 feedback=640x360');
 });
 test('UW-22 WORLD-6 全画面は明示操作のみ・シーク後は位置を維持して再開', async () => {
   let requests = 0, exits = 0;
@@ -524,11 +524,11 @@ test('UW-25 WORLD-7 2D camera: 全小節頭30度以上のcut・kind別pan/zoom/r
     assert.ok(u[82] > 0);
   }
   assert.equal(u.length, 108);
-  assert.equal(engine.fluid.velocity.read.width, 480); assert.equal(engine.fluid.velocity.read.height, 270);
-  assert.equal(engine.fluid.dye.read.width, 960); assert.equal(engine.fluid.dye.read.height, 540);
+  assert.equal(engine.fluid.velocity.read.width, 720); assert.equal(engine.fluid.velocity.read.height, 405);
+  assert.equal(engine.fluid.dye.read.width, 1440); assert.equal(engine.fluid.dye.read.height, 810);
   assert.equal(engine.particles.count, 262144);
   console.log('UW-25 camera2DCuts=' + cuts + ' minimumCutDeg=' + minimumAngle.toFixed(4) +
-    ' uniformFloats=108 velocity=480x270 dye=960x540 particles=262144');
+    ' uniformFloats=108 velocity=720x405 dye=1440x810 particles=262144');
 });
 test('UW-26 WORLD-7 計測: RGB丸めを除外したmotion差・画面3×3占有', () => {
   const difference = measurement.get('worldFrameDifference'), occupied = measurement.get('worldOccupiedTiles');
@@ -578,4 +578,74 @@ test('UW-28 WORLD-7 std140契約: GLSLの各vec4配列とJSのcamera/渦/衝撃�
   assert.ok(Math.abs(u[shot + 1]) > .15 && Math.abs(u[shot + 2]) > .1);
   console.log('UW-28 shaderUniformFloats=' + offset + ' lensOffset=' + offsets.get('lens') +
     ' vortexOffset=' + offsets.get('vortices') + ' shockOffset=' + shot + ' packedKickCount=' + u[shot + 3]);
+});
+
+
+test('UW-29 WORLD-8 領域: 1.5倍の速度・圧力・染料・補助場、リサイズ後も世界単位の格子密度を維持', () => {
+  const { engine } = worldTestEngine();
+  for (const [w, h] of [[1920, 1080], [1080, 1080], [1281, 721]]) {
+    engine.resize(w, h);
+    const f = engine.fluid, fw = Math.ceil(w * 1.5 / 4), fh = Math.ceil(h * 1.5 / 4);
+    for (const target of [f.velocity.read, f.velocity.write, f.pressure.read, f.pressure.write, f.curl, f.divergence, f.base]) {
+      assert.equal(target.width, fw); assert.equal(target.height, fh);
+    }
+    assert.equal(f.dye.read.width, Math.ceil(w * 1.5 / 2)); assert.equal(f.dye.read.height, Math.ceil(h * 1.5 / 2));
+    assert.equal(engine.scene.width, w); assert.equal(engine.scene.height, h);
+  }
+  const runtime = loadClassic(['js/world/gl-util.js', 'js/world/fluid.js', 'js/world/particles.js', 'js/world/post.js']);
+  assert.equal(runtime.get('OVERSCAN'), 1.5);
+  assert.match(runtime.get('WORLD_FLUID_FRAGMENT'), /worldDomainPosition\(uv\)/);
+  assert.match(runtime.get('WORLD_PARTICLE_UPDATE'), /worldExtent\(\)\.x\*\.5/);
+  assert.match(runtime.get('WORLD_PARTICLE_VERTEX'), /worldScreenUv\(worldView\(s.xy\)\)/);
+  assert.match(runtime.get('WORLD_FEEDBACK_FRAGMENT'), /worldUv\(worldPosition\(vUv\)\)/);
+  console.log('UW-29 overscan=1.5 velocity/pressure=720x405 dye=1440x810 targetsAreaRatio=2.25 screenResolutionUnchanged=true');
+});
+test('UW-30 WORLD-8 camera: 全60Hz時刻・両cut方向・16:9/1:1で四隅に3%以上の余白', () => {
+  const { engine } = worldTestEngine(), u = engine.gpu.uniforms;
+  const marginOf = loadClassic(['js/world/gl-util.js', 'tests/browser/world.test.js']).get('worldCameraMargin');
+  const clamp = engine._clampCamera;
+  let minimumMargin = .5, maximumZoomRatio = 1, samples = 0, unchanged = 0;
+  engine._clampCamera = function (minimumRotation) {
+    const original = u.slice(80, 84);
+    const originalMargin = marginOf(engine);
+    clamp.call(this, minimumRotation);
+    maximumZoomRatio = Math.max(maximumZoomRatio, u[82] / original[2]);
+    if (originalMargin >= .035 + 1e-5) { assert.deepEqual(u.slice(80, 84), original); unchanged++; }
+  };
+  for (const [w, h] of [[1920, 1080], [1080, 1080]]) {
+    engine.resize(w, h);
+    for (const section of engine.score.sections) {
+      for (let frame = Math.ceil(section.startSec * 60); frame < section.endSec * 60; frame++) {
+        const t = frame / 60, p = (t - section.startSec) / (section.endSec - section.startSec);
+        for (const cut of [0, 1]) {
+          engine.cut = cut; engine._camera(section, t, p, false, false);
+          const margin = marginOf(engine); minimumMargin = Math.min(minimumMargin, margin);
+          assert.ok(margin >= .03, 'camera margin=' + margin); samples++;
+        }
+      }
+    }
+  }
+  // 式の検証: 最大角で必要なズームは、余白から半径を除いた各軸の比の最大値。
+  u.set([2, -2, 1.05, .85], 80); clamp.call(engine);
+  assert.ok(marginOf(engine) >= .03); assert.equal(u[82], Math.fround(1.05));
+  console.log('UW-30 cornersChecked=' + samples * 4 + ' cameraSamples=' + samples +
+    ' minimumDomainUvMargin=' + minimumMargin.toFixed(9) + ' maximumZoomRatio=' + maximumZoomRatio.toFixed(9) +
+    ' unchangedSafeCameras=' + unchanged);
+});
+test('UW-31 BW-8-edges 計測: 一定輝度・黒い端・0.6閾値・暗部除外', () => {
+  const bands = measurement.get('worldEdgeBands'), width = 100, height = 100, rgba = new Uint8Array(width * height * 4);
+  function fill(outer, inner) {
+    for (let y = 0; y < height; y++) for (let x = 0; x < width; x++) {
+      const d = Math.min(x + .5, width - x - .5, y + .5, height - y - .5) / 100;
+      const value = d < .04 ? outer : inner, i = (y * width + x) * 4;
+      rgba[i] = value; rgba[i + 1] = value; rgba[i + 2] = value;
+    }
+    return bands(rgba, width, height);
+  }
+  assert.equal(fill(100, 100).pass, true); assert.equal(fill(0, 100).pass, false);
+  const exact = fill(60, 100); assert.equal(exact.pass, true);
+  assert.equal(fill(59, 100).pass, false); assert.equal(fill(0, 2).pass, true);
+  assert.equal(exact.outerPixels, 1536); assert.equal(exact.innerPixels, 1408);
+  assert.ok(Math.abs(exact.ratio - .6) < 1e-12);
+  console.log('UW-31 syntheticOuter/Inner=0.6 outerPixels=1536 innerPixels=1408 blackBorderRejected=true darkInnerExempt=true');
 });

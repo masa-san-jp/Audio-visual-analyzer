@@ -6,7 +6,7 @@ out vec4 frag;
 void main(){
  vec2 uv=worldUv(worldPosition(vUv));
  vec2 flow=texture(velocity,uv).xy;
- vec3 ink=texture(dye,uv+flow*.00004).rgb;
+ vec3 ink=texture(dye,uv+flow*(.00004/OVERSCAN)).rgb;
  // HDR染料の細い輪郭を光へ変換する。建造物／地形／レイマーチは使わない。
  vec2 dx=1./vec2(textureSize(dye,0));
  vec3 edge=abs(texture(dye,uv+dx).rgb-texture(dye,uv-dx).rgb);
@@ -242,7 +242,8 @@ class WorldEngine {
     u[80] = Math.cos(phase) * .08 + direction * (eased - .5) * (s.kind === 'build' ? .24 : .16);
     u[81] = Math.sin(phase) * .06 + Math.sin(eased * Math.PI) * (s.kind === 'break' ? .08 : -.06);
     u[82] = s.kind === 'build' ? 1.05 + eased * .45 : s.kind === 'drop' ? 1.08 + Math.sin(local * .65) * .08 : 1.08;
-    u[83] = (s.compositionId === 1 ? -.2 : s.compositionId === 3 ? .015 : .16) * direction + eased * direction * .14;
+    const baseRotation = s.compositionId === 1 ? -.2 : s.compositionId === 3 ? .015 : .16;
+    u[83] = baseRotation * direction + eased * direction * .14;
     if (s.kind === 'drop') {
       u[80] += Math.sin(local * .4 + phase) * .06;
       u[81] += Math.cos(local * .33 + phase) * .05;
@@ -250,6 +251,40 @@ class WorldEngine {
       u[83] += this.cut % 2 === 0 ? -.55 : .55;
       u[82] += s.variation > 1 ? .16 : 0;
     }
+    // 元の±.55rad cutと基底回転の全範囲から、30度cutを残せる最小回転を求める。
+    const cutRotation = Math.max(0, Math.PI / 6 - (.55 - Math.max(Math.abs(baseRotation), Math.abs(baseRotation + .14))));
+    this._clampCamera(s.kind === 'drop' ? cutRotation : 0);
+  }
+  // WORLD-8: 回転矩形の軸方向半径から必要ズームを解析的に求める。
+  // まずパンを減らす。中心でも収まらない回転だけを減らし、過大なズームを避ける。
+  _clampCamera(minimumRotation = 0) {
+    const u = this.gpu.uniforms, aspect = this.canvas.width / this.canvas.height;
+    // Float32への丸め後にも安全用フェードの外側に四隅を保つ。
+    const bx = aspect * OVERSCAN * (.5 - WORLD_DOMAIN_MARGIN) - 1e-6;
+    const by = OVERSCAN * (.5 - WORLD_DOMAIN_MARGIN) - 1e-6;
+    const requested = u[82], angle = Math.abs(u[83]);
+    // 既存UW-25の30度cutを残す範囲だけズームを許容し、それ以上の回転を減らす。
+    const cutC = Math.cos(minimumRotation), cutS = Math.sin(minimumRotation);
+    const zoom = Math.max(requested, (aspect * cutC + cutS) / (2 * bx),
+      (aspect * cutS + cutC) / (2 * by));
+    let c = Math.abs(Math.cos(angle)), sn = Math.abs(Math.sin(angle));
+    if ((aspect * c + sn) / (2 * zoom) > bx || (aspect * sn + c) / (2 * zoom) > by) {
+      let lo = 0, hi = angle;
+      // 原点から連続して収まる回転範囲を二分探索。割り当ては発生しない。
+      for (let i = 0; i < 24; i++) {
+        const a = (lo + hi) * .5, ac = Math.abs(Math.cos(a)), as = Math.abs(Math.sin(a));
+        if ((aspect * ac + as) / (2 * zoom) <= bx && (aspect * as + ac) / (2 * zoom) <= by) lo = a;
+        else hi = a;
+      }
+      u[83] = Math.sign(u[83]) * Math.max(Math.min(angle, minimumRotation), lo);
+      c = Math.abs(Math.cos(u[83])); sn = Math.abs(Math.sin(u[83]));
+    }
+    const hx = (aspect * c + sn) * .5, hy = (aspect * sn + c) * .5;
+    const px = Math.max(0, bx - hx / zoom), py = Math.max(0, by - hy / zoom);
+    u[80] = Math.max(-px, Math.min(px, u[80]));
+    u[81] = Math.max(-py, Math.min(py, u[81]));
+    const minimumZoom = Math.max(hx / (bx - Math.abs(u[80])), hy / (by - Math.abs(u[81])));
+    u[82] = Math.max(requested, minimumZoom);
   }
   _renderMatter() {
     const g = this.gpu;
@@ -298,6 +333,8 @@ class WorldEngine {
     const p95 = a => { a.sort((x, y) => x - y); return a.length ? a[Math.ceil(a.length * .95) - 1] : null; };
     return { width: this.canvas.width, height: this.canvas.height, particleCount: this.particles.count,
       fluidWidth: this.fluid.velocity.read.width, fluidHeight: this.fluid.velocity.read.height,
+      overscan: OVERSCAN, domainMargin: WORLD_DOMAIN_MARGIN,
+      dyeWidth: this.fluid.dye.read.width, dyeHeight: this.fluid.dye.read.height,
       feedbackWidth: this.post.feedback.read.width, feedbackHeight: this.post.feedback.read.height, hdrFormat: 'RGBA16F',
       cpuP95Ms: p95(cpu), gpuP95Ms: p95(gpu), renderP95Ms: p95(duration), frameP95Ms: p95(intervals),
       timingSamples: duration.length, submittedFrames: this.timeCount, timerAvailable: !!this.timer,

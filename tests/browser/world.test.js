@@ -161,12 +161,46 @@ async function worldV5Probe(w) {
   return { 'BW-5-light': { pass: samples.length > 0 && samples.every(s => s.pass), samples },
     'BW-5-palette': { pass: swapError < 1e-5 && ambientError < 1e-5 && gl.getError() === 0, swapError, ambientError, first, second } };
 }
+// WORLD-8: sRGB Yの外側0〜4%と隣接4〜8%を比較する。四隅は帯全体では一度だけ数える。
+function worldEdgeBands(rgba, width, height) {
+  const sums = new Float64Array(2), counts = new Uint32Array(2);
+  const sideSums = new Float64Array(8), sideCounts = new Uint32Array(8);
+  for (let y = 0; y < height; y++) for (let x = 0; x < width; x++) {
+    const left = (x + .5) / width, right = 1 - left, bottom = (y + .5) / height, top = 1 - bottom;
+    const distance = Math.min(left, right, bottom, top);
+    if (distance >= .08) continue;
+    const i = (y * width + x) * 4;
+    const luminance = (.2126 * rgba[i] + .7152 * rgba[i + 1] + .0722 * rgba[i + 2]) / 255;
+    const band = distance < .04 ? 0 : 1; sums[band] += luminance; counts[band]++;
+    for (let side = 0; side < 4; side++) {
+      const d = side === 0 ? left : side === 1 ? right : side === 2 ? bottom : top;
+      if (d >= .08) continue;
+      const j = side * 2 + (d < .04 ? 0 : 1); sideSums[j] += luminance; sideCounts[j]++;
+    }
+  }
+  const outerMean = sums[0] / counts[0], innerMean = sums[1] / counts[1];
+  return { pass: innerMean <= .01 || outerMean >= .6 * innerMean, outerMean, innerMean,
+    ratio: innerMean > 0 ? outerMean / innerMean : null, outerPixels: counts[0], innerPixels: counts[1],
+    sides: ['left', 'right', 'bottom', 'top'].map((side, i) => ({ side,
+      outerMean: sideSums[i * 2] / sideCounts[i * 2], innerMean: sideSums[i * 2 + 1] / sideCounts[i * 2 + 1] })) };
+}
+function worldCameraMargin(engine) {
+  const u = engine.gpu.uniforms, aspect = engine.canvas.width / engine.canvas.height;
+  let margin = .5;
+  for (const x of [-.5, .5]) for (const y of [-.5, .5]) {
+    const px = x * aspect / u[82], py = y / u[82], c = Math.cos(u[83]), s = Math.sin(u[83]);
+    const ux = (c * px - s * py + u[80]) / (aspect * OVERSCAN) + .5;
+    const uy = (s * px + c * py + u[81]) / OVERSCAN + .5;
+    margin = Math.min(margin, ux, 1 - ux, uy, 1 - uy);
+  }
+  return margin;
+}
 async function runWorldVisualMeasurement() {
   const w = window.__world, engine = w.engine, score = w.score, sections = score.sections;
   const screenshots = new Array(sections.length).fill(null), bands = [], references = [];
   window.__worldScreenshots = screenshots; window.__worldReferences = references;
   let maxRatio = 0, hdrMin = null, hdrMax = null;
-  const exposure = [], matter = [], referenceMatter = [];
+  const exposure = [], matter = [], referenceMatter = [], edges = [];
   function record(c, tSec, kind) {
     if (c.glError) throw new Error('capture GL error ' + c.glError);
     exposure.push({ tSec, kind, clippedFraction: c.clippedFraction, mean: c.mean });
@@ -177,6 +211,8 @@ async function runWorldVisualMeasurement() {
     await w.renderAt(tSec); const c = engine.capture(); screenshots[i] = c;
     bands.push({ sectionIndex: i, targetSec: tSec, capturedSec: engine.latestSec, environment: sections[i].environment,
       ...worldBandEnergy(c.rgba, c.width, c.height) }); record(c, tSec, sections[i].kind);
+    edges.push({ sectionIndex: i, tSec, kind: sections[i].kind, cameraMargin: worldCameraMargin(engine),
+      ...worldEdgeBands(c.rgba, c.width, c.height) });
     matter.push({ sectionIndex: i, kind: sections[i].kind, ...worldMatterProbe(engine) });
   }
   // v1と同じ時刻を必ず保存する。曲の中央値だけで白飛びと構図の繰り返しを見逃さない。
@@ -184,6 +220,7 @@ async function runWorldVisualMeasurement() {
     if (tSec > score.durationSec) continue;
     await w.renderAt(tSec); const c = engine.capture();
     references.push({ tSec, capture: c, environment: sections[engine.sectionIndex].environment }); record(c, tSec, 'reference');
+    edges.push({ tSec, kind: 'reference', cameraMargin: worldCameraMargin(engine), ...worldEdgeBands(c.rgba, c.width, c.height) });
     referenceMatter.push({ tSec, kind: sections[engine.sectionIndex].kind, ...worldMatterProbe(engine) });
   }
   const dropRatios = [];
@@ -236,6 +273,7 @@ async function runWorldVisualMeasurement() {
   const v4 = await worldV4Probe(w), v5 = await worldV5Probe(w), v6 = await worldV6Probe(w), v7 = await worldV7Probe(w);
   return {
     ...v4, ...v5, ...v6, ...v7,
+    'BW-8-edges': { pass: edges.length > 0 && edges.every(e => e.pass && e.cameraMargin >= .03), frames: edges },
     'W-1': { pass: maxRatio >= 1000, maxHdrRatio: maxRatio, hdrMin, hdrMax },
     'W-2': { pass: bands.every(b => Object.values(b.fractions).every(v => v >= .1)), sections: bands },
     'W-5': { pass: dropRatios.length > 0 && dropRatios.every(d => d.pass), drops: dropRatios },
@@ -436,4 +474,4 @@ function worldScreenshot(index, reference = false) {
   for (let y = 0; y < c.height; y++) image.data.set(c.rgba.subarray(y * c.width * 4, (y + 1) * c.width * 4), (c.height - 1 - y) * c.width * 4);
   ctx.putImageData(image, 0, 0); return canvas.toDataURL('image/png');
 }
-if (typeof module !== 'undefined' && module.exports) { module.exports = { worldBandEnergy, worldGaussian, worldReflectIndex, worldWarmFraction, worldParticleCoverage }; }
+if (typeof module !== 'undefined' && module.exports) { module.exports = { worldBandEnergy, worldGaussian, worldReflectIndex, worldWarmFraction, worldParticleCoverage, worldEdgeBands, worldCameraMargin }; }

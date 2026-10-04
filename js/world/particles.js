@@ -9,21 +9,23 @@ vec3 spawn(vec3 key){
  float seed=hash31(key),lane=floor(seed*12.),a=hash31(key+4.)*6.283185;
  float aspect=screen.x/screen.y;vec2 p;
  if(composition.x==0.){
-  int center=int(mod(lane,composition.z));float r=.025+sqrt(hash31(key+2.))*.32;
+  int center=int(mod(lane,composition.z));float r=.025+sqrt(hash31(key+2.))*.32*OVERSCAN;
   p=worldCenter(center)+vec2(cos(a+r*12.),sin(a+r*12.))*r;
  }else if(composition.x==1.){
-  p=rot(.45)*vec2((hash31(key+2.)-.5)*aspect*1.35,(lane-5.5)*.055+(hash31(key+5.)-.5)*.018);
+  p=rot(.45)*vec2((hash31(key+2.)-.5)*aspect*1.35*OVERSCAN,(lane-5.5)*.055*OVERSCAN+(hash31(key+5.)-.5)*.018);
  }else if(composition.x==2.){
-  p=vec2((hash31(key+2.)-.5)*aspect*1.2,(lane-5.5)*.08);
+  p=vec2((hash31(key+2.)-.5)*aspect*1.2*OVERSCAN,(lane-5.5)*.08*OVERSCAN);
   p.y+=.035*sin(p.x*9.-clock.x)+(hash31(key+5.)-.5)*.016;
  }else if(composition.x==3.){
-  p=vec2((hash31(key+2.)-.5)*aspect*1.2,(lane-5.5)*.033);
+  p=vec2((hash31(key+2.)-.5)*aspect*1.2*OVERSCAN,(lane-5.5)*.033*OVERSCAN);
   p.y+=.025*sin(p.x*5.+clock.x*.3)+(hash31(key+5.)-.5)*.022;
  }else{
-  float r=.06+sqrt(hash31(key+2.))*.95;
+  float r=.06+sqrt(hash31(key+2.))*.95*OVERSCAN;
   a=floor(seed*3.)*6.283185/3.-r*7.+composition.w+(hash31(key+5.)-.5)*.09;
   p=vortices[0].xy+vec2(cos(a),sin(a))*r;
  }
+ // 拡張した流線の生成点を領域へ折り返す。中心・流線・色の規則は維持する。
+ p=mod(p+worldExtent()*.5,worldExtent())-worldExtent()*.5;
  return vec3(p,.3+hash31(key+3.)*.7);
 }
 // 三つの滑らかな流れ関数の解析的curl。発散のない揺らぎを加える。
@@ -47,7 +49,7 @@ void main(){
   p.xy=worldCenter(center)+vec2(cos(a),sin(a))*r;v=worldFlow(p.xy)*1.2;
  }
  vec2 uv=worldUv(p.xy);
- vec2 flow=texture(velocity,clamp(uv,0.,1.)).xy/vec2(textureSize(velocity,0))*vec2(screen.x/screen.y,1.);
+ vec2 flow=texture(velocity,clamp(uv,0.,1.)).xy/vec2(textureSize(velocity,0))*worldExtent();
  float tempo=story.x==2.?1.6:story.x==0.?.12:story.x==3.?.18:story.x==4.?.08:.65;
  vec2 desired=worldFlow(p.xy)*tempo;
  vec2 force=(desired-v)*(story.x==2.?6.:2.5);
@@ -58,7 +60,7 @@ void main(){
  force+=flow*.9+curlFlow(p.xy,clock.x)*(story.x==3.?.4:1.);
  v+=force*clock.y;v*=exp(-clock.y*(story.x==2.?.35:.6));p.xy+=v*clock.y;
  // カメラ外にも物質を持ち、フレーム端で円盤状に切らない。outroは再供給しない。
- if(story.x!=4.&&(abs(p.x)>screen.x/screen.y*.7||abs(p.y)>.75)){
+ if(story.x!=4.&&(abs(p.x)>worldExtent().x*.5||abs(p.y)>worldExtent().y*.5)){
   p=spawn(key+floor(clock.x*.1));v=worldFlow(p.xy)*tempo;
  }
  positionOut=vec4(p,state.w);velocityOut=vec4(v,0,1);
@@ -74,7 +76,7 @@ void main(){
  ivec2 id=ivec2(gl_VertexID%512,gl_VertexID/512);vec4 s=texelFetch(particles,id,0);
  vec2 velocity=texelFetch(particleVelocity,id,0).xy;
  float seed=hash31(vec3(vec2(id),s.w));
- vec2 uv=worldUv(worldView(s.xy));
+ vec2 uv=worldScreenUv(worldView(s.xy));
  vec2 speed=rot(-lens.w)*velocity*lens.z*screen.y*.025;
  streakAxis=length(speed)>.01?normalize(speed):vec2(0,1);
  float width=mix(.45,.8,s.z)*screen.y/1080.;

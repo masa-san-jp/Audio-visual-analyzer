@@ -1,3 +1,36 @@
+## 2026-10-04 — [WORLD-8] 計算領域のオーバースキャン
+
+### 作業内容
+- `js/world/gl-util.js`: `OVERSCAN = 1.5`をJS/GLSLで共有し、worldUv／worldDomainPosition／worldExtentを計算領域用に拡張。粒子表示用worldScreenUvは画面の世界単位を維持。UBO108 floatsを保持。
+- `js/world/fluid.js`: 速度・圧力・curl・divergence・baseを画面1/4×1.5、染料を画面1/2×1.5へ拡張。全領域の世界座標で既存force／filamentを評価し、セル/秒換算も領域サイズに合わせる。渦・衝撃・粘性・圧力反復・染料係数は保持。
+- `js/world/particles.js`: 構図別spawnの領域寸法を1.5倍に拡張し、領域外の生成点はdomain内へ折り返す。respawn境界と流体速度の世界単位換算をdomainへ合わせる。表示のUVは画面用へ分離。262,144粒子、kick再供給4%、既存force、色、ストリークの寸法と強度を保持。
+- `js/world/world-engine.js`: 回転矩形の半径から必要最小zoomを解析的に計算。パンを制限し、中心でも収まらない回転は24回の二分探索で減らす。既存30度cutの条件を残す最小回転の分だけ追加zoomを許容。染料合成の微小flow変位をdomain UVへ換算し、soft fadeを安全網として保持。metricsにoverscan／domainMargin／dye寸法を追加。
+- `js/world/post.js`: feedback用の速度サンプルを同じカメラ／domain UVへ合わせる。dropのhistory weight、bloom、palette、露出、ACES、仕上げ係数は変更なし。
+- `tests/browser/world.test.js`: BW-8-edgesを追加。各section中央と7／20／30.3／45／62／90／112秒で外側4%と隣接内側4%のsRGB平均Yを比較し、inner>.01ならouter≥.6×inner、カメラ四隅のdomain UV余白≥.03を検査。四辺の平均も診断値として出力する。
+- `tests/world/measure.mjs`: BW-8-edgesを結果出力／終了コード判定へ追加。既存BW-7-performanceの1080p GPU p95≤14msを保持。
+- `tests/unit/world-score.test.mjs`: 指定の新target寸法へ既存UW-06／21／25の期待値を更新。UW-29〜31で全流体targetとresize、全60Hzカメラの四隅、band計測の合成入力と閾値を検証。
+
+### 検証
+- `node tests/run.mjs --unit`: 161件／160成功／0失敗／1スキップ（想定U15-00異常系）、27,935ms、終了コード0。
+- `node --test tests/unit/world-score.test.mjs`: 最終31件／31成功／0失敗／0スキップ、598.560125ms、終了コード0。初回はUW-21に旧1280×720時の速度幅320の期待値が残って失敗（実際480）。チケット指定の1.5倍に期待値を更新して再実行。計画の係数や閾値の調整はしていない。
+- UW-29: 1080p速度／圧力720×405、染料1440×810、計算target面積2.25倍。1:1と奇数サイズのresizeも成功。画面・scene・feedback解像度は維持。
+- UW-30: 16:9／1:1、120秒の全60Hz時刻×両cut方向、28,800camera／115,200四隅。最小domain UV余白0.035000641、最大zoom比1.034521917（追加3.4522%）、安全な19,082cameraは元の4uniformと完全一致。UW-25: 30cut、最小30.2188度（既存≥30度を保持）。
+- UW-31: 合成outer/inner=.6で成功、.59と黒い端で失敗、inner≤.01は除外。100×100画像のouter1,536画素／inner1,408画素、四隅は一度だけ集計。
+- 全`.js`／`.mjs`の`node --check`: 113件／113成功／0失敗、終了コード0。`git diff --check`: 成功。
+- Chrome禁止に従いBW-8-edges、既存W/BW全件、file://のconsole／GLSL実コンパイルは未実行。実フレームの帯輝度比、GPU p95、v7 dropとの見た目一致は未測定。既存PNG／world report／goldenは再生成していない。
+
+### spec.md 変更
+- なし。WORLDの実装・専用テスト・logに限定し、共有`doc/spec.md`／`README.md`、本体`index.html`、構想SSOTは編集していない。必要な共有文書への反映はレビュアー側で扱うこと。
+
+### 備考
+- 実装: Codex gpt-6.1-sol high
+- 判断: 余白は既存soft fadeの幅と同じdomain UV3.5%とし、要求の3%以上を確保。Float32丸めへの余裕として世界座標の半幅から1e-6を引く。必要zoomは `max(hx/(bx-abs(panX)), hy/(by-abs(panY)))`。中心でも元zoomに収まらない角度だけ減らし、旧UW-25の30度cutに必要な最小回転を既存基底回転と±.55radから導出した。
+- 判断: spawnの寸法・respawn境界を拡張する変更だけを粒子生成に適用。モチーフ選択、渦中心生成、kickの交互更新、force／palette／色／描画係数は変更していない。ただし拡張した領域への粒子配分と必要なcamera clampは画素結果に影響するため、dropの見た目保持は実GPUでの比較が必要。
+- 判断: bandは各軸を画像寸法で正規化した画素中心の最短端距離を使い、0〜4%と4〜8%を比較。合否は全周帯、四辺個別は診断値。従来のsRGB Y定義を使用し、閾値はチケット指定のまま。
+- 染料は指定の0.5×を維持。GPU実測が禁止されているため、性能超過を仮定した0.4×への削減は行っていない。
+- レビュアー確認: 実GPU・headed Chromeで`node tests/world/measure.mjs`を実行し、BW-8-edges全フレーム、1080p GPU p95≤14ms、GLSL／console／GL error 0、既存W/BWを確認。とくに7／20／30.3秒の左右／斜めの硬い境界消失、45／90秒のv7 dropのpalette／motion／composition／主役感を比較すること。性能超過時はユーザー指定の染料0.4×案を評価し、変更と測定値を報告すること。計画基準の失敗は定数を調整せず、該当節・選択肢・推奨案を報告すること。
+- 未コミット変更として納品。Chrome起動、commit／push／PR作成は行っていない。
+
 ## 2026-10-04 — [WORLD-7] 構図と動き
 
 ### 作業内容
