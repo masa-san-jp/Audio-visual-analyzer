@@ -4,6 +4,9 @@ ${WORLD_GLSL}
 uniform sampler2D field, velocity, auxiliary;
 uniform int mode;
 uniform float analyzerSpeed, analyzerDetail;
+uniform vec4 pulse;
+uniform vec4 bands[32];
+uniform float mids;
 out vec4 frag;
 void main(){
  vec2 dx=1./vec2(textureSize(field,0)), uv=vUv;
@@ -15,11 +18,17 @@ void main(){
    frag.xy*=exp(-clock.y*(.12+story.w*1.8));
  }else if(mode==1){ // 構図の流線と、キック位置からの衝撃。
    vec2 v=c.xy;
+   // 画面中心の低域渦は1〜3倍、拍は40格子セル/秒の放射加速。
+   float centerRadius=max(.002,length(q));
+   vec2 central=vec2(-q.y,q.x)*.075/(dot(q,q)+.018);
+
    vec2 d=q-shot.yz;float distance=max(.002,length(d));
    vec2 desired=worldFlow(q)*analyzerSpeed*(.65+worldKind(2.)*.95-worldKind(0.)*.53-worldKind(3.)*.47-worldKind(4.)*.57);
    // 速度格子のセル/秒へ変換。投影後も渦ペア間の剪断を維持する。
    vec2 cells=vec2(textureSize(velocity,0))/worldExtent();
+   desired+=central*(1.+pulse.z*FLUID_BASS_SWIRL);
    v+=clock.y*(desired*cells-v)*(story.x==2.?5.:1.4);
+   v+=clock.y*q/centerRadius*pulse.x*FLUID_BEAT_ACCELERATION;
    if(story.x==2.)v+=clock.y*d/distance*(worldShock(q)*180.+hit.x*100.*exp(-distance*12.));
    frag=vec4(clamp(v,vec2(-120),vec2(120)),0,1);
  }else if(mode==2){ // curl(v)
@@ -39,19 +48,18 @@ void main(){
    vec2 dv=1./vec2(textureSize(velocity,0)); // 染料は速度格子の2倍の解像度。変位は速度格子のセル単位
    vec3 dye=texture(field,fract(uv-clock.y*texture(velocity,uv).xy*dv)).rgb;
    dye*=exp(-clock.y*(story.x==4.?1.5:.25));
-   float angle=atan(q.y,q.x)+camera.x;
-   // 細い注入とノイズの途切れで、渦に巻かれて細い筋（フィラメント）が生まれるようにする
-   float plume=pow(max(0.,worldFilament(q)),1.+analyzerDetail)*smoothstep(.35,.75,worldPeriodicNoise(q,5.,sin(worldSlowPhase())));
-   float burst=worldShock(q)*(.4+.6*worldPeriodicNoise(q,7.,7.));
-   float inkRate=1.-worldKind(0.)*.5-worldKind(3.)*.4-worldKind(4.);
-   dye+=clock.y*inkRate*(1.+audio.z*4.+hit.x*12.)*plume*mix(worldColor(0.),worldColor(1.),.5+.5*sin(angle));
-   dye+=clock.y*(hit.w*14.*burst+hit.x*8.*burst)*worldColor(story.y>1.5?1.:2.);
+   // 既存の染料移流パスで完全なガウス形を注入（quadの端で切らない）。
+   for(int i=0;i<32;i++){
+     float L=bands[i].x,radius=(PUFF_RADIUS+L*PUFF_LEVEL_RADIUS)/lens.z;
+     vec2 d=q-emitterWorld(i);
+     dye+=clock.y*pow(L,PUFF_LEVEL_POWER)*PUFF_AMOUNT*exp(-dot(d,d)/(radius*radius))*bandRamp(float(i)/31.,primary.rgb,secondary.rgb,accent.rgb);
+   }
    frag=vec4(min(dye,vec3(32)),1);
  }else { // 暗黙的粘性拡散: 初期速度を auxiliary に固定して反復。
    float a=clock.y*mood.w*35.; frag=vec4((texture(auxiliary,uv).xy+a*(l.xy+r.xy+b.xy+t.xy))/(1.+4.*a),0,1);
  }
 }`;
-// 帯域の短い細線を32個のquadで供給。流れの向きで変形し、染料は直ちに移流へ乗る。
+// 帯域ごとのガウス形のひと吹きを32個のquadで供給 — 詳細設計 §4。
 const WORLD_SPECTRUM_VERTEX = `#version 300 es
 ${WORLD_GLSL.replace('in vec2 vUv;', '')}
 uniform int screenSpace;
@@ -63,23 +71,21 @@ void main(){
  int i=gl_VertexID/6,j=gl_VertexID%6;
  vec2 corner=j==0?vec2(-1,-1):j==1?vec2(1,-1):j==2?vec2(-1,1):j==3?vec2(-1,1):j==4?vec2(1,-1):vec2(1,1);
  local=corner;level=emitters[i].z;
- vec2 point=emitterWorld(i),flow=worldFlow(point);
- vec2 tangent=length(flow)>.001?normalize(flow):vec2(1,0),normal=vec2(-tangent.y,tangent.x);
- float radius=.010+level*(.020+.020*analyzerDetail);
- // 核は局所輝度を保ち、短い尖った筋を同じ流れに沿って作る。平行な長い噴流は作らない。
- vec2 offset=tangent*corner.x*radius+normal*corner.y*radius*.38;
+ vec2 point=emitterWorld(i);
+ float radius=PUFF_RADIUS+level*PUFF_LEVEL_RADIUS;
+ vec2 offset=corner*radius;
  vec2 uv=screenSpace==1?worldScreenUv(emitters[i].xy+rot(-lens.w)*offset*lens.z):worldUv(point+offset);
  gl_Position=vec4(uv*2.-1.,0,1);
- // 全噴出点の基準色度を共通にし、輝度の順位を帯域のレベルだけで決める。
- tint=worldColor(1.);tint/=max(.01,dot(tint,vec3(.2126,.7152,.0722)));
+ tint=bandRamp(float(i)/31.,primary.rgb,secondary.rgb,accent.rgb);
 }`;
 const WORLD_SPECTRUM_FRAGMENT = `#version 300 es
 precision highp float;
+${WORLD_GPU_DESIGN_GLSL}
 in vec2 local;in float level;in vec3 tint;
 uniform float amount;
 out vec4 frag;
 void main(){float r=dot(local,local);if(r>1.)discard;
- frag=vec4(tint*level*exp(-r*6.)*amount,0);
+ frag=vec4(tint*pow(level,PUFF_LEVEL_POWER)*exp(-r)*amount,0);
 }`;
 class WorldSpectrum {
  constructor(gpu){this.gpu=gpu;this.program=gpu.program(WORLD_SPECTRUM_FRAGMENT,WORLD_SPECTRUM_VERTEX);
@@ -93,7 +99,9 @@ class WorldFluid {
     this.gpu = gpu; this.program = gpu.program(WORLD_FLUID_FRAGMENT);
     this.fieldLoc = gpu.texture(this.program, 'field'); this.velocityLoc = gpu.texture(this.program, 'velocity');
     this.auxLoc = gpu.texture(this.program, 'auxiliary'); this.modeLoc = gpu.texture(this.program, 'mode');
-    this.motionSpeed = 1; this.detail = 1; this.speedLoc = gpu.texture(this.program, 'analyzerSpeed'); this.detailLoc = gpu.texture(this.program, 'analyzerDetail');
+    this.bandLoc = gpu.texture(this.program, 'bands[0]'); this.bands = new Float32Array(128);
+    this.pulseLoc = gpu.texture(this.program, 'pulse'); this.midsLoc = gpu.texture(this.program, 'mids');
+    this.pulse = new Float32Array(4); this.mids = 0; this.motionSpeed = 1; this.detail = 1; this.speedLoc = gpu.texture(this.program, 'analyzerSpeed'); this.detailLoc = gpu.texture(this.program, 'analyzerDetail');
     this.spectrum = new WorldSpectrum(gpu); this.resize(w, h);
   }
   resize(w, h) {
@@ -124,6 +132,7 @@ class WorldFluid {
   step() {
     const g = this.gpu; g.bind(this.program, this.base);
     g.gl.uniform1f(this.speedLoc, this.motionSpeed); g.gl.uniform1f(this.detailLoc, this.detail);
+    g.gl.uniform4fv(this.bandLoc, this.bands); g.gl.uniform4fv(this.pulseLoc, this.pulse); g.gl.uniform1f(this.midsLoc, this.mids);
     this.pass(0, this.velocity.read, this.base);
     this.pass(1, this.base, this.velocity.write); g.swap(this.velocity);
     // 粘性の反復で使う固定 RHS。コピーも GPU 内で完結する。
@@ -138,7 +147,6 @@ class WorldFluid {
     for (let i = 0; i < 20; i++) { this.pass(5, this.pressure.read, this.pressure.write); g.swap(this.pressure); }
     this.pass(6, this.pressure.read, this.velocity.write); g.swap(this.velocity);
     this.pass(7, this.dye.read, this.dye.write); g.swap(this.dye);
-    this.spectrum.render(this.dye.read, 0, this.gpu.uniforms[1] * 90);
   }
 }
 if (typeof module !== 'undefined' && module.exports) { module.exports = { WorldFluid }; }

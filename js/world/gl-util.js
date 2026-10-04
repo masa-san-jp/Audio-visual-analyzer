@@ -6,7 +6,69 @@ const WORLD_VERTEX = `#version 300 es
 precision highp float;
 out vec2 vUv;
 void main(){ vec2 p=vec2((gl_VertexID<<1)&2,gl_VertexID&2); vUv=p; gl_Position=vec4(p*2.-1.,0.,1.); }`;
+// 全GPUタイプの式と名前つき定数 — doc/20261004-design-gpu-analyzers-v1.md §1〜4。
+const WORLD_GPU_DESIGN_GLSL = `
+const float PI=3.141592653589793, TAU=6.283185307179586;
+const float BAND_SECONDARY_END=.65, BAND_ACCENT_START=.78;
+const float DUST_THRESHOLD=.9975, DUST_GRID=900., DUST_AMOUNT=.6, DUST_LIGHT=.35;
+const float STREAK_SEED=3.;
+const float STREAK_ANGLE=6., STREAK_RADIUS=1.5, STREAK_SPEED=.15, STREAK_POWER=6.;
+const float STREAK_OUTER=1.2, STREAK_INNER=.15, BACKGROUND_BASE=.006, STREAK_LIGHT=.05;
+const float CORE_RADIUS=.075, CORE_BASS_RADIUS=.035, CORE_BEAT_RADIUS=.02;
+const float CORE_FALLOFF=.55, CORE_BASE=1.2, CORE_BASS_LIGHT=4., CORE_BEAT_LIGHT=2.;
+const float CORE_WHITE_MIX=.5;
+const float CORONA_BASE=.6, CORONA_NOISE=.4, CORONA_SCALE=3., CORONA_SPEED=.6;
+const float RINGS_ROTATION=.04, RINGS_BEAT_ROTATION=.025, RAY_COUNT=64.;
+const float RAY_BASE_LENGTH=.06, RAY_LEVEL_LENGTH=.40, RAY_BASS_LENGTH=.05;
+const float RAY_ROOT_WIDTH=.0016, RAY_TIP_WIDTH=.0040, RAY_HALO=.12, RAY_HALO_WIDTH=5.;
+const float RAY_START=.04, RAY_FADE=.85, RAY_TIP_RADIUS=.012, RAY_WHITE_END=.55;
+const float RAY_BASE_LIGHT=.25, RAY_LEVEL_LIGHT=5., RAY_ONSET_LIGHT=.5, RAY_TIP_LIGHT=3.;
+const float TRAIL_WIDTH=1.6, TRAIL_FADE=.02, TRAIL_LIGHT=.35;
+const float RING_LIFE=.7, RING_SPEED=.95, RING_BASE_SPEED=.3;
+const float RING_WIDTH=.003, RING_WIDTH_GROWTH=.012, RING_LIGHT=2.5;
+const float RING_RED_SCALE=1.006, RING_BLUE_SCALE=.994, BAR_EXPOSURE=.25;
+const float SPARK_THRESHOLD=.6, SPARK_SPEED=.25, SPARK_LEVEL_SPEED=.5, SPARK_LIFE=.5, SPARK_LIGHT=2.;
+const int SPARKS_PER_RAY=8;
+const float GALAXY_TILT_DEGREES=62., GALAXY_SPIN=.03;
+const float ORBIT_INNER=.10, ORBIT_SPAN=.78, ORBIT_POWER=.9;
+const float GALAXY_ANGLE_JITTER=.02, ARM_BASE=.55, ARM_MODULATION=.45;
+const float ARM_COUNT=2., ARM_TWIST=3.2, ARM_SPEED=.05;
+const float ORBIT_WOBBLE=.05, ORBIT_WAVES=3., ORBIT_WOBBLE_SPEED=2., ORBIT_JITTER=.012;
+const float GALAXY_SIZE=1.4, GALAXY_LEVEL_SIZE=3.2, GALAXY_BEAT_SIZE=1., REFERENCE_HEIGHT=1080.;
+const float GALAXY_BASE_LIGHT=.10, GALAXY_LEVEL_POWER=1.2, GALAXY_LEVEL_LIGHT=3.2, GALAXY_BEAT_LIGHT=.6;
+const float GALAXY_FAR_LIGHT=.75, BULGE_RADIUS=.07, BULGE_BASE=.8, BULGE_BASS=3.5, BULGE_BEAT=1.5;
+const float BULGE_WHITE_MIX=.6, LANE_SEED=1.;
+const float LANE_LOW=.45, LANE_HIGH=.55, LANE_ANGLE=2., LANE_RADIUS=8., LANE_SHADE=.5;
+const float GALAXY_BEAT_SCALE=.035;
+const float FLUID_ARC_RADIUS=.32, FLUID_ARC_DEGREES=220., FLUID_DRIFT_MAX=.02, FLUID_JITTER=.006;
+const float PUFF_RADIUS=.010, PUFF_LEVEL_RADIUS=.018, PUFF_LEVEL_POWER=1.5, PUFF_AMOUNT=6.;
+const float FLUID_BEAT_EXPOSURE=.30, FLUID_BEAT_ACCELERATION=40., FLUID_BASS_SWIRL=2.;
+vec3 bandRamp(float x,vec3 a,vec3 b,vec3 c){
+ return mix(mix(a,b,smoothstep(0.,BAND_SECONDARY_END,x)),c,smoothstep(BAND_ACCENT_START,1.,x));
+}
+float gpuHash(vec3 p){p=fract(p*.1031);p+=dot(p,p.yzx+33.33);return fract((p.x+p.y)*p.z);}
+float gpuNoise3(vec3 p){vec3 i=floor(p),f=fract(p);f=f*f*(3.-2.*f);
+ return mix(mix(mix(gpuHash(i),gpuHash(i+vec3(1,0,0)),f.x),mix(gpuHash(i+vec3(0,1,0)),gpuHash(i+vec3(1,1,0)),f.x),f.y),
+ mix(mix(gpuHash(i+vec3(0,0,1)),gpuHash(i+vec3(1,0,1)),f.x),mix(gpuHash(i+vec3(0,1,1)),gpuHash(i+vec3(1,1,1)),f.x),f.y),f.z);
+}
+mat2 gpuRot(float a){return mat2(cos(a),sin(a),-sin(a),cos(a));}
+float coronaRadius(vec4 pulse){return CORE_RADIUS+pulse.z*CORE_BASS_RADIUS+pulse.x*CORE_BEAT_RADIUS;}
+vec3 analyzerBackground(vec2 p,float a,float r,float t,vec3 secondary){
+ float dust=step(DUST_THRESHOLD,gpuHash(vec3(floor(p*DUST_GRID),0.)))*DUST_AMOUNT;
+ // 逆順smoothstepはGLSLでは未定義なので、同じ下降曲線の正順の補数で表す。
+ float streak=pow(gpuNoise3(vec3(a*STREAK_ANGLE,r*STREAK_RADIUS-t*STREAK_SPEED,STREAK_SEED)),STREAK_POWER)*(1.-smoothstep(STREAK_INNER,STREAK_OUTER,r));
+ return secondary*(BACKGROUND_BASE+streak*STREAK_LIGHT)+vec3(dust)*DUST_LIGHT;
+}
+vec3 analyzerBeatRings(float r,float R0,vec4 beats,float speed,vec3 accent){
+ vec3 c=vec3(0);for(int k=0;k<4;k++){float age=beats[k];if(age<RING_LIFE){
+ float rad=R0+age*(RING_SPEED*speed+RING_BASE_SPEED),wid=RING_WIDTH+age*RING_WIDTH_GROWTH;
+ float amp=pow(1.-age/RING_LIFE,2.)*RING_LIGHT;
+ c+=accent*amp*exp(-pow((vec3(r)-rad*vec3(RING_RED_SCALE,1.,RING_BLUE_SCALE))/wid,vec3(2.)));
+ }}return c;
+}
+`;
 const WORLD_GLSL = `
+${WORLD_GPU_DESIGN_GLSL}
 precision highp float;
 precision highp sampler2D;
 in vec2 vUv;

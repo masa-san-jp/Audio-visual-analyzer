@@ -1,8 +1,8 @@
 // 目的 — 実HDR像・MFS入力からGPUタイプのG-1〜G-4を計測する — 構想 §2.8(4)
 // @page harness
 // G-1: 8秒の独立した32帯域包絡。60Hzで描画、15Hzで最終sRGB像を4px間隔で標本化。
-//      領域は固定: ringsは帯域の2光線を含む扇形、galaxyは傾き.22・軸比.60の楕円環。
-//      現在のbandsSmoothと領域平均YのPearson相関を全32帯域で検査（最小≥.6）。
+//      詳細設計v1: ringsは鏡像64光線の回転扇形、galaxyは62度・非線形半径の軌道環。
+//      整形後のL_iと領域平均YのPearson相関を全32帯域で検査（最小≥.6）。
 // G-2: 定常帯域・一定ラウドネス、3秒の拍前[2.9,3)と拍後[3,3.1)の6枚ずつ。
 //      |after-before|/before、黒→非ゼロはInfinity。空の窓／両方黒は失敗。
 // G-3: 6秒の90BPM/C/純音と180BPM/F#/倍音＋細かい打撃を実offline MFSで解析。
@@ -33,16 +33,26 @@ function world11Histogram(capture) {
   return {bins:Array.from(bins),weight};
 }
 function world11HistogramDistance(a,b){let sum=0;for(let i=0;i<a.length;i++)sum+=Math.abs(a[i]-b[i]);return sum*.5;}
-function world11RegionSamples(capture,typeId){
+function world11RegionSamples(capture,typeId,state){
   const sums=new Float64Array(32),counts=new Uint32Array(32),p=capture.rgba,w=capture.width,h=capture.height;
-  const c=Math.cos(.22),s=Math.sin(.22);
+  const t=state?.tSec||0,speed=state?.speed||1,beat=state?.beat||0,bass=state?.bass||0;
+  const angle=t*.04*speed+beat*.025,c=Math.cos(angle),s=Math.sin(angle),scale=1+beat*.035;
+  const inner=.075+bass*.035+beat*.02,tilt=Math.cos(62*Math.PI/180);
   for(let y=0;y<h;y+=4)for(let x=0;x<w;x+=4){
     const px=(x+.5-w/2)/h,py=(y+.5-h/2)/h;let band=-1;
     if(typeId==='g-rings'){
-      const r=Math.hypot(px,py);if(r>=.09&&r<=.46)band=Math.floor(((Math.atan2(py,px)+Math.PI*2)%(Math.PI*2))/(Math.PI*2)*32);
+      const qx=c*px-s*py,qy=s*px+c*py,r=Math.hypot(px,py);
+      if(r>=inner+.02&&r<=inner+.06+.40+.05*bass){
+        const a=Math.atan2(qy,qx)+Math.PI,ray=Math.min(63,Math.floor(a/(Math.PI*2)*64));band=ray<32?ray:63-ray;
+      }
     }else{
-      const qx=c*px+s*py,qy=-s*px+c*py,r=Math.hypot(qx,qy/.60),i=Math.round((r-.07)/.012);
-      if(i>=0&&i<32&&Math.abs(r-(.07+i*.012))<.005)band=i;
+      const r=Math.hypot(px,py/tilt)/scale;
+      // 非線形の32軌道。隣接半径の中点が環の境界になる。
+      if(r>=.10-.5*(.78*Math.pow(1/31,.9))&&r<=.88+.5*(.88-(.10+.78*Math.pow(30/31,.9)))){
+        const orbit=31*Math.pow(Math.max(0,(r-.10)/.78),1/.9),lo=Math.min(31,Math.floor(orbit)),hi=Math.min(31,lo+1);
+        const rLo=.10+.78*Math.pow(lo/31,.9),rHi=.10+.78*Math.pow(hi/31,.9);
+        band=Math.abs(r-rLo)<=Math.abs(r-rHi)?lo:hi;
+      }
     }
     if(band>=0){const o=(y*w+x)*4;sums[band]+=(.2126*p[o]+.7152*p[o+1]+.0722*p[o+2])/255;counts[band]++;}
   }
@@ -73,8 +83,8 @@ async function runWorldAnalyzerMeasurement(){
         const t=frame/60;feature.raw.fill(0);feature.raw[MFS_LAYOUT.LEVEL]=.65;
         for(let i=0;i<32;i++)feature.bandsSmooth[i]=.05+.9*(.5+.5*Math.sin(t*(1.4+i*.067)+i*2.399963));
         engine._step(t,feature,1/60);
-        if(frame%4===0){engine._draw();const capture=engine.capture();if(capture.glError)glErrors++;const values=world11RegionSamples(capture,typeId);
-          for(let i=0;i<32;i++){levels[i].push(feature.bandsSmooth[i]);regions[i].push(values[i]);}}
+        if(frame%4===0){engine._draw();const capture=engine.capture();if(capture.glError)glErrors++;const values=world11RegionSamples(capture,typeId,{tSec:t,speed:engine.type.songUniforms[0],beat:engine.type.pulseUniforms[0],bass:engine.type.pulseUniforms[2]});
+          for(let i=0;i<32;i++){levels[i].push(engine.type.bandUniforms[i*4]);regions[i].push(values[i]);}}
         if(frame%30===0)await nextFrame();
       }
       const correlations=levels.map((values,i)=>world11Correlation(values,regions[i]));

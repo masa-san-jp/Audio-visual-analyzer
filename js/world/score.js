@@ -11,12 +11,21 @@ function worldHash(text, seed) {
   for (let i = 0; i < text.length; i++) h = Math.imul(h ^ text.charCodeAt(i), 16777619) >>> 0;
   return h;
 }
-function worldHue(h) {
-  // 三色の正規化色相。描画時の明度・彩度・役割はworldColorで統一する。
-  const hue = ((h / (Math.PI * 2)) % 1 + 1) % 1;
-  const channel = offset => .015 + .985 * Math.max(0, Math.min(1, Math.abs(((hue * 6 + offset) % 6) - 3) - 1));
-  return [channel(0), channel(4), channel(2)];
-}
+// 線形RGB。色の役割の回転はcompileWorldScoreで維持する — 詳細設計 §1.1。
+const WORLD_PALETTES = [
+  { primary: [.10,.85,.75], secondary: [.45,.25,1.00], accent: [1.00,.85,.60] }, // Aurora
+  { primary: [1.00,.55,.15], secondary: [.90,.12,.25], accent: [1.00,.90,.75] }, // Ember
+  { primary: [.35,.70,1.00], secondary: [.12,.25,.90], accent: [.90,.95,1.00] }, // Glacier
+  { primary: [1.00,.45,.70], secondary: [.60,.50,1.00], accent: [1.00,.85,.55] }, // Sakura
+  { primary: [1.00,.75,.25], secondary: [1.00,.40,.10], accent: [1.00,.95,.85] }, // Solar
+  { primary: [.00,.80,1.00], secondary: [.25,.15,.80], accent: [1.00,.30,.80] }, // Abyss
+  { primary: [.60,1.00,.40], secondary: [.10,.70,.45], accent: [1.00,.85,.40] }, // Canopy
+  { primary: [.95,.25,.75], secondary: [.20,.40,1.00], accent: [.40,.95,1.00] }, // Nebula
+  { primary: [1.00,.45,.35], secondary: [.55,.20,.80], accent: [1.00,.75,.50] }, // Sunset
+  { primary: [.15,.50,1.00], secondary: [1.00,.20,.60], accent: [.95,.95,1.00] }, // Neon
+  { primary: [.95,.50,.25], secondary: [.10,.60,.60], accent: [1.00,.92,.80] }, // Copper
+  { primary: [.55,.30,1.00], secondary: [1.00,.40,.55], accent: [.50,.80,1.00] } // Twilight
+];
 // 全曲特徴は読込時だけ集計。ゼロ分布のtieは音名順、入力配列は変更しない。
 function worldSongVariation(songMap, featureFrames = null) {
   const chroma = new Float64Array(12); let centroid = 0, active = 0, onsets = 0;
@@ -28,11 +37,9 @@ function worldSongVariation(songMap, featureFrames = null) {
   }
   if (songMap.worldChroma) chroma.set(songMap.worldChroma);
   const order = Array.from({ length: 12 }, (_, i) => i).sort((a, b) => chroma[b] - chroma[a] || a - b);
-  const hue = order[0] * 7 / 12 * Math.PI * 2;
-  const accentHue = chroma[order[1]] > 0 ? order[1] * 7 / 12 * Math.PI * 2 : hue + Math.PI * 2 / 3;
   const meanCentroid = active ? centroid / active : 0, onsetDensity = onsets / Math.max(.001, songMap.durationSec);
   const brightness = Math.min(1, meanCentroid / 8000), density = onsetDensity / (onsetDensity + 2);
-  return { palette: { primary: worldHue(hue), secondary: worldHue(hue + Math.PI), accent: worldHue(accentHue) },
+  return { palette: WORLD_PALETTES[order[0]],
     motionSpeed: songMap.bpm / 120, detail: featureFrames ? .25 + .75 * (brightness + density) * .5 : 1,
     particleAmount: featureFrames ? .2 + .8 * (brightness * .6 + density * .4) : 1,
     centroidHz: meanCentroid, onsetDensity, dominantChroma: order[0] };
@@ -81,5 +88,5 @@ function compileWorldScore(songMap, seed, featureFrames = null) {
     palette: { primary: palette[0], secondary: palette[1], accent: palette[2] } };
 }
 if (typeof module !== 'undefined' && module.exports) {
-  module.exports = { worldSongVariation, compileWorldScore, worldHash, WORLD_KINDS, WORLD_ENVIRONMENTS, WORLD_KIND_ENVIRONMENT, WORLD_COMPOSITIONS };
+  module.exports = { worldSongVariation, compileWorldScore, worldHash, WORLD_PALETTES, WORLD_KINDS, WORLD_ENVIRONMENTS, WORLD_KIND_ENVIRONMENT, WORLD_COMPOSITIONS };
 }

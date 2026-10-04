@@ -4,6 +4,9 @@ const WORLD_PARTICLE_UPDATE = `#version 300 es
 ${WORLD_GLSL}
 uniform sampler2D particles, particleVelocity, velocity;
 uniform float analyzerSpeed;
+uniform int ringMode, sparkReset, fluidReset;
+uniform float analyzerDt;
+uniform vec4 bands[32], sparkEvents[32];
 layout(location=0) out vec4 positionOut;
 layout(location=1) out vec4 velocityOut;
 vec3 spawn(vec3 key){
@@ -37,8 +40,22 @@ vec2 curlFlow(vec2 p,float t){
 }
 void main(){
  ivec2 id=ivec2(gl_FragCoord.xy);vec4 state=texelFetch(particles,id,0);
- vec3 key=vec3(vec2(id),state.w),p=state.xyz;vec2 v=texelFetch(particleVelocity,id,0).xy;
- if(eye.w>.5){p=spawn(key);v=worldFlow(p.xy*3./p.z)*(.1+worldKind(2.)*1.1);}
+ vec3 key=vec3(vec2(id),state.w),p=state.xyz;vec4 previousVelocity=texelFetch(particleVelocity,id,0);vec2 v=previousVelocity.xy;
+ if(ringMode==1){
+   int particle=id.x+id.y*512,ray=(particle%512)/SPARKS_PER_RAY,volley=particle/512;
+   int band=ray<32?ray:63-ray;vec4 event=sparkEvents[band];
+   float lastEvent=previousVelocity.z,sparkAlive=previousVelocity.w;
+   if(sparkReset==1){p=vec3(0,0,SPARK_LIFE);sparkAlive=0.;lastEvent=-100.;}
+   if(event.x>=0.&&int(event.y)%512==volley&&event.x!=lastEvent){
+     float angle=(float(ray)+.5)*TAU/RAY_COUNT-PI-event.w;
+     vec2 direction=vec2(cos(angle),sin(angle));
+     p=vec3(direction*event.z,0.);v=direction*(SPARK_SPEED+bands[band].x*SPARK_LEVEL_SPEED);
+     sparkAlive=1.;lastEvent=event.x;
+   }else {p.xy+=v*analyzerDt;p.z=max(0.,clock.z-lastEvent);}
+   sparkAlive*=float(p.z<SPARK_LIFE);
+   positionOut=vec4(p,state.w);velocityOut=vec4(v,lastEvent,sparkAlive);return;
+ }
+ if(eye.w>.5||fluidReset==1){p=spawn(key);v=worldFlow(p.xy*3./p.z)*(.1+worldKind(2.)*1.1);}
  int band=(id.x+id.y*512)%32;float level=emitters[band].z;
  // 一斉に同じ方向の噴流を作らず、少量を既存の流線へ散らして供給する。
  if(clock.y>0.&&hash31(key+floor(clock.z/max(.0001,clock.y)))<clock.y*level*3.){
@@ -69,6 +86,8 @@ const WORLD_PARTICLE_VERTEX = `#version 300 es
 ${WORLD_GLSL.replace('in vec2 vUv;', '')}
 uniform sampler2D particles, particleVelocity;
 uniform float analyzerAmount;
+uniform int ringMode;
+uniform vec3 sparkColors[3];
 out vec3 color;
 out float alpha;
 out vec2 streakAxis;
@@ -76,6 +95,17 @@ out float streakWidth;
 void main(){
  ivec2 id=ivec2(gl_VertexID%512,gl_VertexID/512);vec4 s=texelFetch(particles,id,0);
  vec2 velocity=texelFetch(particleVelocity,id,0).xy;
+ if(ringMode==1){
+   int ray=(gl_VertexID%512)/SPARKS_PER_RAY,band=ray<32?ray:63-ray;
+   vec4 v=texelFetch(particleVelocity,id,0);
+   gl_Position=vec4(s.xy/vec2(screen.x/screen.y,1.)*2.,0,1);
+   // 火花も既存の速度ストリークの幅・サイズを使う。
+   gl_PointSize=clamp(1.5*screen.y/REFERENCE_HEIGHT+length(v.xy)*screen.y*.025,1.5,8.*screen.y/REFERENCE_HEIGHT);
+   streakWidth=.45*screen.y/REFERENCE_HEIGHT/gl_PointSize;
+   streakAxis=length(v.xy)>.001?normalize(v.xy):vec2(0,1);
+   color=bandRamp(float(band)/31.,sparkColors[0],sparkColors[1],sparkColors[2])*SPARK_LIGHT;
+   alpha=v.w*float(s.z<SPARK_LIFE);return;
+ }
  float seed=hash31(vec3(vec2(id),s.w)),depth=max(1.,s.z),material=(depth-1.)/8.;
  vec2 plane=s.xy*3./depth;
  // 焦点面の流体粒子。深度ぼけ・画面全体の伸張は別の奥行き層へ分離する。
@@ -165,14 +195,20 @@ class WorldParticles {
     }
     this.updateProgram = gpu.program(WORLD_PARTICLE_UPDATE); this.motionSpeed = 1;
     this.speedLoc = gpu.texture(this.updateProgram, 'analyzerSpeed');
+    this.fluidResetLoc = gpu.texture(this.updateProgram, 'fluidReset');
+    this.dtLoc = gpu.texture(this.updateProgram, 'analyzerDt');
+    this.ringLoc = gpu.texture(this.updateProgram, 'ringMode'); this.sparkResetLoc = gpu.texture(this.updateProgram, 'sparkReset');
+    this.sparkBandLoc = gpu.texture(this.updateProgram, 'bands[0]'); this.sparkEventLoc = gpu.texture(this.updateProgram, 'sparkEvents[0]');
     this.stateLoc = gpu.texture(this.updateProgram, 'particles'); this.particleVelocityLoc = gpu.texture(this.updateProgram, 'particleVelocity');
     this.flowLoc = gpu.texture(this.updateProgram, 'velocity');
     this.drawProgram = gpu.program(WORLD_PARTICLE_FRAGMENT, WORLD_PARTICLE_VERTEX);
+    this.drawRingLoc = gpu.texture(this.drawProgram, 'ringMode'); this.sparkColorLoc = gpu.texture(this.drawProgram, 'sparkColors[0]');
     this.amount = 1; this.amountLoc = gpu.texture(this.drawProgram, 'analyzerAmount');
     this.drawStateLoc = gpu.texture(this.drawProgram, 'particles'); this.drawVelocityLoc = gpu.texture(this.drawProgram, 'particleVelocity');
     this.reset(seed);
   }
   reset(seed) {
+    this.needsReset = true;
     const rng = makeRng(seed), data = this.initial, gl = this.gpu.gl;
     for (let i = 0; i < this.count; i++) {
       data[i * 4] = 0; data[i * 4 + 1] = 0; data[i * 4 + 2] = .5; data[i * 4 + 3] = rng() * 1000;
@@ -181,13 +217,18 @@ class WorldParticles {
     gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, 512, 512, gl.RGBA, gl.FLOAT, data);
     this.gpu.clearTarget(this.velocity.read); this.gpu.clearTarget(this.velocity.write);
   }
-  step(fluid) {
+  step(fluid, rings = null, input = null) {
     const g = this.gpu; g.bind(this.updateProgram, this.state.write); g.gl.uniform1f(this.speedLoc, this.motionSpeed);
+    g.gl.uniform1f(this.dtLoc, input ? input.dt : g.uniforms[1]);
+    g.gl.uniform1i(this.fluidResetLoc, this.needsReset ? 1 : 0);
+    g.gl.uniform1i(this.ringLoc, rings ? 1 : 0); g.gl.uniform1i(this.sparkResetLoc, rings && rings.sparkReset ? 1 : 0);
+    if (rings) { g.gl.uniform4fv(this.sparkBandLoc, rings.bandUniforms); g.gl.uniform4fv(this.sparkEventLoc, rings.sparkEvents); }
     g.sampler(this.stateLoc, 0, this.state.read); g.sampler(this.particleVelocityLoc, 1, this.velocity.read);
-    g.sampler(this.flowLoc, 2, fluid.velocity.read); g.draw(); g.swap(this.state); g.swap(this.velocity);
+    g.sampler(this.flowLoc, 2, fluid.velocity.read); g.draw(); g.swap(this.state); g.swap(this.velocity); this.needsReset = false;
   }
-  render(target) {
+  render(target, rings = null) {
     const g = this.gpu, gl = g.gl; g.bind(this.drawProgram, target); gl.uniform1f(this.amountLoc, this.amount);
+    gl.uniform1i(this.drawRingLoc, rings ? 1 : 0); if (rings) gl.uniform3fv(this.sparkColorLoc, rings.colors);
     g.sampler(this.drawStateLoc, 0, this.state.read); g.sampler(this.drawVelocityLoc, 1, this.velocity.read);
     gl.enable(gl.BLEND); gl.blendFunc(gl.ONE, gl.ONE); gl.drawArrays(gl.POINTS, 0, this.count); gl.disable(gl.BLEND);
   }

@@ -175,7 +175,7 @@ class WorldEngine {
       }
     }
     if (beat) this.lastBeat = tSec;
-    this.pulse = Math.exp(-Math.max(0, tSec - this.lastBeat) * 18);
+    this.pulse = Math.exp(-Math.max(0, tSec - this.lastBeat) / WORLD_BEAT_SECONDS);
     const input = this.typeInput; input.features = f; input.song = score.song;
     input.dt = Math.max(0, dt); input.tSec = tSec; input.boundaryNow = boundaryNow;
     this.fadeElapsed = Math.min(.5, this.fadeElapsed + input.dt);
@@ -247,36 +247,54 @@ class WorldEngine {
     u[82] = 1.08 + .08 * Math.sin(phase) ** 2 + .03 * (gain - 1);
     u[83] = .12 * Math.sin(phase); this._clampCamera();
   }
-  _emitterPosition(id, i, out, offset, phase = this.gpu.uniforms[0]) {
-    const aspect = this.canvas.width / this.canvas.height;
-    // 単調な不等間隔。帯域の順序と分離を保ち、規則的な櫛の歯を作らない。
-    const v = (i + .22 * Math.sin(i * 2.399963)) / 31;
-    const a = Math.PI * (.12 + v * .76);
-    let x = -Math.cos(a) * aspect * .4, y = Math.sin(a) * .32 - .26;
-    if (id === 4) {
-      const turn = v * Math.PI * 3.4, r = .08 + v * .29;
-      x = Math.cos(turn) * r; y = Math.sin(turn) * r;
-    } else if (id === 2) {
-      y += .10 * Math.sin(v * Math.PI * 1.4);
+  _globalFlow(x, y, out) {
+    // GLSL worldFlow/flowForの大域場をそのままCPUで評価。scratchは初期化時の2要素だけ。
+    const u = this.gpu.uniforms, ex = this.canvas.width / this.canvas.height * OVERSCAN, ey = OVERSCAN;
+    x = ((x / ex + .5) % 1 + 1) % 1 * ex - ex * .5;
+    y = ((y / ey + .5) % 1 + 1) % 1 * ey - ey * .5;
+    const tau = Math.PI * 2, t = u[0] * u[85];
+    const build = ((u[114] === 1 ? 1 : 0) * (1 - u[112]) + (u[115] === 1 ? 1 : 0) * u[112]) * (1 - u[113]);
+    const drop = ((u[114] === 2 ? 1 : 0) * (1 - u[112]) + (u[115] === 2 ? 1 : 0) * u[112]) * (1 - u[113]);
+    let resultX = 0, resultY = 0;
+    for (let pass = 0; pass < 3; pass++) {
+      const id = pass === 0 ? u[108] : pass === 1 ? u[84] : 3;
+      const count = pass === 0 ? u[110] : pass === 1 ? u[86] : 2;
+      const weight = pass === 0 ? (1 - u[112]) * (1 - u[113]) : pass === 1 ? u[112] * (1 - u[113]) : u[113];
+      let fx = 0, fy = 0;
+      for (let i = 0; i < 2; i++) {
+        const cx = u[88 + i * 4] + Math.cos(t + i * 2) * .07, cy = u[89 + i * 4] + Math.sin(t + i * 2) * .07;
+        const dx = Math.sin((x - cx) / ex * tau) * ex / tau, dy = Math.sin((y - cy) / ey * tau) * ey / tau;
+        const strength = u[90 + i * 4] * .075 / (dx * dx + dy * dy + .018) * (i === 0 ? 1 : count - 1);
+        fx -= dy * strength; fy += dx * strength;
+      }
+      const ax = x / ex * tau, ay = y / ey * tau;
+      fx += Math.sin(ay + Math.sin(t)) * .13; fy += Math.cos(ax + Math.cos(t)) * .13;
+      if (id === 1) { fx += .16; fy += .08; }
+      if (id === 2) { fx += .2; fy += .04; }
+      if (id === 4) { fx -= Math.sin(ax) * (.15 + .25 * build); fy -= Math.sin(ay) * (.15 + .25 * build); }
+      let axisX = u[92] - u[88] + .001, axisY = u[93] - u[89] + .001;
+      const length = Math.hypot(axisX, axisY); axisX /= length; axisY /= length;
+      const dx = Math.sin(ax) * ex / tau, dy = Math.sin(ay) * ey / tau;
+      const shear = Math.exp(-(((-dx * axisY + dy * axisX) / .08) ** 2));
+      fx += axisX * .45 * shear * drop; fy += axisY * .45 * shear * drop;
+      resultX += fx * weight; resultY += fy * weight;
     }
-    // カメラと独立に、流体の低周波うねりに沿って周期的に漂う。
-    out[offset] = x + .04 * (Math.sin(phase + y * 2.) - Math.sin(y * 2.));
-    out[offset + 1] = y + .035 * (Math.cos(phase + x * 2.) - Math.cos(x * 2.));
+    const gain = 1 + u[4] * .35 + u[78] * .25;
+    out[0] = resultX * gain; out[1] = resultY * gain;
   }
-
-  _emitters(f) {
-    const u = this.gpu.uniforms, blend = u[112], loop = u[113];
-    const phase = Math.PI * 2 * this.latestSec / this.score.durationSec;
+  _emitterPosition(id, i, out, offset, phase = this.gpu.uniforms[0], analyzer = null) {
+    // s=i/31の220度円弧。向きが未指定なので±110度、中心は原点に置く。
+    const a = (i / 31 - .5) * WORLD_FLUID_ARC_DEGREES * Math.PI / 180;
+    const frame = Math.floor(this.latestSec * this.fps + 1e-9);
+    out[offset] = Math.cos(a) * WORLD_FLUID_ARC_RADIUS + (analyzer ? analyzer.driftX + (worldEmitterHash(i, frame, 17) * 2 - 1) * WORLD_FLUID_JITTER : 0);
+    out[offset + 1] = Math.sin(a) * WORLD_FLUID_ARC_RADIUS + (analyzer ? analyzer.driftY + (worldEmitterHash(i, frame, 29) * 2 - 1) * WORLD_FLUID_JITTER : 0);
+  }
+  _emitters(f, analyzer = null) {
+    const u = this.gpu.uniforms;
     for (let i = 0; i < 32; i++) {
       const offset = 116 + i * 4;
-      this._emitterPosition(u[108], i, u, offset, phase);
-      const x = u[offset], y = u[offset + 1];
-      this._emitterPosition(u[84], i, u, offset, phase);
-      const nx = x + (u[offset] - x) * blend, ny = y + (u[offset + 1] - y) * blend;
-      this._emitterPosition(this.score.sections[0].compositionId, i, u, offset, phase);
-      u[offset] = nx * (1 - loop) + u[offset] * loop;
-      u[offset + 1] = ny * (1 - loop) + u[offset + 1] * loop;
-      u[offset + 2] = f.bandsSmooth[i]; u[offset + 3] = f.bands[i];
+      this._emitterPosition(u[84], i, u, offset, u[0], analyzer);
+      u[offset + 2] = analyzer ? analyzer.bandUniforms[i * 4] : f.bandsSmooth[i]; u[offset + 3] = f.bands[i];
     }
   }
   setTimeline(frames, fps) {
@@ -359,11 +377,11 @@ class WorldEngine {
     this.depthParticles.render(target);
     this.spectrum.detail = this.score.song.detail;
     this.particles.amount = this.score.song.particleAmount; this.particles.render(target);
-    this.spectrum.render(target, 1, g.uniforms[39] ? 0 : 20 * g.uniforms[79]);
   }
   _draw() {
     const p = this.fadeElapsed / .5, blend = p * p * (3 - 2 * p);
-    this.post.pulse = this.pulse;
+    // 詳細設計の各タイプで拍の露出・スケールを適用済み。旧postの二重pulseを止める。
+    this.post.pulse = 0;
     this.post.analyzerMode = this.previousPostMode * (1 - blend) + (this.type.id === 'g-fluid' ? 0 : 1) * blend;
     this.post.render(this.scene);
   }
