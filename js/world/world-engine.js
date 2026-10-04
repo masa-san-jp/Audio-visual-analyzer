@@ -1,31 +1,12 @@
-// 目的 — 世界の状態・演出・HDR合成と計測を統合する — doc/20261004-concept-world-mode.md §2.7・§4〜§5
-const WORLD_COMPOSITE_FRAGMENT = `#version 300 es
-${WORLD_GLSL}
-uniform sampler2D dye, velocity;
+// 目的 — 世界の状態・演出・HDR合成と計測を統合する — doc/20261004-concept-world-mode.md §2.8・§4〜§5
+// 切替時の現在HDR像を保持し、0.5秒で選択タイプへ連続的に溶かす。
+const WORLD_TYPE_FADE_FRAGMENT = `#version 300 es
+precision highp float;
+in vec2 vUv;
+uniform sampler2D previous, current;
+uniform float blend;
 out vec4 frag;
-void main(){
- vec2 p=worldPosition(vUv),uv=worldUv(p);
- vec2 flow=texture(velocity,uv).xy;
- vec3 ink=texture(dye,uv+flow*(.00004/OVERSCAN)).rgb;
- vec2 dx=1./vec2(textureSize(dye,0));
- vec3 edge=abs(texture(dye,uv+dx).rgb-texture(dye,uv-dx).rgb);
- vec3 mist=vec3(0);
- // 星雲は遠景だけに置き、dropの焦点面を霞で覆わない。
- float quiet=worldKind(0.)+worldKind(3.)*.2;
- if(quiet>.001){
-  for(int i=0;i<2;i++){
-   float depth=3.+float(i)*5.;
-   vec2 q=worldPosition(vUv)+eye.xy/depth;
-   q*=1.+float(i)*.45;
-   float cloud=worldNebula(q,depth);
-   // 最近の雲だけに細部を加える。全画面のぼかし・同心円・波紋は使わない。
-   mist+=worldColor(float(i%2))*cloud*exp(-depth*.12);
-  }
- }
- // 直近の流体はv8の合成係数へ戻し、領域の矩形フェードを重ねない。
- frag=vec4(mist*quiet+(ink*.65+edge*.8)*mood.x*environment.w,1);
-
-}`;
+void main(){frag=mix(texture(previous,vUv),texture(current,vUv),blend);}`;
 class WorldEngine {
   constructor(canvas, seed = 11) {
     this.canvas = canvas; this.seed = seed; this.gpu = new WorldGL(canvas);
@@ -34,9 +15,18 @@ class WorldEngine {
     this.depthParticles = new WorldDepthParticles(this.gpu, seed);
     this.post = new WorldPost(this.gpu, canvas.width, canvas.height);
     this.scene = this.gpu.target(canvas.width, canvas.height);
-    this.composite = this.gpu.program(WORLD_COMPOSITE_FRAGMENT); this.spectrum = new WorldSpectrum(this.gpu);
-    this.dyeLoc = this.gpu.texture(this.composite, 'dye');
-    this.velocityLoc = this.gpu.texture(this.composite, 'velocity');
+    this.spectrum = new WorldSpectrum(this.gpu);
+    this.types = [new WorldFluidAnalyzer(), new WorldRingsAnalyzer(), new WorldGalaxyAnalyzer()];
+    for (let i = 0; i < this.types.length; i++) this.types[i].init(this.gpu);
+    this.type = this.types[0]; this.fadeElapsed = .5; this.previousPostMode = 0;
+    // 従来計測の公開口は保持。shader/programの所有者はg-fluid。
+    this.composite = this.type.program; this.dyeLoc = this.type.dyeLoc; this.velocityLoc = this.type.velocityLoc;
+    this.typeTarget = this.gpu.target(canvas.width, canvas.height); this.typeSnapshot = this.gpu.target(canvas.width, canvas.height);
+    this.typeFade = this.gpu.program(WORLD_TYPE_FADE_FRAGMENT);
+    this.previousLoc = this.gpu.texture(this.typeFade, 'previous'); this.currentLoc = this.gpu.texture(this.typeFade, 'current');
+    this.blendLoc = this.gpu.texture(this.typeFade, 'blend');
+    this.typeInput = { engine: this, target: this.scene, features: null, song: null, dt: 0, tSec: 0, boundaryNow: false };
+    this.lastBeat = -100; this.pulse = 0;
     this.score = null; this.events = []; this.sectionIndex = 0; this.eventIndex = 0; this.downbeatIndex = 0;
     this.frame = 0; this.simTime = 0; this.cut = 0; this.lastDrop = -100; this.lastKick = -100; this.onFrame = null;
     this.beatIndex = 0; this.kickCount = 0; this.lastCut = 0;
@@ -63,6 +53,8 @@ class WorldEngine {
     // 再上演とpreviewは同じGPU状態から開始する。program/FBOを再作成しない。
     const g = this.gpu; g.uniforms.fill(0); this.particles.reset(score.seed); this.depthParticles.reset(score.seed); this.fluid.reset(); this.post.reset();
     this.latestSec = 0; this.previewStep = 0; this.preview = false;
+    this.fadeElapsed = .5; this.lastBeat = -100; this.pulse = 0;
+    for (let i = 0; i < this.types.length; i++) if (this.types[i].reset) this.types[i].reset();
   }
 
   resize(w, h) {
@@ -70,6 +62,8 @@ class WorldEngine {
     this.canvas.width = w; this.canvas.height = h;
     this.fluid.resize(w, h); this.post.resize(w, h);
     this.gpu.releaseTarget(this.scene); this.scene = this.gpu.target(w, h);
+    this.gpu.releaseTarget(this.typeTarget); this.gpu.releaseTarget(this.typeSnapshot);
+    this.typeTarget = this.gpu.target(w, h); this.typeSnapshot = this.gpu.target(w, h); this.fadeElapsed = .5;
   }
   _beginTiming(tSec, dt) {
     const gl = this.gpu.gl;
@@ -149,7 +143,7 @@ class WorldEngine {
     u[18] = s.kind === 'break' ? 2.4 : 1; u[19] = s.kind === 'break' ? .8 : s.kind === 'intro' ? .6 : .15;
     u[20] = .16 * Math.sin(u[0]);
     u[21] = 22 * s.worldScale;
-    u[22] = s.kind === 'build' ? p * p * .025 : u[8] * .008; u[23] = s.complexity;
+    u[22] = s.kind === 'build' ? p * p * .025 : u[8] * .008; u[23] = s.complexity * score.song.detail;
     const invert = s.kind === 'drop';
     for (let i = 0; i < 3; i++) { u[24 + i] = invert ? s.secondary[i] : s.primary[i]; u[28 + i] = invert ? s.primary[i] : s.secondary[i]; }
     u[32] = f.chroma[0] + f.chroma[4]; u[33] = f.chroma[3] + f.chroma[7]; u[34] = f.chroma[5] + f.chroma[11];
@@ -180,8 +174,12 @@ class WorldEngine {
         this.responses[i + 6] = this.frame; this.responseCount++;
       }
     }
-    if (dt > 0) this.fluid.step();
-    if (dt > 0 || this.frame === 1 || boundaryNow) this.particles.step(this.fluid);
+    if (beat) this.lastBeat = tSec;
+    this.pulse = Math.exp(-Math.max(0, tSec - this.lastBeat) * 18);
+    const input = this.typeInput; input.features = f; input.song = score.song;
+    input.dt = Math.max(0, dt); input.tSec = tSec; input.boundaryNow = boundaryNow;
+    this.fadeElapsed = Math.min(.5, this.fadeElapsed + input.dt);
+    this.type.step(input);
     this._renderMatter();
     // 履歴は固定simulationステップで更新。captureや再描画では進めない。
     if (dt > 0 || this.frame === 1 || boundaryNow) this.post.stepFeedback(this.scene, this.fluid);
@@ -325,15 +323,50 @@ class WorldEngine {
     const minimumZoom = Math.max(hx / (bx - Math.abs(u[80])), hy / (by - Math.abs(u[81])));
     u[82] = Math.max(requested, minimumZoom);
   }
-  _renderMatter() {
-    const g = this.gpu;
-    g.bind(this.composite, this.scene);
-    g.sampler(this.dyeLoc, 0, this.fluid.dye.read); g.sampler(this.velocityLoc, 1, this.fluid.velocity.read); g.draw();
-    this.depthParticles.render(this.scene);
-    this.particles.render(this.scene);
-    this.spectrum.render(this.scene, 1, this.gpu.uniforms[39] ? 0 : 5 * this.gpu.uniforms[79]);
+  selectType(id, immediate = false) {
+    let next = null;
+    for (let i = 0; i < this.types.length; i++) if (this.types[i].id === id) next = this.types[i];
+    if (!next) throw new RangeError('未実装のGPUタイプ: ' + id);
+    if (next === this.type) return;
+    // 再切替時も現在の混合像を起点にする。GPU資源は選択時に増やさない。
+    const gl = this.gpu.gl;
+    gl.bindFramebuffer(gl.READ_FRAMEBUFFER, this.scene.fbo); gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, this.typeSnapshot.fbo);
+    gl.blitFramebuffer(0, 0, this.scene.width, this.scene.height, 0, 0, this.scene.width, this.scene.height, gl.COLOR_BUFFER_BIT, gl.NEAREST);
+    this.previousPostMode = this.post.analyzerMode;
+    this.type = next; if (next.reset) next.reset(); this.fadeElapsed = immediate || !this.frame ? .5 : 0;
+    if (this.frame) { this.typeInput.dt = 0; this.typeInput.boundaryNow = false; next.step(this.typeInput); }
   }
-  _draw() { this.post.render(this.scene); }
+  _renderMatter() {
+    const input = this.typeInput, g = this.gpu;
+    input.target = this.fadeElapsed < .5 ? this.typeTarget : this.scene;
+    this.type.render(input);
+    if (this.fadeElapsed < .5) {
+      const p = this.fadeElapsed / .5;
+      g.bind(this.typeFade, this.scene); g.sampler(this.previousLoc, 0, this.typeSnapshot); g.sampler(this.currentLoc, 1, this.typeTarget);
+      g.gl.uniform1f(this.blendLoc, p * p * (3 - 2 * p)); g.draw();
+    }
+  }
+  redrawTransition(dt) {
+    if (!this.score || this.fadeElapsed >= .5 || !this.frame) return;
+    this.fadeElapsed = Math.min(.5, this.fadeElapsed + Math.max(0, dt));
+    this.typeInput.dt = 0; this.typeInput.boundaryNow = false;
+    this._renderMatter(); this.post.stepFeedback(this.scene, this.fluid); this._draw();
+  }
+  _renderFluid(target) {
+    const g = this.gpu;
+    g.bind(this.composite, target);
+    g.sampler(this.dyeLoc, 0, this.fluid.dye.read); g.sampler(this.velocityLoc, 1, this.fluid.velocity.read); g.draw();
+    this.depthParticles.render(target);
+    this.spectrum.detail = this.score.song.detail;
+    this.particles.amount = this.score.song.particleAmount; this.particles.render(target);
+    this.spectrum.render(target, 1, g.uniforms[39] ? 0 : 20 * g.uniforms[79]);
+  }
+  _draw() {
+    const p = this.fadeElapsed / .5, blend = p * p * (3 - 2 * p);
+    this.post.pulse = this.pulse;
+    this.post.analyzerMode = this.previousPostMode * (1 - blend) + (this.type.id === 'g-fluid' ? 0 : 1) * blend;
+    this.post.render(this.scene);
+  }
   _validatePreview(tSec) {
     if (!this.score) throw new Error('曲を読み込んでください');
     if (!Number.isFinite(tSec) || tSec < 0 || tSec > this.score.durationSec) throw new RangeError('preview時刻が範囲外です');
@@ -376,7 +409,8 @@ class WorldEngine {
     const intervals = Array.from(this.frameIntervals.subarray(0, this.timeCount));
     const p95 = a => { a.sort((x, y) => x - y); return a.length ? a[Math.ceil(a.length * .95) - 1] : null; };
     return { width: this.canvas.width, height: this.canvas.height, particleCount: this.particles.count,
-      depthParticleCount: this.depthParticles.count, focusedFluid: true,
+      depthParticleCount: this.depthParticles.count, focusedFluid: this.type.id === 'g-fluid',
+      typeId: this.type.id, typeBlend: this.fadeElapsed / .5, analyzerParticleCount: this.type.particleCount || 0,
       fluidWidth: this.fluid.velocity.read.width, fluidHeight: this.fluid.velocity.read.height,
       overscan: OVERSCAN, domainMargin: WORLD_DOMAIN_MARGIN,
       dyeWidth: this.fluid.dye.read.width, dyeHeight: this.fluid.dye.read.height,

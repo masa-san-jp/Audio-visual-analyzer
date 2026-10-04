@@ -1,4 +1,4 @@
-// 目的 — WORLDのオフラインMFS・固定dt・音声入りWebCodecs書き出し — 構想 §2.7(1)、Phase16 §6.3
+// 目的 — WORLDのオフラインMFS・固定dt・音声入りWebCodecs書き出し — 構想 §2.8・§2.7(1)、Phase16 §6.3
 // 既存OfflineExporterのMFS worklet／音声エンコード／品質算出を再利用する。
 class WorldExporter extends OfflineExporter {
   async prepare(file, fps, audioBuffer = null) {
@@ -57,7 +57,7 @@ class WorldExporter extends OfflineExporter {
       }, error: error => { encoderError = error; } });
       videoEncoder.configure(video); audioEncoder.configure(audio);
       const canvas = document.createElement('canvas'); canvas.width = width; canvas.height = height;
-      engine = new WorldEngine(canvas, score.seed); engine.setScore(score); engine.setTimeline(featureFrames, fps);
+      engine = new WorldEngine(canvas, score.seed); engine.selectType(options.typeId || 'g-fluid', true); engine.setScore(score); engine.setTimeline(featureFrames, fps);
       // 終端のMFSフレームはシミュレーション用。6秒×30fpsは[0,6)の180枚だけを符号化する。
       for (let i = 0; i < frameCount; i++) {
         this._checkCancelled(); if (encoderError) throw encoderError;

@@ -56,13 +56,15 @@ void main(){
 const WORLD_POST_FRAGMENT = `#version 300 es
 ${WORLD_GLSL}
 uniform sampler2D scene, history, bloom0, bloom1, bloom2, bloom3, exposure;
+uniform float analyzerPulse;
+uniform float analyzerMode;
 out vec4 frag;
 vec3 aces(vec3 x){return clamp((x*(2.51*x+.03))/(x*(2.43*x+.59)+.14),0.,1.);}
 void main(){
  if(screen.w>.5||mood.x<=0.){frag=vec4(0,0,0,1);return;}
- vec2 uv=vUv,ca=(uv-.5)/screen.xy*1.2;
+ vec2 uv=.5+(vUv-.5)/(1.+analyzerPulse*.055),ca=(uv-.5)/screen.xy*1.2;
  // 履歴の画面端がbreakの矩形として残らないよう、buildのトンネルだけに残像を重ねる。
- float hw=.12*worldKind(1.)*environment.w;
+ float hw=(1.-analyzerMode)*.12*worldKind(1.)*environment.w;
  vec3 c=texture(scene,uv).rgb+texture(history,uv).rgb*hw;
  c.r=mix(c.r,texture(scene,uv+ca).r+texture(history,uv+ca).r*hw,.18);
  c.b=mix(c.b,texture(scene,uv-ca).b+texture(history,uv-ca).b*hw,.18);
@@ -73,12 +75,14 @@ void main(){
  // 静かな細い霧を黒へ潰さない。introだけ低いHDR入力を持ち上げ、他kindの露出は維持。
  float gain=clamp(target/max(.0001,average),.035,2.+22.*worldKind(0.));
  gain=mix(1.8,gain,environment.w);
+ // 新タイプの帯域応答を自動露出で打ち消さない。beatは露出測定後に加える。
+ gain=mix(gain,.75,analyzerMode);
  float vignette=1.-smoothstep(.35,1.1,length((uv-.5)*vec2(screen.x/screen.y,1.)))*(.18+story.w*.72);
  c=aces(c*gain*vignette*(1.+hit.w*.18));
  c=pow(c,vec3(1.13));float lum=dot(c,vec3(.2126,.7152,.0722));c=max(vec3(0),mix(vec3(lum),c,1.06));
  float peak=max(c.r,max(c.g,c.b));if(peak>.7)c*=(.7+.255*(1.-exp(-(peak-.7)/.255)))/peak;
  c=mix(c*12.92,1.055*pow(c,vec3(1./2.4))-.055,step(vec3(.0031308),c));
- frag=vec4(clamp(c,0.,1.),1.);
+ frag=vec4(clamp(c*(1.+analyzerPulse*1.4),0.,1.),1.);
 }`;
 class WorldPost {
   constructor(gpu, w, h) {
@@ -87,7 +91,8 @@ class WorldPost {
     this.thresholdLoc = gpu.texture(this.bloomProgram, 'threshold');
     this.exposureProgram = gpu.program(WORLD_EXPOSURE_FRAGMENT);
     this.meterSourceLoc = gpu.texture(this.exposureProgram, 'source'); this.firstLoc = gpu.texture(this.exposureProgram, 'firstPass');
-    this.program = gpu.program(WORLD_POST_FRAGMENT);
+    this.program = gpu.program(WORLD_POST_FRAGMENT); this.pulse = 0; this.analyzerMode = 0;
+    this.pulseLoc = gpu.texture(this.program, 'analyzerPulse'); this.modeLoc = gpu.texture(this.program, 'analyzerMode');
     this.samplers = ['scene', 'history', 'bloom0', 'bloom1', 'bloom2', 'bloom3', 'exposure'].map(n => gpu.texture(this.program, n));
     this.feedbackProgram = gpu.program(WORLD_FEEDBACK_FRAGMENT);
     this.feedbackSamplers = ['source', 'history', 'flow'].map(n => gpu.texture(this.feedbackProgram, n));
@@ -116,19 +121,21 @@ class WorldPost {
   }
   render(scene) {
     const g = this.gpu, gl = g.gl;
-    let source = this.feedback.read;
+    let source = this.analyzerMode ? scene : this.feedback.read;
     for (let i = 0; i < 4; i++) {
       const b = this.bloom[i]; g.bind(this.bloomProgram, b.write); g.sampler(this.sourceLoc, 0, source);
       gl.uniform2f(this.axisLoc, 1, 0); gl.uniform1f(this.thresholdLoc, i === 0 ? .65 : 0); g.draw(); g.swap(b);
       g.bind(this.bloomProgram, b.write); g.sampler(this.sourceLoc, 0, b.read);
       gl.uniform2f(this.axisLoc, 0, 1); gl.uniform1f(this.thresholdLoc, 0); g.draw(); g.swap(b); source = b.read;
     }
+    // 縮約FBOは半解像度の入力用。露出は従来どおりfeedbackから全域を測る。
     source = this.feedback.read;
     for (let i = 0; i < this.meter.length; i++) {
       g.bind(this.exposureProgram, this.meter[i]); g.sampler(this.meterSourceLoc, 0, source);
       gl.uniform1i(this.firstLoc, i === 0 ? 1 : 0); g.draw(); source = this.meter[i];
     }
     g.bind(this.program, this.output);
+    gl.uniform1f(this.pulseLoc, this.pulse); gl.uniform1f(this.modeLoc, this.analyzerMode);
     g.sampler(this.samplers[0], 0, scene); g.sampler(this.samplers[1], 1, this.feedback.read);
     for (let i = 0; i < 4; i++) g.sampler(this.samplers[i + 2], i + 2, this.bloom[i].read);
     g.sampler(this.samplers[6], 6, source); g.draw();

@@ -1,4 +1,4 @@
-// 目的 — ドロップ・先行解析・常設操作と評価用の公開口 — doc/20261004-concept-world-mode.md §2.7・§5
+// 目的 — ドロップ・先行解析・常設操作と評価用の公開口 — doc/20261004-concept-world-mode.md §2.8・§5
 class WorldSongMapService extends SongMapService {
   async _collectRows(job, buffer) {
     const rows = await super._collectRows(job, buffer);
@@ -18,6 +18,12 @@ class WorldApp {
     this.playButton = document.getElementById('play'); this.seekInput = document.getElementById('seek');
     this.timeOutput = document.getElementById('time'); this.fullscreenButton = document.getElementById('fullscreen');
     this.seeking = false; this.prepared = null; this.exportBusy = false;
+    this.typeInput = document.getElementById('type');
+    for (const type of WORLD_ANALYZER_TYPES) {
+      const option = document.createElement('option'); option.value = type.id; option.textContent = type.key + ' · ' + type.label;
+      option.disabled = !type.available; this.typeInput.appendChild(option);
+    }
+    this.typeInput.addEventListener('change', () => this.selectType(this.typeInput.value));
     this.fpsInput = document.getElementById('fps'); this.exportButton = document.getElementById('export');
     this.cancelExportButton = document.getElementById('cancel-export'); this.exportProgress = document.getElementById('export-progress');
     this.exportStatus = document.getElementById('export-status'); this.exporter = new WorldExporter();
@@ -50,6 +56,10 @@ class WorldApp {
     document.addEventListener('keydown', e => {
       if (e.altKey || e.ctrlKey || e.metaKey || e.repeat) return;
       const editing = e.target && /^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName);
+      if (!editing && /^Digit[1-6]$/.test(e.code)) {
+        const type = WORLD_ANALYZER_TYPES[Number(e.code.slice(5)) - 1];
+        if (type.available) { e.preventDefault(); this.selectType(type.id); }
+      }
       if (e.code === 'KeyF') { e.preventDefault(); this.toggleFullscreen().catch(this._showError.bind(this)); }
       if (e.code === 'Space' && !editing && (!e.target || e.target.tagName !== 'BUTTON')) { e.preventDefault(); this.togglePlay().catch(this._showError.bind(this)); }
     });
@@ -78,8 +88,8 @@ class WorldApp {
     this.state = 'analyzing'; this.prompt.hidden = false; this.prompt.textContent = '曲を解析中…'; this.prompt.classList.add('busy'); this._updateControls();
     try {
       const map = await this.service.request(file); if (id !== this.loadId) return;
-      this.score = compileWorldScore(map, 11);
       this.prepared = await this.exporter.prepare(file, Number(this.fpsInput.value)); if (id !== this.loadId) return;
+      this.score = compileWorldScore(map, 11, this.prepared.featureFrames);
       this.engine.setScore(this.score); this.engine.setTimeline(this.prepared.featureFrames, this.prepared.fps);
       this.public.score = this.score; this.public.events = this.engine.events; this.public.songMap = map;
       if (this.url) URL.revokeObjectURL(this.url); this.url = URL.createObjectURL(file);
@@ -87,6 +97,13 @@ class WorldApp {
       this.state = 'ready'; this.prompt.classList.remove('busy'); this.prompt.textContent = '再生で開始'; this._updateControls();
       return this.score;
     } catch (error) { if (id !== this.loadId) return; this._showError(error); throw error; }
+  }
+  selectType(id) {
+    if (!this.engine || this.previewBusy || this.starting || this.exportBusy || this.state === 'analyzing') return;
+    this.engine.selectType(id); this.typeInput.value = this.engine.type.id;
+    if (this.state !== 'playing' && this.engine.fadeElapsed < .5) {
+      cancelAnimationFrame(this.raf); this.lastMs = 0; this.raf = requestAnimationFrame(this._tickBound);
+    }
   }
   async setFps(fps) {
     if (!this.score || !this.prepared) return;
@@ -103,7 +120,7 @@ class WorldApp {
     this.audio.pause(); cancelAnimationFrame(this.raf); this.state = 'paused'; this.exportBusy = true;
     this.exportStatus.textContent = '書き出し中…'; this._updateControls();
     try {
-      const blob = await this.exporter.exportWorld(this.score, this.prepared);
+      const blob = await this.exporter.exportWorld(this.score, this.prepared, { typeId: this.engine.type.id });
       if (blob) { this.exporter.download(); this.exportStatus.textContent = '保存しました'; }
       else this.exportStatus.textContent = '中止しました';
     } catch (error) { this.exportStatus.textContent = '書き出し失敗: ' + error.message; }
@@ -170,7 +187,7 @@ class WorldApp {
   }
   _updateControls() {
     const busy = this.previewBusy || this.starting || this.exportBusy || this.state === 'analyzing';
-    this.fileInput.disabled = busy; this.fpsInput.disabled = busy;
+    this.fileInput.disabled = busy; this.fpsInput.disabled = busy; this.typeInput.disabled = busy || !this.engine;
     this.exportButton.disabled = !this.prepared || busy || this.state === 'error';
     this.cancelExportButton.hidden = !this.exportBusy; this.exportProgress.hidden = !this.exportBusy;
     this.playButton.disabled = !this.score || busy || this.state === 'error' || this.state === 'unavailable';
@@ -194,8 +211,12 @@ class WorldApp {
       const start = performance.now(); this.engine.render(this.audio.currentTime, this.audioEngine.getFeatures(), dt);
       this.engine.endCpuTiming(performance.now() - start);
       if (this.engine.onFrame) this.engine.onFrame(this.engine);
+    } else if (this.engine && this.engine.fadeElapsed < .5) {
+      const dt = this.lastMs ? (nowMs - this.lastMs) / 1000 : 1 / 60; this.lastMs = nowMs;
+      this.engine.redrawTransition(dt);
     } else this.lastMs = 0;
-    if (this.state === 'playing' || this.state === 'paused') this.raf = requestAnimationFrame(this._tickBound);
+    if (this.engine && this.engine.fadeElapsed < .5 && this.state !== 'playing' && this.state !== 'paused') this.raf = requestAnimationFrame(this._tickBound);
+    else if (this.state === 'playing' || this.state === 'paused') this.raf = requestAnimationFrame(this._tickBound);
   }
   _end() {
     if (this.engine && this.score) {

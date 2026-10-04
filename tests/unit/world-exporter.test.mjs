@@ -23,6 +23,7 @@ function setup({ mp4Audio = true, audioError = false } = {}) {
   class Frame { constructor(canvas, config) { Object.assign(this, config); } close() { calls.frameClosed++; } }
   class AudioFrame { constructor(config) { Object.assign(this, config); } close() {} }
   class Engine {
+    selectType(id, immediate) { calls.typeId = id; calls.immediate = immediate; }
     setScore(score) {} setTimeline(frames, fps) { calls.timeline = { frames, fps }; }
     advanceTo(t) { calls.steps.push(t); } _draw() {} dispose() { calls.disposed++; }
   }
@@ -63,4 +64,11 @@ test('UW-36 WORLD-9 cancel/error: download用blob無し・encoder/engineを確�
   const fail=setup({audioError:true});await assert.rejects(fail.exporter.exportWorld({seed:11},fail.prepared(30)),/audio failure/);
   assert.equal(fail.exporter.blob,null);assert.equal(fail.calls.closed,2);assert.equal(fail.calls.disposed,1);
   console.log('UW-36 cancellationFrames='+calls.video.length+' cancelledBlob=null audioFailureRejected=true resourcesReleased=true');
+});
+
+test('UW-42 WORLD-11 書き出し: 選択タイプを固定して全フレームを符号化', async () => {
+  const { exporter, calls, prepared } = setup();
+  await exporter.exportWorld({ seed: 11 }, prepared(30), { typeId: 'g-galaxy' });
+  assert.equal(calls.typeId, 'g-galaxy'); assert.equal(calls.immediate, true); assert.equal(calls.video.length, 180);
+  console.log('UW-42 selectedExportType=g-galaxy frames=180 startupFade=false');
 });

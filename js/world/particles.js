@@ -3,6 +3,7 @@ const WORLD_PARTICLE_SIDE = 512;
 const WORLD_PARTICLE_UPDATE = `#version 300 es
 ${WORLD_GLSL}
 uniform sampler2D particles, particleVelocity, velocity;
+uniform float analyzerSpeed;
 layout(location=0) out vec4 positionOut;
 layout(location=1) out vec4 velocityOut;
 vec3 spawn(vec3 key){
@@ -40,7 +41,7 @@ void main(){
  if(eye.w>.5){p=spawn(key);v=worldFlow(p.xy*3./p.z)*(.1+worldKind(2.)*1.1);}
  int band=(id.x+id.y*512)%32;float level=emitters[band].z;
  // 一斉に同じ方向の噴流を作らず、少量を既存の流線へ散らして供給する。
- if(clock.y>0.&&hash31(key+floor(clock.z/max(.0001,clock.y)))<clock.y*level*.12){
+ if(clock.y>0.&&hash31(key+floor(clock.z/max(.0001,clock.y)))<clock.y*level*3.){
   float a=hash31(key+9.)*6.283185,r=sqrt(hash31(key+13.))*(.006+level*.006);
   vec2 point=emitterWorld(band)+vec2(cos(a),sin(a))*r;
   p.xy=point*p.z/3.;v=worldFlow(point)*(.65+worldKind(2.)*.95);
@@ -55,7 +56,7 @@ void main(){
  vec2 plane=p.xy*3./p.z,uv=worldUv(plane);
  vec2 flow=texture(velocity,fract(uv)).xy/vec2(textureSize(velocity,0))*worldExtent();
  float tempo=.65+worldKind(2.)*.95-worldKind(0.)*.53-worldKind(3.)*.47;
- vec2 desired=worldFlow(plane)*tempo;
+ vec2 desired=worldFlow(plane)*tempo*analyzerSpeed;
  vec2 force=(desired-v)*(2.5+worldKind(2.)*3.5)+flow*.9+curlFlow(plane,worldSlowPhase());
  vec2 d=plane-shot.yz;float r=max(.002,length(d));
  force+=d/r*(worldShock(plane)*5.+hit.w*exp(-r*4.)*2.)*worldKind(2.);
@@ -67,6 +68,7 @@ void main(){
 const WORLD_PARTICLE_VERTEX = `#version 300 es
 ${WORLD_GLSL.replace('in vec2 vUv;', '')}
 uniform sampler2D particles, particleVelocity;
+uniform float analyzerAmount;
 out vec3 color;
 out float alpha;
 out vec2 streakAxis;
@@ -90,7 +92,7 @@ void main(){
  float ring=worldShock(plane)*worldKind(2.);
  float strength=1.-worldKind(0.)*.4-worldKind(3.)*.65+worldKind(2.)*.4;
  float sparse=mix(1.,step(seed,.08+clock.w*.04),worldKind(0.));
- alpha=mood.x*strength*sparse*(.06+.1*material)*(1.+ring*3.)*environment.w;
+ alpha=step(seed,analyzerAmount)*mood.x*strength*sparse*(.06+.1*material)*(1.+ring*3.)*environment.w;
 }`;
 const WORLD_PARTICLE_FRAGMENT = `#version 300 es
 precision highp float;
@@ -161,10 +163,12 @@ class WorldParticles {
       gl.drawBuffers(this.attachments);
       if (gl.checkFramebufferStatus(gl.FRAMEBUFFER) !== gl.FRAMEBUFFER_COMPLETE) throw new Error('Particle MRT unavailable');
     }
-    this.updateProgram = gpu.program(WORLD_PARTICLE_UPDATE);
+    this.updateProgram = gpu.program(WORLD_PARTICLE_UPDATE); this.motionSpeed = 1;
+    this.speedLoc = gpu.texture(this.updateProgram, 'analyzerSpeed');
     this.stateLoc = gpu.texture(this.updateProgram, 'particles'); this.particleVelocityLoc = gpu.texture(this.updateProgram, 'particleVelocity');
     this.flowLoc = gpu.texture(this.updateProgram, 'velocity');
     this.drawProgram = gpu.program(WORLD_PARTICLE_FRAGMENT, WORLD_PARTICLE_VERTEX);
+    this.amount = 1; this.amountLoc = gpu.texture(this.drawProgram, 'analyzerAmount');
     this.drawStateLoc = gpu.texture(this.drawProgram, 'particles'); this.drawVelocityLoc = gpu.texture(this.drawProgram, 'particleVelocity');
     this.reset(seed);
   }
@@ -178,12 +182,12 @@ class WorldParticles {
     this.gpu.clearTarget(this.velocity.read); this.gpu.clearTarget(this.velocity.write);
   }
   step(fluid) {
-    const g = this.gpu; g.bind(this.updateProgram, this.state.write);
+    const g = this.gpu; g.bind(this.updateProgram, this.state.write); g.gl.uniform1f(this.speedLoc, this.motionSpeed);
     g.sampler(this.stateLoc, 0, this.state.read); g.sampler(this.particleVelocityLoc, 1, this.velocity.read);
     g.sampler(this.flowLoc, 2, fluid.velocity.read); g.draw(); g.swap(this.state); g.swap(this.velocity);
   }
   render(target) {
-    const g = this.gpu, gl = g.gl; g.bind(this.drawProgram, target);
+    const g = this.gpu, gl = g.gl; g.bind(this.drawProgram, target); gl.uniform1f(this.amountLoc, this.amount);
     g.sampler(this.drawStateLoc, 0, this.state.read); g.sampler(this.drawVelocityLoc, 1, this.velocity.read);
     gl.enable(gl.BLEND); gl.blendFunc(gl.ONE, gl.ONE); gl.drawArrays(gl.POINTS, 0, this.count); gl.disable(gl.BLEND);
   }

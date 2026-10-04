@@ -96,7 +96,7 @@ function worldCommandGl() {
   for (const name of ['createVertexArray', 'createBuffer', 'createShader', 'createProgram', 'createTexture', 'createFramebuffer']) gl[name] = () => ({ id: id++ });
   for (const name of ['bindVertexArray', 'bindBuffer', 'bufferData', 'bindBufferBase', 'shaderSource', 'compileShader',
     'deleteShader', 'attachShader', 'linkProgram', 'uniformBlockBinding', 'texStorage2D', 'texParameteri', 'viewport',
-    'clearColor', 'clear', 'uniform2f', 'uniform1f', 'blitFramebuffer', 'enable', 'blendFunc', 'disable',
+    'clearColor', 'clear', 'uniform2f', 'uniform1f', 'uniform3fv', 'uniform4fv', 'blitFramebuffer', 'enable', 'blendFunc', 'disable',
     'deleteTexture', 'deleteFramebuffer', 'deleteProgram', 'deleteBuffer', 'deleteVertexArray', 'texSubImage2D', 'drawBuffers']) gl[name] = () => {};
   gl.getExtension = name => name === 'EXT_disjoint_timer_query_webgl2' ? null : {};
   gl.getShaderParameter = gl.getProgramParameter = () => true;
@@ -132,7 +132,7 @@ test('UW-06 GPU命令: 流体射影20反復・全粒子・同時合成・MFS即�
   const gl = worldCommandGl(), canvas = { width: 1920, height: 1080, getContext: () => gl };
   gl.canvas = canvas;
   const runtime = loadClassic(['js/vis-utils.js', 'js/mfs-const.js', 'js/mfs-view.js', 'js/world/gl-util.js',
-    'js/world/fluid.js', 'js/world/particles.js', 'js/world/post.js', 'js/world/score.js', 'js/world/world-engine.js']);
+    'js/world/fluid.js', 'js/world/particles.js', 'js/world/post.js', 'js/world/score.js', 'js/world/analyzer-types.js', 'js/world/g-fluid.js', 'js/world/g-rings.js', 'js/world/g-galaxy.js', 'js/world/world-engine.js']);
   const engine = new (runtime.get('WorldEngine'))(canvas), score = runtime.get('compileWorldScore')(fixture, 11);
   const features = new (runtime.get('MfsFrameView'))(), layout = runtime.get('MFS_LAYOUT');
   engine.setScore(score);
@@ -172,7 +172,7 @@ test('UW-07 曲の三色だけで全抽象状態を配色・種別をまたぐ�
 function worldTestEngine() {
   const gl = worldCommandGl(), canvas = { width: 1920, height: 1080, getContext: () => gl }; gl.canvas = canvas;
   const runtime = loadClassic(['js/vis-utils.js', 'js/mfs-const.js', 'js/mfs-view.js', 'js/world/gl-util.js',
-    'js/world/fluid.js', 'js/world/particles.js', 'js/world/post.js', 'js/world/score.js', 'js/world/world-engine.js']);
+    'js/world/fluid.js', 'js/world/particles.js', 'js/world/post.js', 'js/world/score.js', 'js/world/analyzer-types.js', 'js/world/g-fluid.js', 'js/world/g-rings.js', 'js/world/g-galaxy.js', 'js/world/world-engine.js']);
   const engine = new (runtime.get('WorldEngine'))(canvas); engine.setScore(runtime.get('compileWorldScore')(fixture, 11));
   return { engine, gl };
 }
@@ -251,7 +251,7 @@ test('UW-11 renderAt: 120秒7200固定ステップ・全境界・dt0の描画で
   console.log('UW-11 previewSteps=7200 boundaryCoverage=6/6 maximumSimDt=' + maxDt.toFixed(9));
 });
 
-test('UW-12 WORLD-3 パレット: 調性ごとに三色・飽和した補色・濁った黄緑を作らない', () => {
+test('UW-12 WORLD-11 パレット: 調性ごとに三色・飽和保持（旧olive禁止は§2.8で撤回）', () => {
   let minimumSaturation = 1;
   for (let seed = 0; seed < 96; seed++) {
     const harmony = new Array(12).fill(0); harmony[seed % 12] = 1;
@@ -263,7 +263,7 @@ test('UW-12 WORLD-3 パレット: 調性ごとに三色・飽和した補色・�
       const saturation = (Math.max(...c) - Math.min(...c)) / Math.max(...c);
       minimumSaturation = Math.min(minimumSaturation, saturation);
       assert.ok(saturation > .98);
-      assert.ok(!(c[1] > c[2] * 2 && c[0] > c[2] * 2 && c[1] > c[0]), 'olive禁止');
+      // §2.8: 音名が選ぶ色相を禁止しない。RGB範囲・飽和度・三色の検査は維持。
     }
   }
   console.log('UW-12 palettes=96 colorsPerSong=3 minimumLinearRgbSaturation=' + minimumSaturation);
@@ -312,7 +312,7 @@ test('UW-15 WORLD-6 粒子: 262144全件を描画・seed再現・深度遮蔽と
   assert.ok(!/coverageBudget|activeCount|rank|depthField/.test(vertex));
   console.log('UW-15 submittedParticles=262144 seedResetDifference=0 pointDrawCalls=' + points.length);
 });
-test('UW-16 WORLD-4 harmony: 96曲の寒色二色・暖色一色・補色角差180度', () => {
+test('UW-16 WORLD-11 harmony: 96曲のクロマ上位・補色角差180度（固定寒色を撤回）', () => {
   let minimumHueGap = 360;
   const hue = c => {
     const hi = Math.max(...c), lo = Math.min(...c), delta = hi - lo;
@@ -323,10 +323,10 @@ test('UW-16 WORLD-4 harmony: 96曲の寒色二色・暖色一色・補色角差1
     const harmony = new Array(12).fill(0);harmony[seed % 12] = 1;
     const { primary, secondary, accent } = compile({ ...fixture, worldChroma: harmony }, seed).palette;
     const a = hue(primary), b = hue(secondary), warm = hue(accent);
-    assert.ok(a >= 199 && a <= 218);assert.ok(b >= 224 && b <= 244);
-    assert.ok(warm >= 19 && warm <= 38);
-    assert.ok(Math.abs(a - warm - 180) < 1e-10);
-    minimumHueGap = Math.min(minimumHueGap, b - a);
+    assert.ok(Math.abs(a - ((seed % 12)*210)%360) < 1e-10);
+    assert.ok(Math.abs(Math.abs(a-b)-180) < 1e-10);
+    const accentGap=(warm-a+360)%360;assert.ok(Math.abs(accentGap-120)<1e-10);
+    minimumHueGap = Math.min(minimumHueGap, accentGap);
   }
   console.log('UW-16 complementaryGapDeg=180 secondaryGapMinDeg=' + minimumHueGap);
 });
@@ -665,4 +665,55 @@ test('UW-38 WORLD-10 帯域曲線: 不等間隔・水平列なし・帯域分離
   }
   assert.ok(minSpacing>.012,'局所帯域の重なりを避ける');assert.ok(minSpread>.15);assert.ok(maxMovement>.03);
   console.log('UW-38 minBandSpacing='+minSpacing+' minVerticalSpread='+minSpread+' maxQuarterLoopDrift='+maxMovement+' loopPositionError<1e-7');
+});
+
+test('UW-39 WORLD-11 タイプ契約: 独立shader・32帯域・即時反応・共通HDR・0.5秒切替',()=>{
+  const {engine,gl}=worldTestEngine(),r=loadClassic(['js/mfs-const.js','js/mfs-view.js']),f=new(r.get('MfsFrameView'))(),L=r.get('MFS_LAYOUT');
+  f.bandsSmooth[17]=.8;f.raw[L.LEVEL]=.7;f.raw[L.BEAT_FLAG]=1;f.raw[L.ONSET_ENV+1]=.9;
+  let fluidSteps=0;engine.fluid.step=()=>fluidSteps++;
+  engine._step(2,f,0);engine.selectType('g-rings');assert.equal(engine.fadeElapsed,0);
+  const resources=[engine.gpu.textures.length,engine.gpu.fbos.length,engine.gpu.programs.length];
+  engine._step(2.25,f,.25);assert.equal(engine.fadeElapsed,.25);assert.equal(engine.type.rayCount,64);
+  assert.ok(Math.abs(engine.type.bandUniforms[17*4]-.8)<1e-6);assert.ok(Math.abs(engine.type.bandUniforms[17*4+3]-.9)<1e-6);
+  assert.equal(engine.type.beats[0],0);assert.equal(engine.pulse,1);
+  engine.selectType('g-galaxy');engine._step(2.5,f,.25);engine._step(2.75,f,.25);
+  assert.equal(engine.fadeElapsed,.5);assert.equal(engine.type.orbitCount,32);assert.equal(engine.type.particleCount,65536);
+  assert.equal(fluidSteps,0);engine._draw();assert.equal(engine.post.analyzerMode,1);assert.equal(engine.post.pulse,1);
+  assert.ok(gl.calls.some(c=>c.type===gl.TRIANGLES&&c.count===65536*6));
+  assert.deepEqual([engine.gpu.textures.length,engine.gpu.fbos.length,engine.gpu.programs.length],resources);
+  assert.throws(()=>engine.selectType('g-terrain'),RangeError);
+  console.log('UW-39 rays=64 orbits=32 galaxyParticles=65536 latencyFrames=0 fadeSec=.5 inactiveFluidSteps=0 GPUResourceGrowth=0');
+});
+test('UW-40 WORLD-11 曲固有値: クロマ上位・BPM比例・重心/オンセット密度・入力不変',()=>{
+  const r=loadClassic(['js/vis-utils.js','js/world/score.js']),variation=r.get('worldSongVariation');
+  const map={...fixture,bpm:90,durationSec:4,worldChroma:[3,0,0,0,1,0,0,0,0,0,0,0]};
+  const frames=Array.from({length:240},()=>{const f=new Float32Array(104);f[83]=800;f[102]=.1;return f;});
+  const original=JSON.stringify(map),a=variation(map,frames);
+  const loud=frames.map((f,i)=>{const v=f.slice();v[83]=6400;v[68]=i%15===0?1:0;return v;});
+  const b=variation({...map,bpm:180,worldChroma:[0,0,0,0,0,0,3,0,0,0,1,0]},loud);
+  assert.equal(a.motionSpeed,.75);assert.equal(b.motionSpeed,1.5);assert.equal(a.dominantChroma,0);assert.equal(b.dominantChroma,6);
+  assert.equal(a.centroidHz,800);assert.equal(b.centroidHz,6400);assert.equal(b.onsetDensity,4);
+  assert.ok(b.detail>a.detail);assert.ok(b.particleAmount>a.particleAmount);assert.notDeepEqual(a.palette,b.palette);
+  assert.deepEqual(variation(map,frames),a);assert.equal(JSON.stringify(map),original);
+  console.log('UW-40 BPMspeed=.75/1.5 centroidHz=800/6400 onsetPerSec=0/4 detail='+a.detail+'/'+b.detail+' particleAmount='+a.particleAmount+'/'+b.particleAmount);
+});
+test('UW-41 WORLD-11 計測: Pearsonの無変化拒否・輝度重み色ヒストグラム・固定領域',()=>{
+  const r=loadClassic(['tests/browser/world11.test.js']),corr=r.get('world11Correlation'),hist=r.get('world11Histogram'),distance=r.get('world11HistogramDistance');
+  assert.equal(corr([1,2,3],[2,4,6]),1);assert.equal(corr([1,2,3],[6,4,2]),-1);assert.equal(corr([1,1,1],[2,3,4]),0);
+  const image=color=>{const rgba=new Uint8Array(8*8*4);for(let i=0;i<rgba.length;i+=4)rgba[i+color]=255;return {rgba,width:8,height:8};};
+  const a=hist(image(0)),b=hist(image(2));assert.equal(distance(a.bins,b.bins),1);assert.equal(distance(a.bins,a.bins),0);
+  assert.equal(hist({rgba:new Uint8Array(256),width:8,height:8}).weight,0);
+  assert.equal(r.get('world11RegionSamples')(image(0),'g-galaxy').length,32);
+  console.log('UW-41 Pearson=1/-1 constant=0 redBlueHistogramDistance=1 identical=0 blackWeight=0 ROIcount=32');
+});
+test('UW-43 WORLD-11 決定性: タイプ選択を保ってlive/renderAt/逆シークの位相と残光一致',async()=>{
+  const {engine}=worldTestEngine(),L=loadClassic(['js/mfs-const.js']).get('MFS_LAYOUT');
+  const frames=Array.from({length:31},(_,i)=>{const f=new Float32Array(L.LENGTH);f[L.BANDS_SMOOTH+4]=i/30;f[L.LEVEL]=.7;f[L.BEAT_FLAG]=i===15?1:0;return f;});
+  for(const typeId of ['g-rings','g-galaxy']){
+    engine.selectType(typeId,true);engine.setScore(engine.score);engine.setTimeline(frames,30);
+    engine.render(.11,null,.17);engine.render(1,null,.9);const expected=engine.type.bandUniforms.slice(),beats=engine.type.beats.slice();
+    await engine.renderAt(.4);await engine.renderAt(1);assert.equal(engine.type.id,typeId);
+    assert.deepEqual(engine.type.bandUniforms,expected);assert.deepEqual(engine.type.beats,beats);
+  }
+  console.log('UW-43 types=2 fixedSteps=30 live/replayBandStateError=0 beatStateError=0');
 });

@@ -1,3 +1,40 @@
+## 2026-10-04 — [WORLD-11] GPU アナライザー群 第1弾
+
+### 作業内容
+- `world.html`、`js/world/world-app.js`: 常設TYPE選択を追加。構想表の順で1=g-fluid／2=g-rings／4=g-galaxy、3・5・6は後続タイプの予約枠として表示し選択不能にする。再生中／一時停止中の切替を約0.5秒でクロスフェード。書き出し中はタイプを固定し、UIから選択IDをexportへ渡す。全曲特徴の集計はoffline MFS準備後の読込時に行う。
+- `js/world/analyzer-types.js`（追加）: 6枠の登録情報、事前確保した32帯域uniform、残光、積分位相、帯域群onset、直近4拍の状態を共有。各タイプのid／label／init(gpu)／render(input)と固定ステップstepを分離。
+- `js/world/g-fluid.js`（追加）: 従来の流体合成shader／programの所有者を独立タイプへ移動。共有fluid／particles／depthParticlesを接続し、BPMは固定dtを変えず速度uniformへ適用。共有エンジンに残るcomposite等の公開口は既存W/BW計測との互換用。
+- `js/world/g-rings.js`（追加）: 32帯域に2本ずつ、計64本のHDR放射光線。現在レベルに結びつく長さ／輝度、独立した残光包絡、拍ごとの同心衝撃環、BPM比例の細部の移動を描く。
+- `js/world/g-galaxy.js`（追加）: 32本の傾いた楕円粒子軌道。帯域のレベルから即時増光・積分速度・半径揺動、onsetから輝度と線幅を変える。全曲特徴から1軌道512〜2048粒を決定。最大65,536粒をquadで描き、同じHDR／bloom／ACESを使用。
+- `js/world/world-engine.js`: 選択タイプだけを更新・描画。2枚の再利用HDR targetで現在像を保持して切替先へsmoothstepフェードし、連続した再切替も現在の混合像から始める。停止中のフェードではsimulationを進めない。setScore／renderAt／逆シークでタイプ選択を維持し、位相と残光を決定的に再演。固定step・既存244 float UBO・GPU timer query・資源解放は保持。
+- `js/world/fluid.js`、`js/world/particles.js`: 32帯域の大きな染料注入（90×dt、従来6×dt）、レベルで広がる発光フィラメント、粒子供給の増量を追加。流速をBPM、染料／供給線の細部を全曲detail、主粒子の可視量をparticleAmountから駆動。262,144粒の状態容量・描画命令と独立4,108粒の深度層は保持。
+- `js/world/post.js`: 全タイプの拍から全画面の輝度・スケールpulse。新タイプは固定露出で帯域応答を保持し、pulseは露出測定後へ適用。タイプ切替に合わせて露出方針も連続にブレンド。新形態のbloomは現在HDR像から作り、旧build履歴の再注入を除く。露出縮約は従来の半解像度入力を保持。
+- `js/world/score.js`: 上位クロマ（同値は音名順）から主色・補色・アクセント、BPM/120からmotionSpeed、全曲平均重心とonsetイベント密度からdetail／particleAmountを決定。入力不変、曲＋seed＋特徴量で決定的。ラベルのモチーフ・kind/labelの変奏・連続色モーフは維持。
+- `js/world/world-exporter.js`: options.typeIdの選択タイプで曲頭から書き出し。開始時の選択は即時、手動切替履歴は焼き込まず、既存音声・固定dt・muxer・中止／解放経路を再利用。
+- `tests/unit/world-score.test.mjs`、`tests/unit/world-exporter.test.mjs`: UW-39〜43でタイプ契約／即時uniform／0.5秒フェード／inactive fluid停止／GPU資源再利用／曲固有値／測定関数／選択タイプの180枚export／逆シーク・live再演一致を追加。UW-12／16の旧固定寒色・olive禁止だけを§2.8のクロマ上位・補色へ書換え、RGB範囲・飽和度・三色・180度の検査を保持。既存テストIDの削除／skip／閾値緩和は行わない。
+- `tests/browser/world11.test.js`（追加）: BW-11-types（6枠、3実装、番号、0.5秒、途中再切替、逆シーク）とBW-11-export（UI選択rings／galaxy、live/renderAt完全画素一致、音声付き180枚、復号t=3秒RMSE≤.04）を追加。G計測関数はmeasureから実worldページに注入する。
+- `tests/world/measure.mjs`: G-1〜G-4の実ピクセル／実GPU測定を統合。G-1はrings／galaxyの全32帯域の最小Pearson相関≥.6、G-2は3タイプの拍前後0.1秒の平均Y変化≥25%、G-3は実offline MFSの90BPM/C/純音と180BPM/F#/倍音＋打撃の色ヒストグラム距離≥.3、G-4は各タイプ1080p GPU p95≤16ms・120標本以上・disjointなし。GLエラーとsoftware GPUを合格扱いしない。既存W/BWはg-fluidへ適用して閾値を維持（BW-7-performance≤14msも保持）。W-3の旧SDF併描と全タイプへの26万粒／同一被覆の強制をobsoleteとして報告し、新形態をG基準へ置換。
+
+### 検証
+- 最終全単体テスト結果: `node tests/run.mjs --unit`: 173件／172成功／0失敗／1スキップ（想定U15-00）、86,094ms、終了コード0。実行ログはignoredの`tests/output/world11-unit-suite.txt`。
+- 最終全`.js`／`.mjs`の`node --check`: 122件／122成功／0失敗。`git diff --check`: 成功。
+- UW-39: 64光線、32軌道、最大65,536粒、MFS→uniform遅延0フレーム、fade=.5秒、非選択fluid更新0、切替・再演時のGPU資源増加0（GL命令モック）。
+- UW-40: 90／180BPM→速度.75／1.5、重心800／6400Hz、onset密度0／4回/秒、detail=.2875／.8、particleAmount=.248／.7973333333。UW-41: Pearson=1／-1、無変化=0、赤対青の色ヒストグラム距離1、同一像0、黒の重み0。
+- UW-42: 選択g-galaxyで30fps・180枚、開始fadeなし（encoder／GPUモック、実muxer/demuxer）。UW-43: 2タイプ、固定30step、live／renderAt／逆シーク後の帯域状態差0、拍状態差0。
+- 先行全単体検査は173件／169成功／3失敗／想定skip1。BPMをsimulation dtへ掛けた実装不具合（UW-11）を直し、固定dtを保持して速度uniformへ移した。UW-12／16の旧固定色制約は§2.8で明示的に置き換えた。次の全件実行は173件／172成功／0失敗／想定skip1（28,265ms）。最終実行は上記を参照。
+- Chrome禁止に従いブラウザは起動していない。新規BW-11-types／exportとG-1〜G-4、既存W/BW全件、file:// console、実GLSLコンパイル、実符号化・実画像・実GPU p95は未実行／未測定。GPU／輝度／相関／実合成音パレットの合格は主張しない。ゴールデンは再生成していない。
+
+### spec.md 変更
+- `doc/spec.md`をv2.18（2026-10-04）に更新し、§1.1に3タイプ・番号・切替・選択タイプexport・曲固有の違いを記載。設計と基準は構想§2.8への参照。`README.md`の試作説明も更新。本体index.htmlへの統合は行っていない。
+
+### 備考
+- 実装: Codex gpt-6.1-sol high
+- 判断／逸脱: §2.8に描画係数の固定表はないため、上記の形態・発光・残光・粒子数を初回実装として設定。測定失敗に合わせた係数／基準の調整はしていない。番号1〜6は6行の構想表の順を使用し、今回未実装の3タイプを無効枠にした。停止中の切替は描画だけで進行し、書き出しは選択タイプを曲頭から再演する。
+- 曲固有値の集計: クロマはsongmapのworldChromaを優先、なければMFSを総和。RMS>.0001のフレームで平均重心を求め、onsetフラグのあるフレーム数/曲長を密度とする。彩度の高い主色に180度の補色、次点クロマのアクセント（無ければ120度）を選ぶ。特徴量がない旧previewはdetail／amount=1。MFS packedオフセットは既存104-float契約のまま。
+- G測定の細部（構想§1.3の裁量）: G-1は固定扇形／固定楕円環で8秒・120標本、全帯域の最小値を合格判定。G-2は一定帯域／一定ラウドネスを使い6枚ずつ算術平均。G-3は4×4平均像の24色相binを輝度重みで正規化し、総変動距離を使う（黒背景の共通面積を色差と混同しない）。G-4は2秒ウォームアップ後の全帯域強入力、GPUとCPUを別集計し実GPU・timer・標本数を要求。閾値は変更していない。
+- レビュアー確認: `node tests/run.mjs --browser --headed --filter 'BW-11'`で操作・GLSL・選択タイプexport・復号像・音声を検査し、`node tests/world/measure.mjs`をmacOS実GPU／headedで実行して全G/W/BW基準を確認すること。波形の異なる実曲で64光線／32軌道の即応、拍の全画面の明暗・拡大、曲ごとの色・速さ・粒子量、再切替の継ぎ目、停止中の選択、シーク、ループ、exportを目視すること。既存W-2／W-5／BW-6-coverage／BW-7-performance等も新しいg-fluidで確認。基準に失敗したら、定数を調整せず、該当§・選択肢・推奨案を報告すること。
+- 作業開始時から変更済みの`doc/20261004-concept-world-mode.md`は編集していない。全成果物はこのworktree内。Chrome起動、commit／push／PRは行っていない。未コミット差分として納品。
+
 ## 2026-10-04 — [WORLD-10] v8 の美しさの回復
 
 ### 作業内容

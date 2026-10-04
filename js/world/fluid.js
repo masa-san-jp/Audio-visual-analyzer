@@ -3,6 +3,7 @@ const WORLD_FLUID_FRAGMENT = `#version 300 es
 ${WORLD_GLSL}
 uniform sampler2D field, velocity, auxiliary;
 uniform int mode;
+uniform float analyzerSpeed, analyzerDetail;
 out vec4 frag;
 void main(){
  vec2 dx=1./vec2(textureSize(field,0)), uv=vUv;
@@ -15,7 +16,7 @@ void main(){
  }else if(mode==1){ // 構図の流線と、キック位置からの衝撃。
    vec2 v=c.xy;
    vec2 d=q-shot.yz;float distance=max(.002,length(d));
-   vec2 desired=worldFlow(q)*(.65+worldKind(2.)*.95-worldKind(0.)*.53-worldKind(3.)*.47-worldKind(4.)*.57);
+   vec2 desired=worldFlow(q)*analyzerSpeed*(.65+worldKind(2.)*.95-worldKind(0.)*.53-worldKind(3.)*.47-worldKind(4.)*.57);
    // 速度格子のセル/秒へ変換。投影後も渦ペア間の剪断を維持する。
    vec2 cells=vec2(textureSize(velocity,0))/worldExtent();
    v+=clock.y*(desired*cells-v)*(story.x==2.?5.:1.4);
@@ -40,7 +41,7 @@ void main(){
    dye*=exp(-clock.y*(story.x==4.?1.5:.25));
    float angle=atan(q.y,q.x)+camera.x;
    // 細い注入とノイズの途切れで、渦に巻かれて細い筋（フィラメント）が生まれるようにする
-   float plume=worldFilament(q)*smoothstep(.35,.75,worldPeriodicNoise(q,5.,sin(worldSlowPhase())));
+   float plume=pow(max(0.,worldFilament(q)),1.+analyzerDetail)*smoothstep(.35,.75,worldPeriodicNoise(q,5.,sin(worldSlowPhase())));
    float burst=worldShock(q)*(.4+.6*worldPeriodicNoise(q,7.,7.));
    float inkRate=1.-worldKind(0.)*.5-worldKind(3.)*.4-worldKind(4.);
    dye+=clock.y*inkRate*(1.+audio.z*4.+hit.x*12.)*plume*mix(worldColor(0.),worldColor(1.),.5+.5*sin(angle));
@@ -54,6 +55,7 @@ void main(){
 const WORLD_SPECTRUM_VERTEX = `#version 300 es
 ${WORLD_GLSL.replace('in vec2 vUv;', '')}
 uniform int screenSpace;
+uniform float analyzerDetail;
 out vec2 local;
 out float level;
 out vec3 tint;
@@ -63,7 +65,7 @@ void main(){
  local=corner;level=emitters[i].z;
  vec2 point=emitterWorld(i),flow=worldFlow(point);
  vec2 tangent=length(flow)>.001?normalize(flow):vec2(1,0),normal=vec2(-tangent.y,tangent.x);
- float radius=.010+level*.002;
+ float radius=.010+level*(.020+.020*analyzerDetail);
  // 核は局所輝度を保ち、短い尖った筋を同じ流れに沿って作る。平行な長い噴流は作らない。
  vec2 offset=tangent*corner.x*radius+normal*corner.y*radius*.38;
  vec2 uv=screenSpace==1?worldScreenUv(emitters[i].xy+rot(-lens.w)*offset*lens.z):worldUv(point+offset);
@@ -81,9 +83,9 @@ void main(){float r=dot(local,local);if(r>1.)discard;
 }`;
 class WorldSpectrum {
  constructor(gpu){this.gpu=gpu;this.program=gpu.program(WORLD_SPECTRUM_FRAGMENT,WORLD_SPECTRUM_VERTEX);
-  this.space=gpu.texture(this.program,'screenSpace');this.amount=gpu.texture(this.program,'amount');}
+  this.space=gpu.texture(this.program,'screenSpace');this.amount=gpu.texture(this.program,'amount');this.detail=1;this.detailLoc=gpu.texture(this.program,'analyzerDetail');}
  render(target,screenSpace,amount){const g=this.gpu,gl=g.gl;g.bind(this.program,target);
-  gl.uniform1i(this.space,screenSpace);gl.uniform1f(this.amount,amount);
+  gl.uniform1i(this.space,screenSpace);gl.uniform1f(this.detailLoc,this.detail);gl.uniform1f(this.amount,amount);
   gl.enable(gl.BLEND);gl.blendFunc(gl.ONE,gl.ONE);gl.drawArrays(gl.TRIANGLES,0,32*6);gl.disable(gl.BLEND);}
 }
 class WorldFluid {
@@ -91,6 +93,7 @@ class WorldFluid {
     this.gpu = gpu; this.program = gpu.program(WORLD_FLUID_FRAGMENT);
     this.fieldLoc = gpu.texture(this.program, 'field'); this.velocityLoc = gpu.texture(this.program, 'velocity');
     this.auxLoc = gpu.texture(this.program, 'auxiliary'); this.modeLoc = gpu.texture(this.program, 'mode');
+    this.motionSpeed = 1; this.detail = 1; this.speedLoc = gpu.texture(this.program, 'analyzerSpeed'); this.detailLoc = gpu.texture(this.program, 'analyzerDetail');
     this.spectrum = new WorldSpectrum(gpu); this.resize(w, h);
   }
   resize(w, h) {
@@ -119,7 +122,8 @@ class WorldFluid {
     g.sampler(this.auxLoc, 2, auxiliary === target ? this.base : auxiliary); g.gl.uniform1i(this.modeLoc, mode); g.draw();
   }
   step() {
-    const g = this.gpu;
+    const g = this.gpu; g.bind(this.program, this.base);
+    g.gl.uniform1f(this.speedLoc, this.motionSpeed); g.gl.uniform1f(this.detailLoc, this.detail);
     this.pass(0, this.velocity.read, this.base);
     this.pass(1, this.base, this.velocity.write); g.swap(this.velocity);
     // 粘性の反復で使う固定 RHS。コピーも GPU 内で完結する。
@@ -134,7 +138,7 @@ class WorldFluid {
     for (let i = 0; i < 20; i++) { this.pass(5, this.pressure.read, this.pressure.write); g.swap(this.pressure); }
     this.pass(6, this.pressure.read, this.velocity.write); g.swap(this.velocity);
     this.pass(7, this.dye.read, this.dye.write); g.swap(this.dye);
-    this.spectrum.render(this.dye.read, 0, this.gpu.uniforms[1] * 6);
+    this.spectrum.render(this.dye.read, 0, this.gpu.uniforms[1] * 90);
   }
 }
 if (typeof module !== 'undefined' && module.exports) { module.exports = { WorldFluid }; }

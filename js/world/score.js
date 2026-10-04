@@ -1,4 +1,4 @@
-// 目的 — 決定的な抽象状態・変奏・モチーフ・三色パレットを編成する — doc/20261004-concept-world-mode.md §2.7・§4・§5
+// 目的 — 決定的な抽象状態・変奏・モチーフ・三色パレットを編成する — doc/20261004-concept-world-mode.md §2.8・§4・§5
 const WORLD_KINDS = ['intro', 'build', 'drop', 'break', 'outro', 'main'];
 const WORLD_ENVIRONMENTS = ['mist', 'convergence', 'explosion', 'drift', 'dissipation', 'galaxy'];
 const WORLD_KIND_ENVIRONMENT = [0, 1, 2, 3, 4, 5];
@@ -17,19 +17,31 @@ function worldHue(h) {
   const channel = offset => .015 + .985 * Math.max(0, Math.min(1, Math.abs(((hue * 6 + offset) % 6) - 3) - 1));
   return [channel(0), channel(4), channel(2)];
 }
-function compileWorldScore(songMap, seed) {
-  const rng = makeRng(seed);
-  const harmony = songMap.worldChroma || [];
-  let cx = 0, cy = 0;
-  for (let i = 0; i < 12; i++) {
-    const a = i * 7 / 12 * Math.PI * 2;
-    cx += (harmony[i] || 0) * Math.cos(a); cy += (harmony[i] || 0) * Math.sin(a);
+// 全曲特徴は読込時だけ集計。ゼロ分布のtieは音名順、入力配列は変更しない。
+function worldSongVariation(songMap, featureFrames = null) {
+  const chroma = new Float64Array(12); let centroid = 0, active = 0, onsets = 0;
+  if (featureFrames) for (let h = 0; h < featureFrames.length; h++) {
+    const f = featureFrames[h];
+    for (let k = 0; k < 12; k++) chroma[k] += f[86 + k];
+    if (f[102] > .0001) { centroid += f[83]; active++; }
+    if (f[68]) onsets++;
   }
-  const harmonyHue = Math.atan2(cy, cx) + rng() * 0.35;
-  const hue = (.58 + .025 * Math.sin(harmonyHue)) * Math.PI * 2;
+  if (songMap.worldChroma) chroma.set(songMap.worldChroma);
+  const order = Array.from({ length: 12 }, (_, i) => i).sort((a, b) => chroma[b] - chroma[a] || a - b);
+  const hue = order[0] * 7 / 12 * Math.PI * 2;
+  const accentHue = chroma[order[1]] > 0 ? order[1] * 7 / 12 * Math.PI * 2 : hue + Math.PI * 2 / 3;
+  const meanCentroid = active ? centroid / active : 0, onsetDensity = onsets / Math.max(.001, songMap.durationSec);
+  const brightness = Math.min(1, meanCentroid / 8000), density = onsetDensity / (onsetDensity + 2);
+  return { palette: { primary: worldHue(hue), secondary: worldHue(hue + Math.PI), accent: worldHue(accentHue) },
+    motionSpeed: songMap.bpm / 120, detail: featureFrames ? .25 + .75 * (brightness + density) * .5 : 1,
+    particleAmount: featureFrames ? .2 + .8 * (brightness * .6 + density * .4) : 1,
+    centroidHz: meanCentroid, onsetDensity, dominantChroma: order[0] };
+}
+function compileWorldScore(songMap, seed, featureFrames = null) {
+  const rng = makeRng(seed), song = worldSongVariation(songMap, featureFrames);
   const motifs = Object.create(null), counts = Object.create(null), sections = [], events = [];
   const beatSec = 60 / songMap.bpm;
-  const palette = [worldHue(hue), worldHue(hue + Math.PI * .14), worldHue(hue + Math.PI)];
+  const palette = [song.palette.primary, song.palette.secondary, song.palette.accent];
   for (let i = 0; i < songMap.sections.length; i++) {
     const s = songMap.sections[i];
     if (!motifs[s.label]) {
@@ -64,10 +76,10 @@ function compileWorldScore(songMap, seed) {
   }
   events.push({ tSec: songMap.durationSec, type: 'end', sectionIndex: sections.length - 1 });
   events.sort((a, b) => a.tSec - b.tSec || (a.type === 'boundary' ? -1 : b.type === 'boundary' ? 1 : 0));
-  return { seed: seed >>> 0, durationSec: songMap.durationSec, beatSec, sections, events,
+  return { song, seed: seed >>> 0, durationSec: songMap.durationSec, beatSec, sections, events,
     beats: Array.from(songMap.beats), downbeats: Array.from(songMap.downbeatIndices, i => songMap.beats[i]),
     palette: { primary: palette[0], secondary: palette[1], accent: palette[2] } };
 }
 if (typeof module !== 'undefined' && module.exports) {
-  module.exports = { compileWorldScore, worldHash, WORLD_KINDS, WORLD_ENVIRONMENTS, WORLD_KIND_ENVIRONMENT, WORLD_COMPOSITIONS };
+  module.exports = { worldSongVariation, compileWorldScore, worldHash, WORLD_KINDS, WORLD_ENVIRONMENTS, WORLD_KIND_ENVIRONMENT, WORLD_COMPOSITIONS };
 }

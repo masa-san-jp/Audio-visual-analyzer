@@ -1,5 +1,5 @@
 <!doctype html>
-<!-- 目的 — ワールドモードの独立入口（file://対応） — doc/20261004-concept-world-mode.md §2.7・§5 -->
+<!-- 目的 — ワールドモードの独立入口（file://対応） — doc/20261004-concept-world-mode.md §2.8・§5 -->
 <html lang="ja">
 <head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
@@ -11,7 +11,7 @@ body{display:grid;place-items:center}canvas{display:block;position:absolute;obje
 #prompt[hidden],#debug[hidden]{display:none}#prompt.busy{color:#aeefff}
 #controls{position:fixed;inset:auto 0 0;display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:16px;background:#111;border-top:1px solid #333;z-index:2}
 #controls button,.file-button{border:1px solid #555;border-radius:6px;background:#222;color:#eee;padding:10px 14px;font:inherit;cursor:pointer}
-#controls [hidden]{display:none}#export-progress{width:100px}#fps{background:#222;color:#eee;padding:8px}
+#controls [hidden]{display:none}#export-progress{width:100px}#fps,#type{background:#222;color:#eee;padding:8px}
 #controls button:disabled{opacity:.45;cursor:default}#file{position:absolute;width:1px;height:1px;opacity:0}
 .file-button:focus-within,button:focus-visible,input:focus-visible{outline:2px solid #8ed9fa;outline-offset:3px}
 #seek{flex:1;min-width:100px;accent-color:#8ed9fa}#time{font-variant-numeric:tabular-nums;font-size:12px}
@@ -23,6 +23,7 @@ body{display:grid;place-items:center}canvas{display:block;position:absolute;obje
 <button id="prompt" type="button">曲をドロップ</button><pre id="debug" hidden></pre>
 <nav id="controls" aria-label="再生操作">
 <label class="file-button">曲を読み込む<input id="file" type="file" accept="audio/*,video/*"></label>
+<label>TYPE <select id="type" aria-label="GPUアナライザー（1〜6）"></select></label>
 <button id="play" type="button" disabled>再生</button>
 <input id="seek" type="range" min="0" max="1" step="0.01" value="0" aria-label="再生位置" disabled>
 <output id="time">0:00 / 0:00</output>
@@ -43,6 +44,8 @@ body{display:grid;place-items:center}canvas{display:block;position:absolute;obje
 <script src="js/world/post.js"></script><script src="js/world/score.js"></script>
 <script src="js/webm-muxer.js"></script><script src="js/mp4-muxer.js"></script>
 <script src="js/offline-exporter.js"></script>
+<script src="js/world/analyzer-types.js"></script><script src="js/world/g-fluid.js"></script>
+<script src="js/world/g-rings.js"></script><script src="js/world/g-galaxy.js"></script>
 <script src="js/world/world-engine.js"></script><script src="js/world/world-exporter.js"></script><script src="js/world/world-app.js"></script>
 </body>
 </html>

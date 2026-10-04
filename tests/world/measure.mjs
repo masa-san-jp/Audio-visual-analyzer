@@ -1,10 +1,10 @@
 #!/usr/bin/env node
-// 目的 — ヘッド付きmacOS Chromeで独立したworld.htmlを実再生しW-1〜W-8を報告する — SSOT §1.3
+// 目的 — ヘッド付きmacOS Chromeで独立したworld.htmlを実再生しW/BWとG-1〜G-4を報告する — SSOT §1.3・§2.8
 // 実行: node tests/world/measure.mjs（CHROME_PATHも使用可）。Chromeを起動できるレビュアー専用。
 // 計測上の判断（閾値はSSOTのまま）:
 // W-1: セクション中央のHDR全画素のmin/max。ゼロ除算だけ1e-6で保護し、生min/maxも記録。
 // W-2: SSOTどおりsRGBのYを4×4平均（線形化しない）。Gaussianは半径ceil(3σ)、
-//      正規化された分離畳み込み、端画素を重複する対称折り返し。window.__world.renderAt(中央時刻)で0から固定dt=1/60、MFS無し。
+//      正規化された分離畳み込み、端画素を重複する対称折り返し。window.__world.renderAt(中央時刻)で0から固定dt=1/60、共有offline MFS。
 // W-4: AudioEngine.getFeatures()でフラグを読んだフレームと、実際のUBO読出しを比較。
 // W-5: renderAtで初期化し、advancePreviewによる固定60Hzの直前1拍／直後.25秒の各フレームのsRGB平均輝度を時間窓ごとに算術平均。
 //      完全黒→非ゼロはInfinityとして記録し、窓内フレーム0枚は失敗。
@@ -57,7 +57,7 @@ child.on('close',code=>process.exit(code ?? 0));\n`);
   chrome = await launchChrome({ headed: true, executablePath: executable });
   await chrome.send('Emulation.setDeviceMetricsOverride', { width: 1920, height: 1080, deviceScaleFactor: 1, mobile: false });
   await chrome.navigate(pathToFileURL(path.join(root, 'world.html')).href + '?debug=1');
-  for (const file of ['tests/shared/song-synth.js', 'tests/shared/wav.js', 'tests/browser/world.test.js']) {
+  for (const file of ['tests/shared/song-synth.js', 'tests/shared/wav.js', 'tests/browser/world.test.js', 'tests/browser/world11.test.js']) {
     const source = await fs.readFile(path.join(root, file), 'utf8');
     await chrome.evaluate(source + '\n//# sourceURL=' + pathToFileURL(path.join(root, file)).href);
   }
@@ -67,7 +67,7 @@ child.on('close',code=>process.exit(code ?? 0));\n`);
     const renderer=ext?gl.getParameter(ext.UNMASKED_RENDERER_WEBGL):gl.getParameter(gl.RENDERER);
     return {renderer,hardware:!!ext&&!/swiftshader|llvmpipe|software/i.test(renderer),userAgent:navigator.userAgent};
   })()`);
-  console.log('WORLD v6 measurement: headed Chrome, file://, 1920×1080, ' + hardware.renderer);
+  console.log('WORLD-11 measurement: headed Chrome, file://, 1920×1080, ' + hardware.renderer);
   // 静止画とライブを別CDP呼び出しにし、再生失敗でもvisualの結果とPNGを残す。
   await chrome.evaluate('worldLoadMeasurement()', { timeoutMs: 900000 });
   visual = await chrome.evaluate('(async () => { window.__worldVisualResult = await runWorldVisualMeasurement(); return window.__worldVisualResult; })()', { timeoutMs: 900000 });
@@ -81,17 +81,24 @@ child.on('close',code=>process.exit(code ?? 0));\n`);
     if (png) await fs.writeFile(path.join(output, 't-' + visual.references[i].tSec.toFixed(3) + '.png'), Buffer.from(png.split(',')[1], 'base64'));
   }
   const result = await chrome.evaluate('runWorldMeasurement(window.__worldVisualResult)', { timeoutMs: 900000 });
+  const analyzer = await chrome.evaluate('runWorldAnalyzerMeasurement()', { timeoutMs: 900000 });
+  Object.assign(result, analyzer);
+  // §2.8: W/BWはg-fluidの回帰として保持。旧SDF併描／全タイプ26万粒という解釈のみ撤回。
+  result.applicability = { legacy: 'W/BWはg-fluidへ適用（閾値維持）', obsolete: ['W-3のSDF併描: §2.6で撤回', 'W-3/BW-6-coverageを全タイプへ強制: §2.8で独立形態へ置換'], replacement: '新形態はG-1〜G-4。W-3はfluid/particles/HDR/feedbackの検査を保持' };
   result.environment = hardware; result.consoleErrors = chrome.errors;
   if (!hardware.hardware) {
+    result['G-4'].pass = false; result['G-4'].reason = '実GPUを確認できません';
+    for (const type of result['G-4'].types) { type.pass = false; type.reason = result['G-4'].reason; }
     result['W-8'].pass = false; result['W-8'].reason = '実GPUを確認できません';
     result['BW-7-performance'].pass = false; result['BW-7-performance'].reason = '実GPUを確認できません';
   }
-  result.runtimePass = !(result.glError || result.consoleErrors.length || result.debugErrors);
+  result.runtimePass = !(result.glError || result.analyzerGlErrors || result.consoleErrors.length || result.debugErrors);
   await fs.writeFile(path.join(output, 'report.json'), JSON.stringify(result, null, 2) + '\n');
   for (const id of ['BW-2-exposure', 'BW-2-preview', 'BW-2-environments', 'BW-2-matter', 'BW-3-hero', 'BW-3-kick', 'BW-4-shell', 'BW-4-intro', 'BW-5-light', 'BW-5-palette', 'BW-6-coverage', 'BW-6-ui', 'BW-6-layers', 'BW-7-composition', 'BW-7-camera', 'BW-7-motion', 'BW-7-intro', 'BW-7-performance', 'BW-8-edges']) console.log((result[id].pass ? 'PASS ' : 'FAIL ') + id + ' ' + JSON.stringify(result[id]));
   for (let i = 1; i <= 8; i++) console.log((result['W-' + i].pass ? 'PASS ' : 'FAIL ') + 'W-' + i + ' ' + JSON.stringify(result['W-' + i]));
+  for (const id of ['G-1','G-2','G-3','G-4']) console.log((result[id].pass ? 'PASS ' : 'FAIL ') + id + ' ' + JSON.stringify(result[id]));
   console.log('Report/images: ' + output);
-  if (!result.runtimePass || ['BW-2-exposure', 'BW-2-preview', 'BW-2-environments', 'BW-2-matter', 'BW-3-hero', 'BW-3-kick', 'BW-4-shell', 'BW-4-intro', 'BW-5-light', 'BW-5-palette', 'BW-6-coverage', 'BW-6-ui', 'BW-6-layers', 'BW-7-composition', 'BW-7-camera', 'BW-7-motion', 'BW-7-intro', 'BW-7-performance', 'BW-8-edges'].some(id => !result[id].pass) || Array.from({ length: 8 }, (_, i) => result['W-' + (i + 1)].pass).some(v => !v)) process.exitCode = 1;
+  if (!result.runtimePass || ['G-1','G-2','G-3','G-4'].some(id => !result[id].pass) || ['BW-2-exposure', 'BW-2-preview', 'BW-2-environments', 'BW-2-matter', 'BW-3-hero', 'BW-3-kick', 'BW-4-shell', 'BW-4-intro', 'BW-5-light', 'BW-5-palette', 'BW-6-coverage', 'BW-6-ui', 'BW-6-layers', 'BW-7-composition', 'BW-7-camera', 'BW-7-motion', 'BW-7-intro', 'BW-7-performance', 'BW-8-edges'].some(id => !result[id].pass) || Array.from({ length: 8 }, (_, i) => result['W-' + (i + 1)].pass).some(v => !v)) process.exitCode = 1;
 } catch (error) {
   const state = chrome ? await chrome.evaluate('({ error: window.__world?.error, state: window.__world?.app?.state, tSec: window.__world?.engine?.latestSec, previewSteps: window.__world?.engine?.previewStep, audioTime: window.__world?.audio?.currentTime, audioPaused: window.__world?.audio?.paused, audioReadyState: window.__world?.audio?.readyState, audioContextState: window.__world?.audioEngine?.ctx?.state, mfsStatus: window.__world?.audioEngine?.mfsStatus })').catch(() => null) : null;
   await fs.writeFile(path.join(output, 'report.json'), JSON.stringify({ ...visual, runtimePass: false, setupError: error.message, state, consoleErrors: chrome ? chrome.errors : [] }, null, 2) + '\n');
