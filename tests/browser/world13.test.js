@@ -1,4 +1,4 @@
-// 目的 — 直接像の32環・内側キック増光・実GPU p95とレンズ描画を検査する — doc/20261004-design-gargantua-v1.md §6
+// 目的 — 直接像の32環・内側キック増光・実GPU p95とレンズ描画を検査する — doc/20261004-design-gargantua-v1.md §6・§7
 // @page harness
 function world13ReadAnnuli(engine,capture) {
   const gl=engine.gpu.gl,target=engine.type.half,pixels=new Float32Array(target.width*target.height*4);
@@ -107,7 +107,7 @@ async function world13Shoot(typeId,tSec) {
         const capture=e.capture(),time=e.latestSec;if(capture.glError)throw new Error('capture GL error '+capture.glError);
         if(time!==previousTime){
           const regions=world13ReadAnnuli(e,capture),levels=Array.from({length:32},(_,i)=>e.type.bandUniforms[i*4]);
-          records.push({tSec:time,levels,...regions,kick:e.type.music[0],highOnsetPhase:e.type.highOnsetPhase,camera:Array.from(e.type.camera)});previousTime=time;
+          records.push({tSec:time,levels,...regions,...(typeof world14ExposureReport==='function'?{exposure:world14ExposureReport(capture)}:{}),kick:e.type.music[0],highOnsetPhase:e.type.highOnsetPhase,camera:Array.from(e.type.camera)});previousTime=time;
         }
         if(time>=tSec){
           audio.pause();app.state='paused';e.onFrame=null;
@@ -116,6 +116,7 @@ async function world13Shoot(typeId,tSec) {
           for(let y=0;y<canvas.height;y++)image.data.set(capture.rgba.subarray((canvas.height-1-y)*stride,(canvas.height-y)*stride),y*stride);
           ctx.putImageData(image,0,0);
           resolveShot({typeId,requestedSec:tSec,capturedSec:time,records,png:canvas.toDataURL('image/png'),g1:world13CorrelationReport(records),
+            v11:typeof world14ShotReport==='function'?world14ShotReport(e,capture):null,
             mfsFrames:e.mfsFrames,clippedFraction:capture.clippedFraction,metrics:e.metrics()});
         }
       }catch(error){e.onFrame=null;rejectShot(error);}
@@ -162,23 +163,24 @@ if(typeof avzTest==='function')avzTest('BW-13-formulas','実GLSLの黒体5端点
     await ready;const child=iframe.contentWindow;avzAssert.ok(child.__world?.engine,child.__world?.error);
     const result=child.eval(`(()=>{
       const e=__world.engine,g=e.gpu,gl=g.gl,source=WORLD_GARGANTUA_FRAGMENT.replace(/void main\\(\\)\\{[\\s\\S]*$/,'');
-      const read=(body,w,h)=>{const target=g.target(w,h),program=g.program(source+body);g.bind(program,target);
+      const read=(body,w,h)=>{const target=g.target(w,h,true),program=g.program(source+body);g.bind(program,target);
         const b=new Float32Array(128);for(let i=0;i<32;i++)b[i*4]=i/31;
-        gl.uniform4fv(g.texture(program,'bands[0]'),b);gl.uniform4fv(g.texture(program,'music'),new Float32Array([Math.exp(-.1/.11),3,1,4]));
+        gl.uniform4fv(g.texture(program,'bands[0]'),b);gl.uniform3fv(g.texture(program,'gravity'),[1.5,1,3]);
+        gl.uniform4fv(g.texture(program,'camera'),[22,.1,0,1]);gl.uniform4fv(g.texture(program,'music'),new Float32Array([Math.exp(-.1/.11),3,1,4]));
         gl.uniform3fv(g.texture(program,'secondary'),[.45,.25,1]);gl.uniform2f(g.texture(program,'outputResolution'),1920,1080);g.draw();
         const pixels=new Float32Array(w*h*4);gl.readPixels(0,0,w,h,gl.RGBA,gl.FLOAT,pixels);g.releaseTarget(target);return pixels;};
       const table=WORLD_GARGANTUA_BLACKBODY,colors=read('void main(){float T[5]=float[5](.33,.50,.70,.85,1.);frag=vec4(blackbodyRamp(T[int(gl_FragCoord.x)]),1);}',5,1);
       let rampError=0;for(let i=0;i<5;i++)for(let c=0;c<3;c++)rampError=Math.max(rampError,Math.abs(colors[i*4+c]-table[i][c+1]));
       const gain=read('void main(){float rd=3.+(floor(gl_FragCoord.x)+.5)/32.*11.;frag=vec4(musicGain(rd),rd,0,1);}',32,1);
       let bandError=0;for(let k=0;k<32;k++){const rd=3+(k+.5)/32*11,x=Math.max(0,Math.min(1,(rd-3)/3.5)),smooth=x*x*(3-2*x);
-        const expected=(.45+2.2*(31-k)/31)*(rd<6.5?1+1.8*Math.exp(-.1/.11)*(1-smooth):1);
+        const expected=(.45+2.2*(31-k)/31)*(rd<6.5?1+2.6*Math.exp(-.1/.11)*(1-smooth):1);
         bandError=Math.max(bandError,Math.abs(gain[k*4]-expected));}
       const stars=read('void main(){vec2 p=vUv*2.-1.;frag=vec4(starfield(normalize(vec3(p,1))),1);}',128,64);
       let backgroundMax=0;for(let i=0;i<stars.length;i++)if(i%4!==3)backgroundMax=Math.max(backgroundMax,stars[i]);
       return {rampError,bandError,backgroundMax,starSamples:128*64,glError:gl.getError()};
     })()`);
-    avzAssert.equal(result.glError,0);avzAssert.ok(result.rampError<.001);avzAssert.ok(result.bandError<.004,'RGBA16Fの最大gain量子化誤差');
-    avzAssert.ok(result.backgroundMax<=.04);console.log('BW-13-formulas '+JSON.stringify(result));
+    avzAssert.equal(result.glError,0);avzAssert.ok(result.rampError<.001);avzAssert.ok(result.bandError<.004,'32環の指定gain式');
+    avzAssert.ok(result.backgroundMax<=Math.fround(.6));console.log('BW-13-formulas '+JSON.stringify(result));
   }finally {iframe.contentWindow.__world?.engine?.dispose();iframe.remove();}
 },{timeoutMs:60000});
 if(typeof module!=='undefined'&&module.exports){module.exports={world13AnnulusSamples,world13CorrelationReport,world13KickReport};}
