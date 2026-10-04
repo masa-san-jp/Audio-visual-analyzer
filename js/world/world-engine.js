@@ -10,21 +10,21 @@ void main(){
  vec2 dx=1./vec2(textureSize(dye,0));
  vec3 edge=abs(texture(dye,uv+dx).rgb-texture(dye,uv-dx).rgb);
  vec3 mist=vec3(0);
- // 3視差層、遠方ほど低いコントラスト。周期位相の3D星雲を重ねる。
- for(int i=0;i<3;i++){
-  float depth=1.5+float(i)*2.,t=clock.x;
-  vec2 q=(vUv-.5)*vec2(screen.x/screen.y,1.)+lens.xy/depth;
-  q*=(1.+float(i)*.45)/(1.+audio.x*.05*environment.w);
-  float cloud=noise3(vec3(q*3.+vec2(sin(t),cos(t))*.2,depth+sin(t*2.)*.3));
-  float strand=exp(-pow(sin(atan(q.y+.13,q.x+.07)*3.+length(q)*21.+sin(t*3.))/.18,2.));
-  float haze=smoothstep(.28,.8,cloud)*(.06+strand*.3)*exp(-depth*.25);
-  mist+=worldColor(float(i%2))*haze;
+ // 星雲は遠景だけに置き、dropの焦点面を霞で覆わない。
+ float quiet=worldKind(0.)+worldKind(3.)*.2;
+ if(quiet>.001){
+  for(int i=0;i<3;i++){
+   float depth=3.+float(i)*4.;
+   vec2 q=worldPosition(vUv)+eye.xy/depth;
+   q*=1.+float(i)*.45;
+   float cloud=worldNebula(q,depth);
+   // 最近の雲だけに細部を加える。全画面のぼかし・同心円・波紋は使わない。
+   if(i==0)cloud+=exp(-abs(noise3(vec3(q*43.,depth+sin(clock.x)))-.5)*65.)*cloud*.7;
+   mist+=worldColor(float(i%2))*cloud*exp(-depth*.12);
+  }
  }
- // 遠い光源から放射する細い体積光。具体物を作らず、距離で薄くする。
- vec2 ray=vUv-vec2(.64,.68);float a=atan(ray.y,ray.x);
- float shafts=pow(max(0.,cos(a*13.+sin(clock.x))),24.)*exp(-length(ray)*5.);
- mist+=worldColor(1.)*shafts*.025;
- frag=vec4(mist+(ink*.65+edge*.8)*environment.w,1);
+ // 直近の流体はv8の合成係数へ戻し、領域の矩形フェードを重ねない。
+ frag=vec4(mist*quiet+(ink*.65+edge*.8)*mood.x*environment.w,1);
 
 }`;
 class WorldEngine {
@@ -32,6 +32,7 @@ class WorldEngine {
     this.canvas = canvas; this.seed = seed; this.gpu = new WorldGL(canvas);
     this.fluid = new WorldFluid(this.gpu, canvas.width, canvas.height);
     this.particles = new WorldParticles(this.gpu, seed);
+    this.depthParticles = new WorldDepthParticles(this.gpu, seed);
     this.post = new WorldPost(this.gpu, canvas.width, canvas.height);
     this.scene = this.gpu.target(canvas.width, canvas.height);
     this.composite = this.gpu.program(WORLD_COMPOSITE_FRAGMENT); this.spectrum = new WorldSpectrum(this.gpu);
@@ -61,7 +62,7 @@ class WorldEngine {
     this.gpuTimes.fill(NaN); this.cpuTimes.fill(0); this.lastTimeSlot = -1;
     for (let i = 0; i < this.queries.length; i++) this.queries[i].slot = -1;
     // 再上演とpreviewは同じGPU状態から開始する。program/FBOを再作成しない。
-    const g = this.gpu; g.uniforms.fill(0); this.particles.reset(score.seed); this.fluid.reset(); this.post.reset();
+    const g = this.gpu; g.uniforms.fill(0); this.particles.reset(score.seed); this.depthParticles.reset(score.seed); this.fluid.reset(); this.post.reset();
     this.latestSec = 0; this.previewStep = 0; this.preview = false;
   }
 
@@ -249,26 +250,33 @@ class WorldEngine {
     u[82] = 1.08 + .08 * Math.sin(phase) ** 2 + .03 * (gain - 1);
     u[83] = .12 * Math.sin(phase); this._clampCamera();
   }
-  _emitterPosition(id, i, out, offset) {
-    const v = i / 31, aspect = this.canvas.width / this.canvas.height;
-    if (id === 2) { out[offset] = (v - .5) * aspect * .76; out[offset + 1] = -.24; }
-    else if (id === 4) {
-      const a = v * Math.PI * 3.4, r = .08 + v * .29;
-      out[offset] = Math.cos(a) * r; out[offset + 1] = Math.sin(a) * r;
-    } else {
-      const a = Math.PI * (.12 + v * .76);
-      out[offset] = -Math.cos(a) * aspect * .4; out[offset + 1] = Math.sin(a) * .32 - .26;
+  _emitterPosition(id, i, out, offset, phase = this.gpu.uniforms[0]) {
+    const aspect = this.canvas.width / this.canvas.height;
+    // 単調な不等間隔。帯域の順序と分離を保ち、規則的な櫛の歯を作らない。
+    const v = (i + .22 * Math.sin(i * 2.399963)) / 31;
+    const a = Math.PI * (.12 + v * .76);
+    let x = -Math.cos(a) * aspect * .4, y = Math.sin(a) * .32 - .26;
+    if (id === 4) {
+      const turn = v * Math.PI * 3.4, r = .08 + v * .29;
+      x = Math.cos(turn) * r; y = Math.sin(turn) * r;
+    } else if (id === 2) {
+      y += .10 * Math.sin(v * Math.PI * 1.4);
     }
+    // カメラと独立に、流体の低周波うねりに沿って周期的に漂う。
+    out[offset] = x + .04 * (Math.sin(phase + y * 2.) - Math.sin(y * 2.));
+    out[offset + 1] = y + .035 * (Math.cos(phase + x * 2.) - Math.cos(x * 2.));
   }
+
   _emitters(f) {
     const u = this.gpu.uniforms, blend = u[112], loop = u[113];
+    const phase = Math.PI * 2 * this.latestSec / this.score.durationSec;
     for (let i = 0; i < 32; i++) {
       const offset = 116 + i * 4;
-      this._emitterPosition(u[108], i, u, offset);
+      this._emitterPosition(u[108], i, u, offset, phase);
       const x = u[offset], y = u[offset + 1];
-      this._emitterPosition(u[84], i, u, offset);
+      this._emitterPosition(u[84], i, u, offset, phase);
       const nx = x + (u[offset] - x) * blend, ny = y + (u[offset + 1] - y) * blend;
-      this._emitterPosition(this.score.sections[0].compositionId, i, u, offset);
+      this._emitterPosition(this.score.sections[0].compositionId, i, u, offset, phase);
       u[offset] = nx * (1 - loop) + u[offset] * loop;
       u[offset + 1] = ny * (1 - loop) + u[offset + 1] * loop;
       u[offset + 2] = f.bandsSmooth[i]; u[offset + 3] = f.bands[i];
@@ -322,6 +330,7 @@ class WorldEngine {
     const g = this.gpu;
     g.bind(this.composite, this.scene);
     g.sampler(this.dyeLoc, 0, this.fluid.dye.read); g.sampler(this.velocityLoc, 1, this.fluid.velocity.read); g.draw();
+    this.depthParticles.render(this.scene);
     this.particles.render(this.scene);
     this.spectrum.render(this.scene, 1, this.gpu.uniforms[39] ? 0 : 5 * this.gpu.uniforms[79]);
   }
@@ -368,6 +377,7 @@ class WorldEngine {
     const intervals = Array.from(this.frameIntervals.subarray(0, this.timeCount));
     const p95 = a => { a.sort((x, y) => x - y); return a.length ? a[Math.ceil(a.length * .95) - 1] : null; };
     return { width: this.canvas.width, height: this.canvas.height, particleCount: this.particles.count,
+      depthParticleCount: this.depthParticles.count, focusedFluid: true,
       fluidWidth: this.fluid.velocity.read.width, fluidHeight: this.fluid.velocity.read.height,
       overscan: OVERSCAN, domainMargin: WORLD_DOMAIN_MARGIN,
       dyeWidth: this.fluid.dye.read.width, dyeHeight: this.fluid.dye.read.height,

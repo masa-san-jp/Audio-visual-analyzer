@@ -50,7 +50,7 @@ void main(){
    float a=clock.y*mood.w*35.; frag=vec4((texture(auxiliary,uv).xy+a*(l.xy+r.xy+b.xy+t.xy))/(1.+4.*a),0,1);
  }
 }`;
-// 32個の小さなquadだけ描く。染料と最終像で同じ固定噴出点を使う。
+// 帯域の短い細線を32個のquadで供給。流れの向きで変形し、染料は直ちに移流へ乗る。
 const WORLD_SPECTRUM_VERTEX = `#version 300 es
 ${WORLD_GLSL.replace('in vec2 vUv;', '')}
 uniform int screenSpace;
@@ -61,8 +61,12 @@ void main(){
  int i=gl_VertexID/6,j=gl_VertexID%6;
  vec2 corner=j==0?vec2(-1,-1):j==1?vec2(1,-1):j==2?vec2(-1,1):j==3?vec2(-1,1):j==4?vec2(1,-1):vec2(1,1);
  local=corner;level=emitters[i].z;
- float radius=.012+environment.z*.007;
- vec2 uv=screenSpace==1?worldScreenUv(emitters[i].xy+corner*radius):worldUv(emitterWorld(i)+rot(lens.w)*corner*radius/lens.z);
+ vec2 point=emitterWorld(i),flow=worldFlow(point);
+ vec2 tangent=length(flow)>.001?normalize(flow):vec2(1,0),normal=vec2(-tangent.y,tangent.x);
+ float radius=.010+level*.002;
+ // 核は局所輝度を保ち、短い尖った筋を同じ流れに沿って作る。平行な長い噴流は作らない。
+ vec2 offset=tangent*corner.x*radius+normal*corner.y*radius*.38;
+ vec2 uv=screenSpace==1?worldScreenUv(emitters[i].xy+rot(-lens.w)*offset*lens.z):worldUv(point+offset);
  gl_Position=vec4(uv*2.-1.,0,1);
  // 全噴出点の基準色度を共通にし、輝度の順位を帯域のレベルだけで決める。
  tint=worldColor(1.);tint/=max(.01,dot(tint,vec3(.2126,.7152,.0722)));
@@ -130,7 +134,7 @@ class WorldFluid {
     for (let i = 0; i < 20; i++) { this.pass(5, this.pressure.read, this.pressure.write); g.swap(this.pressure); }
     this.pass(6, this.pressure.read, this.velocity.write); g.swap(this.velocity);
     this.pass(7, this.dye.read, this.dye.write); g.swap(this.dye);
-    this.spectrum.render(this.dye.read, 0, this.gpu.uniforms[1] * 90);
+    this.spectrum.render(this.dye.read, 0, this.gpu.uniforms[1] * 6);
   }
 }
 if (typeof module !== 'undefined' && module.exports) { module.exports = { WorldFluid }; }

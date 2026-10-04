@@ -1,3 +1,36 @@
+## 2026-10-04 — [WORLD-10] v8 の美しさの回復
+
+### 作業内容
+- 指定順の追加ルール／実装者ルール／ガイドと構想§2.7を読み、`80c0c48`（wip(WORLD): v8 overscan）とHEAD `6947257`の描画差分を確認。添付のv8 dropを目標に、主流体の鋭さと独立深度を分離した。実画面のv8同等性はChrome禁止のため未判定。
+- `js/world/particles.js`: 主役262,144粒の焦点面を復元。v8の0.45〜0.8px線幅、最大8pxの速度ストリーク、70%／27%／3%の三色配分、kick時4%補給を使い、全粒子への透視拡大・前進・CoCぼけを撤去。帯域供給は既存flowの速度で開始し、少量を散らして注入。別クラスWorldDepthParticlesで遠景4,096粒＋近景12粒を解析的なquadとして描画し、周期深度1〜33、透視前進、視差、距離による減光／色の変化、近景だけの大きなぼけを追加。追加simulation targetは0。
+- `js/world/gl-util.js`: v8の渦ペア間の剪断と細い渦腕（基準幅.009）を周期場に戻す。v9の太い反復筋、水平の波状注入、角度による同心円状の星雲を撤去し、密度境界の細い星雲を共有。既存の大きなゆっくりしたうねり、1〜2中心、空間／時間ループを維持。周期座標を正規化して領域の両端を同じ座標で評価する。
+- `js/world/fluid.js`: 32帯域をflow方向の短いフィラメントとして粒子と同じ位置に供給。染料の追加係数を90×dtから6×dtへ減らし、帯域列の太い噴流・霞の蓄積を抑える。帯域ごとの局所輝度を読める核と既存のBW-9-spectrum測定uniformを保持。20圧力反復、1.5 overscan、速度720×405／染料1440×810を維持。
+- `js/world/world-engine.js`: 不等間隔の弧／螺旋が周期的に漂う32帯域曲線へ変更し、水平一列を撤去。v8の染料合成（ink*.65＋edge*.8、mood.x）へ復元。intro／outro／breakの遠景だけに3層の星雲を合成し、dropの流体を全面の霞で覆わない。独立深度層を合成し、depthParticleCount／focusedFluidの計測項目を追加。連続カメラ、固定MFS timeline、renderAtとexportの共通経路は維持。
+- `js/world/post.js`: v8→v9差分に独立した全画面motion-blurパスの追加はなかった。既存の変形履歴が霞と矩形境界を再注入し得るため、buildだけに制限（直接合成.12）。build以外ではbloom／露出にも現在の像を渡し、履歴を再注入しない。逆順smoothstepを正順の補数へ修正。breakの矩形境界の消失は実画像未確認。
+- `tests/unit/world-score.test.mjs`: UW-33の「固定位置」を今回の明示指示による漂いへ置換。帯域レベル、32点、同時刻のsection境界、loop両端の厳密一致を保持。UW-37／38で独立深度層のGPU命令・資源再利用と曲線の不等間隔・分離・連続性を追加。
+- `tests/browser/world10.test.js`（追加）: BW-10-focus-depthは製品vertexをtransform feedbackで読み、焦点面の位置／サイズ不変、深度の透視前進／視差／近景サイズを検査。BW-10-v8-timesはt=7／45／62／90の既存W-2閾値（各帯≥10%）と輝度／clipを記録し、breakの履歴を白く汚した前後の画素差≤1を検査。数値はv8との目視比較の代用ではない。
+- `js/world/world-exporter.js`、`js/world/world-app.js`、`world.html`と書き出しテストは変更していない。ゴールデンは再生成していない。
+
+### 検証
+- 最終`node tests/run.mjs --unit`: 168件／167成功／0失敗／1スキップ（想定U15-00）、56,345ms、終了コード0。先行全件実行も成功（26,756ms）。実行ログはignoredの`tests/output/world10-unit-suite.txt`。
+- `node --test tests/unit/world-score.test.mjs tests/unit/world-exporter.test.mjs`: 38件／38成功／0失敗／0スキップ、930.0195ms。後続のshader／履歴整理も最終全単体テストで確認。詳細はignoredの`tests/output/world10-unit-detail.txt`。
+- UW-33: 100msの最大移動0.0002768088832世界単位、32供給点、band17=.8、同時刻のsection境界位置差0、loopのパレット／供給点差0。UW-38: 最小帯域間隔0.02120355394、最小縦方向広がり0.20180929825、1/4ループ時の最大漂い0.06860622498、loop位置誤差<1e-7。
+- UW-37: 主役262,144粒、深度4,108粒（近景12）、追加simulation target=0、再上演時のGPU資源増加0。UW-30: 28,800camera／115,200四隅、最小domain UV余白0.127711641、追加zoom比1。
+- UW-32: live／renderAt uniform差0、30fps固定6ステップ／MFS7枚。UW-34／35／36: MP4 180枚、frame90=3,000,000μs、1920×1080、音声PCM12チャンク、AAC非対応で音声入りWebM 360枚、13枚で中止しblob=null／資源解放。WebCodecs／GPUは単体テストのモックであり、実符号化・GLSLの証明ではない。
+- 全`.js`／`.mjs`の`node --check`: 117件／117成功／0失敗。`git diff --check`: 成功。描画経路へ新しい配列／オブジェクト生成、Math.random／直接時刻取得、外部依存やbuild工程を追加していない。
+- Chrome禁止のためブラウザテストは一切未実行。新規BW-10-focus-depth／BW-10-v8-times、既存BW-9-spectrum／depth-loop／exportとW/BW全件、file:// console、実GLSLコンパイル、実画像、1080p GPU p95≤14msは未測定／未確認。
+
+### spec.md 変更
+- `doc/spec.md`をv2.17（2026-10-04）へ更新し、帯域曲線・鋭い主流体・独立深度・星雲とbreakの境界の要件を§1.1へ記載。`README.md`のWORLD試作説明を更新。本体index.htmlは変更していない。
+
+### 備考
+- 実装: Codex gpt-6.1-sol high
+- 判断／逸脱: WORLD-10の漂う帯域曲線の明示指示を、旧構想§2.7(4)／UW-33の固定位置より優先。BW-9-spectrum自体の測定方法／閾値は変更していない。WORLD-10に固定の描画係数表はなく、v8の係数を復元し、新規層は上記の粒子数／深度／供給量で実装した。測定失敗に合わせた係数の再調整は行っていない。
+- 主粒子の既存state.z=1〜9とxyの保存形式は計測互換のため保持するが、描画時に投影を相殺し焦点面の材質属性として扱う。実際の奥行きは独立深度層が担当する。既存BW-9-depth-loopの主state分布に加え、BW-10-focus-depthで実深度層を確認すること。
+- 一時編集スクリプト2個を誤ってworktree外の`/tmp`に作成した（作業範囲の指示違反）。スクリプトは削除済み。成果物はこのworktree内にあり、他のworktree／メインcheckout／gitメタデータは変更していない。
+- レビュアー確認: `node tests/run.mjs --browser --headed --filter 'BW-9|BW-10'`で実MFSの32帯域輝度順位、実export一致、loop、GLSL／TF、焦点面／視差／break履歴汚染を確認すること。`node tests/world/measure.mjs`をmacOS実GPU／headedで実行し、1080p GPU p95≤14msと既存W/BWの全閾値を確認すること。v8（80c0c48、添付t45／90）と同じ曲・seed・時刻で、鋭いマーブル、櫛／平行噴流／水面の波紋の撤去、t62の上下矩形境界、星塵の前進と広大さ、introの細部を目視比較すること。未測定の閾値に失敗した場合は、係数を調整せず箇所・選択肢・推奨案を報告すること。
+- Chrome起動、commit／push／PR作成は行っていない。未コミット差分として納品。
+
 ## 2026-10-04 — [WORLD-9] 書き出し・連続性・うねり・周波数
 
 ### 作業内容

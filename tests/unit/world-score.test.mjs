@@ -610,16 +610,59 @@ test('UW-32 WORLD-9 固定timeline: rAF間隔に依存せずrenderAtと同じス
   assert.throws(()=>engine.setTimeline(frames,25),RangeError);
   console.log('UW-32 fps=30 fixedSteps=6 live/renderAtUniformError=0 features=7');
 });
-test('UW-33 WORLD-9 帯域と構図: 32固定噴出点・平滑化レベル・セクションモーフ・outro収束',()=>{
+test('UW-33 WORLD-10 帯域と構図: 32漂う供給点・平滑化レベル・セクションモーフ・outro収束',()=>{
   const {engine}=worldTestEngine(),u=engine.gpu.uniforms;
   const r=loadClassic(['js/mfs-const.js','js/mfs-view.js']),f=new(r.get('MfsFrameView'))(),L=r.get('MFS_LAYOUT');
   f.raw[L.BANDS_SMOOTH+17]=.8;engine._step(7,f,1/60);
-  const before=u.slice(116);engine._step(7.1,f,1/60);assert.deepEqual(u.slice(116),before);
+  const before=u.slice(116);engine._step(7.1,f,1/60);
+  let drift=0;for(let i=0;i<32;i++){
+    const o=i*4;drift=Math.max(drift,Math.hypot(u[116+o]-before[o],u[117+o]-before[o+1]));
+    assert.equal(u[118+o],before[o+2]);assert.equal(u[119+o],before[o+3]);
+  }
+  assert.ok(drift>0&&drift<.001,'連続した遅い曲線の漂い');
   assert.ok(Math.abs(u[116+17*4+2]-.8)<1e-6);
   const positions=new Set();for(let i=0;i<32;i++)positions.add(u[116+i*4]+':'+u[117+i*4]);assert.equal(positions.size,32);
-  const boundary=engine.score.sections[1].startSec;engine.setScore(engine.score);engine._step(boundary-.0001,f,0);const start=u.slice(116);
+  const boundary=engine.score.sections[1].startSec;engine.setScore(engine.score);engine._step(boundary-.0001,f,0);
+  // WORLD-10の漂いは時刻で決まる。同じ時刻へ漂いだけ進め、sectionのモーフ開始が位置を飛ばさないことを厳密比較する。
+  engine.latestSec=boundary;engine._emitters(f);const start=u.slice(116);
   engine._step(boundary,f,0);assert.deepEqual(u.slice(116),start);
   engine.setScore(engine.score);engine._step(0,null,0);const palette=u.slice(24,27),emitters=u.slice(116);
   engine._step(engine.score.durationSec,null,0);assert.deepEqual(u.slice(24,27),palette);assert.deepEqual(u.slice(116),emitters);assert.equal(u[79],0);
-  console.log('UW-33 emitters=32 band17=.8 sectionBoundaryPositionError=0 loopPalette/EmitterError=0');
+  console.log('UW-33 emitters=32 band17=.8 maxDrift100ms='+drift+' sectionBoundaryPositionError=0 loopPalette/EmitterError=0');
+});
+
+
+test('UW-37 WORLD-10 独立深度層: 焦点面262144粒・星塵4108粒・同じGPU資源を再利用',()=>{
+  const {engine,gl}=worldTestEngine();
+  const resourceCounts=[engine.gpu.textures.length,engine.gpu.fbos.length,engine.gpu.programs.length];
+  engine._step(45,null,1/60);
+  assert.equal(engine.depthParticles.count,4108);assert.equal(engine.particles.count,262144);
+  assert.ok(gl.calls.some(c=>c.type===gl.TRIANGLES&&c.count===4108*6));
+  assert.ok(gl.calls.some(c=>c.type===gl.POINTS&&c.count===262144));
+  engine.depthParticles.reset(17);assert.equal(engine.depthParticles.seed,17);
+  engine.setScore(engine.score);assert.equal(engine.depthParticles.seed,engine.score.seed);
+  assert.deepEqual([engine.gpu.textures.length,engine.gpu.fbos.length,engine.gpu.programs.length],resourceCounts);
+  assert.equal(engine.metrics().focusedFluid,true);assert.equal(engine.metrics().depthParticleCount,4108);
+  console.log('UW-37 focusedParticles=262144 depthParticles=4108 nearParticles=12 extraSimulationTargets=0 resourceGrowth=0');
+});
+
+test('UW-38 WORLD-10 帯域曲線: 不等間隔・水平列なし・帯域分離・曲全体で決定的',()=>{
+  const {engine}=worldTestEngine(),u=engine.gpu.uniforms;let minSpacing=Infinity,minSpread=Infinity,maxMovement=0;
+  for(const id of [0,1,2,3,4]){
+    const a=new Float32Array(128),b=new Float32Array(128);u[0]=0;
+    for(let i=0;i<32;i++)engine._emitterPosition(id,i,a,i*4);
+    u[0]=Math.PI/2;for(let i=0;i<32;i++)engine._emitterPosition(id,i,b,i*4);
+    const y=Array.from({length:32},(_,i)=>a[i*4+1]);minSpread=Math.min(minSpread,Math.max(...y)-Math.min(...y));
+    const steps=[];
+    for(let i=0;i<32;i++){
+      maxMovement=Math.max(maxMovement,Math.hypot(b[i*4]-a[i*4],b[i*4+1]-a[i*4+1]));
+      for(let j=i+1;j<32;j++)minSpacing=Math.min(minSpacing,Math.hypot(a[i*4]-a[j*4],a[i*4+1]-a[j*4+1]));
+      if(i)steps.push(Math.hypot(a[i*4]-a[(i-1)*4],a[i*4+1]-a[(i-1)*4+1]));
+    }
+    assert.ok(Math.max(...steps)/Math.min(...steps)>1.1,'等間隔でないこと');
+    u[0]=Math.PI*2;for(let i=0;i<32;i++)engine._emitterPosition(id,i,b,i*4);
+    for(let i=0;i<128;i++)assert.ok(Math.abs(a[i]-b[i])<1e-7,'曲頭と曲尾の位置一致');
+  }
+  assert.ok(minSpacing>.012,'局所帯域の重なりを避ける');assert.ok(minSpread>.15);assert.ok(maxMovement>.03);
+  console.log('UW-38 minBandSpacing='+minSpacing+' minVerticalSpread='+minSpread+' maxQuarterLoopDrift='+maxMovement+' loopPositionError<1e-7');
 });

@@ -31,7 +31,7 @@ layout(std140) uniform World {
  vec4 vortices[4]; // xy: 世界座標、z: 回転方向、w: 生成時刻
  vec4 shot; // セクションの経過秒、最新kickの中心xy、kick通番
  vec4 oldComposition, transition; // 構図モーフ、outro収束、前後kind
- vec4 emitters[32]; // 固定の画面xy、平滑化レベル、瞬時レベル
+ vec4 emitters[32]; // 漂う帯域曲線の画面xy、平滑化レベル、瞬時レベル
 };
 // 曲の三色から照明役割を選ぶ。第二DROPだけアクセントとsecondaryの役割を交換する。
 vec3 worldColor(float role){
@@ -81,8 +81,9 @@ vec2 flowFor(vec2 p,float id,float count){
  vec2 f=vec2(0);
  for(int i=0;i<2;i++){
   vec2 a=(p-worldCenter(i))/worldExtent()*6.283185;
-  float r2=2.-cos(a.x)-cos(a.y)+.4;
-  f+=vec2(-sin(a.y),sin(a.x))*vortices[i].z*.13/r2*(i==0?1.:count-1.);
+  vec2 d=sin(a)*worldExtent()/6.283185;
+  float r2=dot(d,d)+.018;
+  f+=vec2(-d.y,d.x)*vortices[i].z*.075/r2*(i==0?1.:count-1.);
  }
  float t=worldSlowPhase();
  vec2 a=p/worldExtent()*6.283185;
@@ -90,26 +91,42 @@ vec2 flowFor(vec2 p,float id,float count){
  if(id==1.)f+=vec2(.16,.08);
  if(id==2.)f+=vec2(.2,.04);
  if(id==4.)f-=sin(a)*(.15+.25*worldKind(1.));
- return f+undulation;
+ vec2 axis=normalize(vortices[1].xy-vortices[0].xy+vec2(.001));
+ vec2 d=sin(p/worldExtent()*6.283185)*worldExtent()/6.283185;
+ float shear=exp(-pow(dot(d,vec2(-axis.y,axis.x))/.08,2.));
+ return f+undulation+axis*.45*shear*worldKind(2.);
 }
 vec2 worldFlow(vec2 p){
+ p=worldDomainPosition(fract(worldUv(p)));
  vec2 f=mix(flowFor(p,oldComposition.x,oldComposition.z),flowFor(p,composition.x,composition.z),transition.x);
  return mix(f,flowFor(p,3.,2.),transition.y)*(1.+audio.x*.35+environment.z*.25);
 }
+// 角度の反復や水平な正弦波の列を使わず、雲の密度境界に細い筋を置く。
+float worldNebula(vec2 p,float depth){
+ float t=clock.x;vec2 drift=vec2(sin(t),cos(t))*.12;
+ vec2 q=sin(p/worldExtent()*6.283185)*worldExtent()*.5;
+ float cloud=noise3(vec3(q*2.7+drift,depth+sin(t)*.25));
+ float detail=noise3(vec3(q*17.+vec2(cloud*2.),depth*3.+cos(t)*.2));
+ float ridge=exp(-abs(detail-.5)*45.);
+ return smoothstep(.35,.72,cloud)*(.008+ridge*.14);
+}
 float filamentFor(vec2 p,float id,float a){
- float t=worldSlowPhase(),width=.012+environment.z*.012;
- p=sin(p/worldExtent()*6.283185)*worldExtent()*.5;
- if(id==3.){
-  // 星雲: 横帯を使わず、3次元の雲の断面と細い巻き筋を重ねる。
-  float cloud=worldPeriodicNoise(p+vec2(sin(t),cos(t))*.04,1.5,2.+sin(clock.x));
-  float strand=sin(atan(p.y+.12,p.x+.03)*3.+length(p)*19.+sin(t));
-  return smoothstep(.3,.75,cloud)*exp(-pow(strand*.06/width,2.));
+ float t=worldSlowPhase();
+ if(id==3.)return worldNebula(p,2.+sin(clock.x));
+ // v8の細い渦腕を復元。周期領域の差分座標で両端の連続性を保持する。
+ float f=0.;
+ for(int i=0;i<2;i++){
+  vec2 angle=(p-worldCenter(i))/worldExtent()*6.283185;
+  vec2 d=sin(angle)*worldExtent()/6.283185;float r=length(d);
+  float warp=worldPeriodicNoise(p,3.,sin(t))*1.8;
+  float phase=atan(d.y,d.x)*2.+r*36.+sin(t)+float(i)+a*.15+warp;
+  float width=.009*(1.+environment.z*.3);
+  f+=exp(-pow(sin(phase)*max(.03,r)/width,2.))*exp(-r*3.);
  }
- if(id==1.||id==2.)return exp(-pow(sin((p.y-p.x*(id==1.?.48:0.)+.08*sin(p.x*3.+sin(t)))*20.+a)*.1/width,2.));
- vec2 d=p-worldCenter(0);float r=length(d);
- return exp(-pow(sin(atan(d.y,d.x)*2.+r*22.+sin(t)+a)*.1/width,2.));
+ return min(1.,f);
 }
 float worldFilament(vec2 p){
+ p=worldDomainPosition(fract(worldUv(p)));
  float f=mix(filamentFor(p,oldComposition.x,oldComposition.w),filamentFor(p,composition.x,composition.w),transition.x);
  return mix(f,filamentFor(p,3.,0.),transition.y);
 }

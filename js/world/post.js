@@ -46,9 +46,12 @@ void main(){
  uv+=texture(flow,worldUv(worldPosition(vUv))).xy*dt*.0002;
  uv+=vec2(sin(q.y*3.+sin(worldSlowPhase())),cos(q.x*3.-cos(worldSlowPhase())))*dt*.006;
  // 画面外へ出た残像は硬く切らず、端で滑らかに消す（縦の境目を出さない）
- float valid=smoothstep(0.,.06,uv.x)*smoothstep(1.,.94,uv.x)*smoothstep(0.,.06,uv.y)*smoothstep(1.,.94,uv.y);
- float decay=exp(-dt*(story.x==2.?7.:story.x==4.?12.:3.));
- frag=vec4(min(vec3(64),texture(source,vUv).rgb*.24*min(1.,dt*60.)+texture(history,uv).rgb*decay*valid),1);
+ float valid=smoothstep(0.,.06,uv.x)*(1.-smoothstep(.94,1.,uv.x))*smoothstep(0.,.06,uv.y)*(1.-smoothstep(.94,1.,uv.y));
+ float decay=exp(-dt*(3.+worldKind(2.)*4.+worldKind(3.)*9.+worldKind(4.)*9.));
+ vec3 current=texture(source,vUv).rgb;
+ vec3 accumulated=current*.24*min(1.,dt*60.)+texture(history,uv).rgb*decay*valid;
+ // bloomと露出用にも、build以外では現在の鋭い像だけを渡す。矩形残像を光へ再注入しない。
+ frag=vec4(min(vec3(64),mix(current,accumulated,worldKind(1.))),1);
 }`;
 const WORLD_POST_FRAGMENT = `#version 300 es
 ${WORLD_GLSL}
@@ -58,8 +61,8 @@ vec3 aces(vec3 x){return clamp((x*(2.51*x+.03))/(x*(2.43*x+.59)+.14),0.,1.);}
 void main(){
  if(screen.w>.5||mood.x<=0.){frag=vec4(0,0,0,1);return;}
  vec2 uv=vUv,ca=(uv-.5)/screen.xy*1.2;
- // 残像はドロップでは重ねない（万華鏡の折り返しで硬い境目とにじみが出るため）。他の場面は控えめに
- float hw=.3*(1.-worldKind(2.))*environment.w;
+ // 履歴の画面端がbreakの矩形として残らないよう、buildのトンネルだけに残像を重ねる。
+ float hw=.12*worldKind(1.)*environment.w;
  vec3 c=texture(scene,uv).rgb+texture(history,uv).rgb*hw;
  c.r=mix(c.r,texture(scene,uv+ca).r+texture(history,uv+ca).r*hw,.18);
  c.b=mix(c.b,texture(scene,uv-ca).b+texture(history,uv-ca).b*hw,.18);
