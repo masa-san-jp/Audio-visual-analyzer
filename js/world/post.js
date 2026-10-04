@@ -1,4 +1,4 @@
-// 目的 — 変形フィードバック・多段HDRブルーム・ACESの光学仕上げ — doc/20261004-concept-world-mode.md §2.6・§5
+// 目的 — 変形フィードバック・多段HDRブルーム・ACESの光学仕上げ — doc/20261004-concept-world-mode.md §2.7・§5
 const WORLD_BLOOM_FRAGMENT = `#version 300 es
 ${WORLD_GLSL}
 uniform sampler2D source;
@@ -44,7 +44,7 @@ void main(){
  }
  vec2 uv=q/vec2(screen.x/screen.y,1.)+.5;
  uv+=texture(flow,worldUv(worldPosition(vUv))).xy*dt*.0002;
- uv+=vec2(sin(q.y*9.+clock.x),cos(q.x*7.-clock.x))*dt*.006;
+ uv+=vec2(sin(q.y*3.+sin(worldSlowPhase())),cos(q.x*3.-cos(worldSlowPhase())))*dt*.006;
  // 画面外へ出た残像は硬く切らず、端で滑らかに消す（縦の境目を出さない）
  float valid=smoothstep(0.,.06,uv.x)*smoothstep(1.,.94,uv.x)*smoothstep(0.,.06,uv.y)*smoothstep(1.,.94,uv.y);
  float decay=exp(-dt*(story.x==2.?7.:story.x==4.?12.:3.));
@@ -59,16 +59,17 @@ void main(){
  if(screen.w>.5||mood.x<=0.){frag=vec4(0,0,0,1);return;}
  vec2 uv=vUv,ca=(uv-.5)/screen.xy*1.2;
  // 残像はドロップでは重ねない（万華鏡の折り返しで硬い境目とにじみが出るため）。他の場面は控えめに
- float hw=story.x==2.?0.:.3;
+ float hw=.3*(1.-worldKind(2.))*environment.w;
  vec3 c=texture(scene,uv).rgb+texture(history,uv).rgb*hw;
  c.r=mix(c.r,texture(scene,uv+ca).r+texture(history,uv+ca).r*hw,.18);
  c.b=mix(c.b,texture(scene,uv-ca).b+texture(history,uv-ca).b*hw,.18);
  vec3 bloom=texture(bloom0,uv).rgb*.3+texture(bloom1,uv).rgb*.22+texture(bloom2,uv).rgb*.14+texture(bloom3,uv).rgb*.08;
- c+=bloom*(.35+worldDropFlare()*.12);
+ c+=bloom*environment.w*(.35+worldDropFlare()*.12);
  vec4 meter=texelFetch(exposure,ivec2(0),0);float average=exp(meter.x/max(1.,meter.y));
  float target=.08*min(1.5,mood.x)*(story.x==2.?1.+min(2.,story.y-1.)*.25:1.);
  // 静かな細い霧を黒へ潰さない。introだけ低いHDR入力を持ち上げ、他kindの露出は維持。
- float gain=clamp(target/max(.0001,average),.035,story.x==0.?24.:2.);
+ float gain=clamp(target/max(.0001,average),.035,2.+22.*worldKind(0.));
+ gain=mix(1.8,gain,environment.w);
  float vignette=1.-smoothstep(.35,1.1,length((uv-.5)*vec2(screen.x/screen.y,1.)))*(.18+story.w*.72);
  c=aces(c*gain*vignette*(1.+hit.w*.18));
  c=pow(c,vec3(1.13));float lum=dot(c,vec3(.2126,.7152,.0722));c=max(vec3(0),mix(vec3(lum),c,1.06));

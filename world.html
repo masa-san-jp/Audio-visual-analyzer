@@ -1,5 +1,5 @@
 <!doctype html>
-<!-- 目的 — ワールドモードの独立入口（file://対応） — doc/20261004-concept-world-mode.md §2.6・§5 -->
+<!-- 目的 — ワールドモードの独立入口（file://対応） — doc/20261004-concept-world-mode.md §2.7・§5 -->
 <html lang="ja">
 <head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
@@ -11,6 +11,7 @@ body{display:grid;place-items:center}canvas{display:block;position:absolute;obje
 #prompt[hidden],#debug[hidden]{display:none}#prompt.busy{color:#aeefff}
 #controls{position:fixed;inset:auto 0 0;display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:16px;background:#111;border-top:1px solid #333;z-index:2}
 #controls button,.file-button{border:1px solid #555;border-radius:6px;background:#222;color:#eee;padding:10px 14px;font:inherit;cursor:pointer}
+#controls [hidden]{display:none}#export-progress{width:100px}#fps{background:#222;color:#eee;padding:8px}
 #controls button:disabled{opacity:.45;cursor:default}#file{position:absolute;width:1px;height:1px;opacity:0}
 .file-button:focus-within,button:focus-visible,input:focus-visible{outline:2px solid #8ed9fa;outline-offset:3px}
 #seek{flex:1;min-width:100px;accent-color:#8ed9fa}#time{font-variant-numeric:tabular-nums;font-size:12px}
@@ -26,6 +27,11 @@ body{display:grid;place-items:center}canvas{display:block;position:absolute;obje
 <input id="seek" type="range" min="0" max="1" step="0.01" value="0" aria-label="再生位置" disabled>
 <output id="time">0:00 / 0:00</output>
 <button id="fullscreen" type="button" aria-label="全画面切替（F）" aria-pressed="false">全画面 (F)</button>
+<label>FPS <select id="fps" aria-label="描画・書き出しFPS"><option value="30">30</option><option value="60" selected>60</option></select></label>
+<button id="export" type="button" disabled>EXPORT / 書き出し</button>
+<button id="cancel-export" type="button" hidden>中止</button>
+<progress id="export-progress" max="1" value="0" hidden aria-label="書き出し進捗"></progress>
+<output id="export-status" role="status" aria-live="polite"></output>
 </nav>
 <audio id="audio" preload="auto" hidden></audio>
 <script src="js/vis-utils.js"></script>
@@ -35,6 +41,8 @@ body{display:grid;place-items:center}canvas{display:block;position:absolute;obje
 <script src="js/songmap-analysis.js"></script><script src="js/songmap-service.js"></script><script src="js/audio-engine.js"></script>
 <script src="js/world/gl-util.js"></script><script src="js/world/fluid.js"></script><script src="js/world/particles.js"></script>
 <script src="js/world/post.js"></script><script src="js/world/score.js"></script>
-<script src="js/world/world-engine.js"></script><script src="js/world/world-app.js"></script>
+<script src="js/webm-muxer.js"></script><script src="js/mp4-muxer.js"></script>
+<script src="js/offline-exporter.js"></script>
+<script src="js/world/world-engine.js"></script><script src="js/world/world-exporter.js"></script><script src="js/world/world-app.js"></script>
 </body>
 </html>

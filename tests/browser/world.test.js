@@ -134,7 +134,7 @@ async function worldV5Probe(w) {
       flaredClippedFraction: flared.clippedFraction,
       pass: flareEnergy > 0 && flared.clippedFraction <= .02 && engine.gpu.gl.getError() === 0 });
   }
-  // worldColorを実GLSLで評価。UBOのラベル循環を打ち消す色選別にも交換が反映されること。
+  // §2.7: 色はCPU側でモーフする。GLSLの変奏番号だけを変えて瞬時に役割交換しない。
   const g = engine.gpu, gl = g.gl, target = g.target(3, 1, true), color = new Float32Array(12);
   const program = g.program('#version 300 es\n' + WORLD_GLSL + '\nout vec4 frag;void main(){frag=vec4(worldColor(floor(gl_FragCoord.x)),1.);}');
   let first, second;
@@ -155,8 +155,8 @@ async function worldV5Probe(w) {
     const c = rgb.slice(offset, offset + 3).map(v => v - mean), length = Math.hypot(...c);
     return c.map(v => v / length);
   };
-  const swapError = Math.max(...direction(first, 4).map((v, i) => Math.abs(v - direction(second, 8)[i])),
-    ...direction(first, 8).map((v, i) => Math.abs(v - direction(second, 4)[i])));
+  const swapError = Math.max(...direction(first, 4).map((v, i) => Math.abs(v - direction(second, 4)[i])),
+    ...direction(first, 8).map((v, i) => Math.abs(v - direction(second, 8)[i])));
   const ambientError = Math.max(...chromaticity(first, 0).map((v, i) => Math.abs(v - chromaticity(second, 0)[i])));
   return { 'BW-5-light': { pass: samples.length > 0 && samples.every(s => s.pass), samples },
     'BW-5-palette': { pass: swapError < 1e-5 && ambientError < 1e-5 && gl.getError() === 0, swapError, ambientError, first, second } };
@@ -269,7 +269,7 @@ async function runWorldVisualMeasurement() {
   await w.renderAt(.1); const first = engine.capture();
   await w.renderAt(.2); await w.renderAt(.1); const second = engine.capture();
   let mismatched = 0; for (let i = 0; i < first.rgba.length; i++) if (first.rgba[i] !== second.rgba[i]) mismatched++;
-  const preview = { pass: mismatched === 0 && engine.mfsFrames === 0, mismatchedChannels: mismatched, previewSteps: engine.previewStep };
+  const preview = { pass: mismatched === 0 && !!engine.timeline && engine.mfsFrames === engine.previewStep + 1, mismatchedChannels: mismatched, previewSteps: engine.previewStep, mfsFrames: engine.mfsFrames };
   const v4 = await worldV4Probe(w), v5 = await worldV5Probe(w), v6 = await worldV6Probe(w), v7 = await worldV7Probe(w);
   return {
     ...v4, ...v5, ...v6, ...v7,
@@ -406,13 +406,18 @@ async function runWorldMeasurement(visual = null) {
   const score = w.score, engine = w.engine, sections = score.sections;
   const probe = new Float32Array(engine.gpu.uniforms.length);
   let checked = 0, maxDelay = 0, uniformFailures = 0, settled = false;
-  let pendingFlags = 0, pendingBeat = 0, sourceFrame = 0, previousSerial = 0;
-  const originalFeatures = w.audioEngine.getFeatures;
-  w.audioEngine.getFeatures = function () {
-    const f = originalFeatures.call(this);
-    pendingFlags = f ? f.onset.flags : 0; pendingBeat = f && f.tempo.beatFlag ? 1 : 0;
-    sourceFrame = engine.frame + 1; previousSerial = engine.gpu.uniforms[27];
-    return f;
+  // §2.7: ライブもoffline MFSの固定ステップを使う。実際の入力とUBOを同じstepで比較する。
+  const originalStep = engine._step;
+  engine._step = function (tSec, features, dt) {
+    const flags = features ? features.onset.flags : 0, beat = features && features.tempo.beatFlag ? 1 : 0;
+    const source = this.frame + 1, serial = this.gpu.uniforms[27];
+    originalStep.call(this, tSec, features, dt);
+    if (flags || beat) {
+      const gl=this.gpu.gl;gl.bindBuffer(gl.UNIFORM_BUFFER,this.gpu.ubo);gl.getBufferSubData(gl.UNIFORM_BUFFER,0,probe);
+      if(probe[8] !== (flags & 1 ? 1 : 0) || probe[9] !== (flags & 4 ? 1 : 0) || probe[10] !== beat ||
+        probe[35] !== flags + beat*16 || probe[27] <= serial)uniformFailures++;
+      maxDelay=Math.max(maxDelay,this.frame-source);checked++;
+    }
   };
   return new Promise((resolve, reject) => {
     const timeout = setTimeout(() => finish(new Error('World playback timed out')), (score.durationSec + 60) * 1000);
@@ -427,7 +432,7 @@ async function runWorldMeasurement(visual = null) {
     }, 500);
     function finish(error) {
       if (settled) return; settled = true;
-      clearTimeout(timeout); clearInterval(watchdog); engine.onFrame = null; w.audioEngine.getFeatures = originalFeatures;
+      clearTimeout(timeout); clearInterval(watchdog); engine.onFrame = null; engine._step = originalStep;
       if (error) { w.audio.pause(); reject(error); return; }
       const metrics = w.metrics();
       const motifs = Object.create(null); let motifPass = true;
@@ -438,7 +443,7 @@ async function runWorldMeasurement(visual = null) {
       const result = {
         ...visual,
         'W-3': { pass: metrics.particleCount >= 262144 && metrics.fluidWidth > 0 && metrics.feedbackWidth > 0 && metrics.raymarchSteps === 0, ...metrics },
-        'W-4': { pass: checked > 0 && maxDelay <= 1 && uniformFailures === 0 && w.audioEngine.mfsStatus === 'active', checked, maxDelayFrames: maxDelay, uniformFailures },
+        'W-4': { pass: checked > 0 && maxDelay <= 1 && uniformFailures === 0 && !!engine.timeline, checked, maxDelayFrames: maxDelay, uniformFailures },
         'W-6': { pass: metrics.boundaryCount === sections.length, fired: metrics.boundaryCount, expected: sections.length, events: w.events },
         'W-7': { pass: motifPass, sections: sections.map(s => ({ kind: s.kind, label: s.label, environment: s.environment, formId: s.formId, variation: s.variation })) },
         'W-8': { pass: metrics.width === 1920 && metrics.height === 1080 && metrics.timingSamples >= 120 && metrics.renderP95Ms !== null && metrics.renderP95Ms <= 16,
@@ -453,13 +458,6 @@ async function runWorldMeasurement(visual = null) {
     engine.onFrame = function () {
       try {
         const t = engine.latestSec;
-        if (pendingFlags || pendingBeat) {
-          const gl = engine.gpu.gl; gl.bindBuffer(gl.UNIFORM_BUFFER, engine.gpu.ubo); gl.getBufferSubData(gl.UNIFORM_BUFFER, 0, probe);
-          if (probe[8] !== (pendingFlags & 1 ? 1 : 0) || probe[9] !== (pendingFlags & 4 ? 1 : 0)
-            || probe[10] !== pendingBeat || probe[35] !== pendingFlags + pendingBeat * 16 || probe[27] <= previousSerial) uniformFailures++;
-          maxDelay = Math.max(maxDelay, engine.frame - sourceFrame); checked++;
-          pendingFlags = 0; pendingBeat = 0;
-        }
         if (t >= score.durationSec) finish();
       } catch (error) { finish(error); }
     };

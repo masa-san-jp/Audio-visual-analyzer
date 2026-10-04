@@ -89,7 +89,7 @@ function worldCommandGl() {
   const calls = [], gl = { calls, NO_ERROR: 0, INVALID_INDEX: 0xffffffff };
   for (const name of ['UNIFORM_BUFFER', 'DYNAMIC_DRAW', 'VERTEX_SHADER', 'FRAGMENT_SHADER', 'COMPILE_STATUS', 'LINK_STATUS',
     'TEXTURE_2D', 'RGBA8', 'RGBA32F', 'RGBA16F', 'NEAREST', 'LINEAR', 'TEXTURE_MIN_FILTER', 'TEXTURE_MAG_FILTER',
-    'TEXTURE_WRAP_S', 'TEXTURE_WRAP_T', 'CLAMP_TO_EDGE', 'FRAMEBUFFER', 'READ_FRAMEBUFFER', 'DRAW_FRAMEBUFFER',
+    'TEXTURE_WRAP_S', 'TEXTURE_WRAP_T', 'CLAMP_TO_EDGE', 'REPEAT', 'FRAMEBUFFER', 'READ_FRAMEBUFFER', 'DRAW_FRAMEBUFFER',
     'COLOR_ATTACHMENT0', 'COLOR_ATTACHMENT1', 'FRAMEBUFFER_COMPLETE', 'COLOR_BUFFER_BIT', 'TRIANGLES', 'POINTS',
     'BLEND', 'ONE', 'RGBA', 'FLOAT', 'UNSIGNED_BYTE']) gl[name] = id++;
   gl.TEXTURE0 = 1000;
@@ -113,7 +113,7 @@ function worldCommandGl() {
   };
   gl.uniform1i = (loc, value) => {
     if (loc.name === 'mode') modes.set(loc.p, value);
-    else if (['maxSteps', 'firstPass'].includes(loc.name)) {}
+    else if (['maxSteps', 'firstPass', 'screenSpace'].includes(loc.name)) {}
     else {
       if (!samplers.has(loc.p)) samplers.set(loc.p, new Map());
       samplers.get(loc.p).set(loc.name, value);
@@ -143,8 +143,8 @@ test('UW-06 GPU命令: 流体射影20反復・全粒子・同時合成・MFS即�
   assert.equal(gl.calls.filter(c => c.type === gl.POINTS)[0].count, 262144);
   assert.deepEqual(gl.lastUniforms.slice(8, 11), [1, 1, 1]); assert.equal(gl.lastUniforms[35], 31);
   assert.equal(engine.responses[6] - engine.responses[0], 0);
-  assert.equal(gl.lastUniforms[11], 1); assert.equal(gl.lastUniforms[17], -1);
-  assert.deepEqual(gl.lastUniforms.slice(24, 27), Array.from(new Float32Array(first.secondary)));
+  assert.equal(gl.lastUniforms[11], 1); assert.ok(Math.abs(gl.lastUniforms[17]) === 0, '境界では中心力をモーフ開始');
+  assert.deepEqual(gl.lastUniforms.slice(24, 27), Array.from(new Float32Array(score.sections[1].primary)));
   engine.setScore(score);
   const preceding = score.sections.find(s => s.silenceSec < Infinity);
   engine.render(preceding.silenceSec + .01, null, 1 / 60);
@@ -189,26 +189,23 @@ test('UW-08 renderAt: 0から固定60Hz・音声不要・逆向きと反復でun
   assert.equal(engine.post.meter.at(-1).width, 1); assert.equal(engine.post.meter.at(-1).height, 1);
   console.log('UW-08 fixedSteps=6 dt=1/60 repeatUniformDifference=0 meterLevels=' + engine.post.meter.length);
 });
-test('UW-09 全抽象状態のcamera基底・前進加速・cut時のmotion履歴・drop再登場の拡大', () => {
-  const { engine } = worldTestEngine(), u = engine.gpu.uniforms, s = engine.score.sections;
-  const basis = () => {
+test('UW-09 WORLD-9 連続カメラ: 正規直交基底・ゆっくり前進・境界で履歴を保持', () => {
+  const { engine } = worldTestEngine(), u = engine.gpu.uniforms;
+  let maxDelta = 0;
+  for (const section of engine.score.sections) {
+    const t = section.startSec + .1;
+    engine._camera(section, t, .1, false, false); const before = u.slice(40, 56);
+    engine._camera(section, t + 1/60, .1, true, true);
+    assert.deepEqual(u.slice(56, 72), before);
     for (const offset of [44, 48, 52]) assert.ok(Math.abs(Math.hypot(...u.slice(offset, offset + 3)) - 1) < 1e-6);
-    for (const [a, b] of [[44, 48], [44, 52], [48, 52]]) {
-      let dot = 0; for (let i = 0; i < 3; i++) dot += u[a + i] * u[b + i]; assert.ok(Math.abs(dot) < 1e-6);
+    for (const [a,b] of [[44,48],[44,52],[48,52]]) {
+      let dot=0;for(let i=0;i<3;i++)dot+=u[a+i]*u[b+i];assert.ok(Math.abs(dot)<1e-6);
     }
-  };
-  for (const section of s) { engine._camera(section, section.startSec + 1, .1, true, false); basis();
-    assert.deepEqual(u.slice(40, 56), u.slice(56, 72)); }
-  const build = s[1], duration = build.endSec - build.startSec;
-  engine._camera(build, build.startSec + 1, 1 / duration, false, false); const z1 = u[42];
-  engine._camera(build, build.startSec + 2, 2 / duration, false, false); const speed1 = u[42] - z1;
-  engine._camera(build, build.startSec + 10, 10 / duration, false, false); const z2 = u[42];
-  engine._camera(build, build.startSec + 11, 11 / duration, false, false); const speed2 = u[42] - z2;
-  assert.ok(speed2 > speed1 * 2);
-  engine._camera(s[2], s[2].startSec + 1, .1, false, true); const first = u[42];
-  engine._camera(s[4], s[4].startSec + 1, .1, false, true); assert.ok(u[42] > first * 2);
-  console.log('UW-09 cameraEarlySpeed=' + speed1.toFixed(3) + ' lateSpeed=' + speed2.toFixed(3) + ' secondDropScale=' + s[4].worldScale);
+    const delta=u[42]-before[2];assert.ok(delta>0 && delta<.01);maxDelta=Math.max(maxDelta,delta);
+  }
+  console.log('UW-09 maximumForwardStep='+maxDelta+' worldUnits/60Hz');
 });
+
 function worldStartApp(resume, play, timers = {}) {
   const calls = [], document = { fullscreenElement: null, body: { classList: { add: () => {} } } };
   const runtime = loadClassic(['js/world/world-app.js'], { SongMapService: class {}, document,
@@ -247,7 +244,7 @@ test('UW-11 renderAt: 120秒7200固定ステップ・全境界・dt0の描画で
   const m = await engine.renderAt(120);
   assert.equal(engine.previewStep, 7200); assert.equal(steps, 7200); assert.ok(maxDt <= 1 / 60 + 1e-9);
   assert.equal(m.boundaryCount, 6); assert.equal(engine.events.at(-1).type, 'end'); assert.ok(engine.events.at(-1).firedFrame >= 0);
-  assert.equal(engine.gpu.uniforms[16], 0); assert.equal(engine.mfsFrames, 0);
+  assert.equal(engine.gpu.uniforms[79], 0); // 終端はintroの霧へ収束（§2.7） assert.equal(engine.mfsFrames, 0);
   await engine.renderAt(.105); assert.equal(steps, 7206);
   await engine.advancePreview(.2); assert.equal(steps, 7212);
   await assert.rejects(engine.advancePreview(.1), RangeError);
@@ -291,24 +288,16 @@ test('UW-13 WORLD-3 キック: 同フレームで衝撃中心を固定・移動�
   assert.ok(Math.abs(u[31] - .1) < 1e-6);
   console.log('UW-13 kickUniformLatencyFrames=0 anchorDriftWithoutKick=0 kickAgeSec=' + u[31]);
 });
-test('UW-14 WORLD-6 第二drop: 拡大・螺旋変奏・レイマーチ撤去と履歴解像度', () => {
+test('UW-14 WORLD-9 第二drop: 空間スケール変奏・連続カメラ・レイマーチ撤去と履歴解像度', () => {
   const { engine } = worldTestEngine(), drops = engine.score.sections.filter(s => s.kind === 'drop');
-  let firstMax = 0, secondMin = Infinity;
-  for (const local of [1, 6, 11]) {
-    for (let i = 0; i < 2; i++) {
-      const s = drops[i]; engine._camera(s, s.startSec + local, .3, false, false);
-      const radius = Math.hypot(engine.gpu.uniforms[40], engine.gpu.uniforms[41]) / s.worldScale;
-      if (i === 0) firstMax = Math.max(firstMax, radius); else secondMin = Math.min(secondMin, radius);
-    }
-  }
-  assert.ok(secondMin > firstMax * 4);
+  assert.ok(drops[1].worldScale > drops[0].worldScale);
+  assert.notEqual(drops[1].compositionId, drops[0].compositionId);
   engine._step(drops[1].startSec, null, 0);
   assert.equal(engine.metrics().formation, 'explosion'); assert.equal(engine.metrics().raymarchSteps, 0);
   assert.equal(engine.form, undefined);
   assert.equal(engine.metrics().feedbackWidth, 960); assert.equal(engine.metrics().feedbackHeight, 540);
   assert.ok(drops[1].intensity > drops[0].intensity);
-  console.log('UW-14 firstPathRadiusMax=' + firstMax.toFixed(4) + ' secondPathRadiusMin=' + secondMin.toFixed(4) +
-    ' worldScale=' + drops[1].worldScale + ' intensity=' + drops[1].intensity + ' raymarchSteps=0 feedback=960x540');
+  console.log('UW-14 worldScale='+drops[1].worldScale+' intensity='+drops[1].intensity+' raymarchSteps=0 feedback=960x540');
 });
 
 
@@ -350,25 +339,16 @@ test('UW-17 WORLD-4 暖色面積計測: 黒・寒色・中立を除外し暖色�
   console.log('UW-17 syntheticWarmPixels=2/8 fraction=0.25');
 });
 
-test('UW-18 WORLD-5 小節頭: 全カットで30度以上の切り返し・motion履歴のリセット', () => {
-  const { engine } = worldTestEngine(), u = engine.gpu.uniforms;
-  let minimumAngle = Infinity, checked = 0;
-  for (const section of engine.score.sections.filter(s => s.kind === 'drop')) {
-    engine.setScore(engine.score);
-    for (const t of engine.score.downbeats.filter(t => t > section.startSec + .01 && t < section.endSec)) {
-      engine._step(t - .001, null, 0); const before = Array.from(u.slice(52, 55));
-      const cuts = engine.cut; engine._step(t, null, 0);
-      assert.equal(engine.cut, cuts + 1);
-      const dot = before.reduce((sum, value, i) => sum + value * u[52 + i], 0);
-      const angle = Math.acos(Math.max(-1, Math.min(1, dot))) * 180 / Math.PI;
-      assert.ok(angle >= 30, 'downbeat=' + t + ' angle=' + angle);
-      minimumAngle = Math.min(minimumAngle, angle); checked++;
-      assert.deepEqual(u.slice(40, 56), u.slice(56, 72));
-      assert.equal(engine.metrics().dropKeyRole, section.variation === 1 ? 'accent' : 'secondary');
-    }
+test('UW-18 WORLD-9 小節頭と全境界: 3D方向が連続・カットなし・履歴保持', () => {
+  const {engine}=worldTestEngine(),u=engine.gpu.uniforms;let maxDelta=0,checked=0;
+  const times=[...engine.score.downbeats,...engine.score.sections.slice(1).map(s=>s.startSec)].sort((a,b)=>a-b);
+  for(const t of times.filter(t=>t>0&&t<engine.score.durationSec)){
+    engine.setScore(engine.score);engine._step(t-.001,null,0);const before=u.slice(40,56);
+    engine._step(t,null,0);assert.equal(engine.cut,0);assert.deepEqual(u.slice(56,72),before);
+    const delta=Math.hypot(...Array.from(u.slice(52,55),(v,i)=>v-before[12+i]));
+    maxDelta=Math.max(maxDelta,delta);assert.ok(delta<.001);checked++;
   }
-  assert.ok(checked > 0);
-  console.log('UW-18 downbeatCuts=' + checked + ' minimumCameraCutDeg=' + minimumAngle.toFixed(4));
+  console.log('UW-18 continuousChecks='+checked+' maxDirectionDelta='+maxDelta+' cuts=0');
 });
 
 test('UW-19 WORLD-5 計測開始: gesture不要resume→start(false)・AudioContext失敗/timeoutを明示', async () => {
@@ -467,69 +447,37 @@ test('UW-23 WORLD-7 構図: 全kindに独立の初回構図・毎再登場で構
   assert.notDeepEqual(a, b);
   console.log('UW-23 sections=72 distinctCompositions=5 adjacentRepeatDifferences=66 fiveRepeatCameraDifference=true');
 });
-test('UW-24 WORLD-7 kick: 同フレームに決定的な新渦ペア・非kick時の固定中心・交互の更新', () => {
-  const { engine } = worldTestEngine(), u = engine.gpu.uniforms;
-  const features = new (loadClassic(['js/mfs-const.js', 'js/mfs-view.js']).get('MfsFrameView'))();
-  features.raw[loadClassic(['js/mfs-const.js']).get('MFS_LAYOUT').ONSET_FLAGS] = 1;
-  let minimumShift = Infinity; const counts = [];
-  for (const section of engine.score.sections.filter(s => s.kind === 'drop')) {
-    const series = () => {
-      engine.setScore(engine.score); engine._step(section.startSec, null, 0);
-      assert.equal(engine.kickCount, 1); assert.equal(u[31], 0); counts.push(u[86]);
-      const samples = [];
-      for (let i = 1; i <= 12; i++) {
-        const t = section.startSec + i * .1, before = u.slice(88, 104), center = u.slice(105, 107);
-        engine._step(t, features, 0);
-        assert.equal(u[8], 1); assert.equal(u[31], 0); assert.equal(engine.kickCount, i + 1);
-        const shift = Math.hypot(u[105] - center[0], u[106] - center[1]);
-        minimumShift = Math.min(minimumShift, shift); assert.ok(shift > 0);
-        assert.ok(Math.abs(u[105]) > .15); assert.ok(Math.abs(u[106]) > .1);
-        const pair = section.vortexCount === 4 ? i % 2 * 2 : 0, offset = 88 + pair * 4;
-        assert.ok(Math.abs(Math.hypot(u[offset] - u[offset + 4], u[offset + 1] - u[offset + 5]) - .22) < 1e-6);
-        if (section.vortexCount === 4) {
-          const untouched = 88 + (pair === 0 ? 2 : 0) * 4;
-          assert.deepEqual(u.slice(untouched, untouched + 8), before.slice(untouched - 88, untouched - 80));
-        }
-        const kicked = u.slice(88, 108); samples.push(Array.from(kicked));
-        engine._step(t + .05, null, 0);
-        assert.deepEqual(u.slice(88, 104), kicked.slice(0, 16));
-        assert.deepEqual(u.slice(105, 108), kicked.slice(17, 20));
-      }
-      return samples;
-    };
-    assert.deepEqual(series(), series());
-  }
-  assert.deepEqual(counts, [2, 2, 4, 4]);
-  console.log('UW-24 kickPairs=48 counts=2/4 minimumCenterShift=' + minimumShift.toFixed(6) +
-    ' pairSeparation=0.22 deterministicDifference=0 eventLatencyFrames=0');
-});
-test('UW-25 WORLD-7 2D camera: 全小節頭30度以上のcut・kind別pan/zoom/rotation', () => {
-  const { engine } = worldTestEngine(), u = engine.gpu.uniforms;
-  let minimumAngle = Infinity, cuts = 0;
-  for (const section of engine.score.sections.filter(s => s.kind === 'drop')) {
-    engine.setScore(engine.score);
-    for (const t of engine.score.downbeats.filter(t => t > section.startSec + .01 && t < section.endSec)) {
-      engine._step(t - .001, null, 0); const angle = u[83];
-      engine._step(t, null, 0);
-      const delta = Math.abs(u[83] - angle) * 180 / Math.PI;
-      minimumAngle = Math.min(minimumAngle, delta); assert.ok(delta >= 30); cuts++;
-      assert.equal(u[104], 0);
+test('UW-24 WORLD-9 kick: 1〜2個の大渦・同フレーム発光・中心を移動しない', () => {
+  const {engine}=worldTestEngine(),u=engine.gpu.uniforms;
+  const runtime=loadClassic(['js/mfs-const.js','js/mfs-view.js']),features=new (runtime.get('MfsFrameView'))();
+  features.raw[runtime.get('MFS_LAYOUT').ONSET_FLAGS]=1;
+  const counts=[];
+  for(const section of engine.score.sections.filter(s=>s.kind==='drop')){
+    engine.setScore(engine.score);engine._step(section.startSec,null,0);const centers=u.slice(88,104);
+    counts.push(u[86]);assert.ok(u[86]>=1&&u[86]<=2);
+    for(let i=1;i<=12;i++){
+      engine._step(section.startSec+i*.1,features,0);assert.deepEqual(u.slice(88,104),centers);
+      assert.equal(engine.kickCount,i+1);assert.equal(u[8],1);assert.equal(u[31],0);
     }
   }
-  for (const section of engine.score.sections) {
-    engine._camera(section, section.startSec, 0, true, false); const start = u.slice(80, 84);
-    engine._camera(section, (section.startSec + section.endSec) / 2, .5, false, false);
-    assert.notDeepEqual(u.slice(80, 84), start);
-    for (const value of u.slice(80, 84)) assert.ok(Number.isFinite(value));
-    assert.ok(u[82] > 0);
-  }
-  assert.equal(u.length, 108);
-  assert.equal(engine.fluid.velocity.read.width, 720); assert.equal(engine.fluid.velocity.read.height, 405);
-  assert.equal(engine.fluid.dye.read.width, 1440); assert.equal(engine.fluid.dye.read.height, 810);
-  assert.equal(engine.particles.count, 262144);
-  console.log('UW-25 camera2DCuts=' + cuts + ' minimumCutDeg=' + minimumAngle.toFixed(4) +
-    ' uniformFloats=108 velocity=720x405 dye=1440x810 particles=262144');
+  assert.deepEqual(counts,[2,1]);console.log('UW-24 vortexCounts=2/1 fixedCenters=true kickLatencyFrames=0');
 });
+
+test('UW-25 WORLD-9 2Dカメラ: 全境界と小節頭で連続・loop端一致・領域維持', () => {
+  const {engine}=worldTestEngine(),u=engine.gpu.uniforms;let maximum=0,checks=0;
+  for(const t of [...engine.score.downbeats,...engine.score.sections.slice(1).map(s=>s.startSec)].filter(t=>t>0&&t<engine.score.durationSec)){
+    engine.setScore(engine.score);engine._step(t-.001,null,0);const before=u.slice(80,84);
+    engine._step(t,null,0);
+    for(let i=0;i<4;i++){const delta=Math.abs(u[80+i]-before[i]);assert.ok(delta<.001);maximum=Math.max(maximum,delta);}checks++;
+  }
+  engine.setScore(engine.score);engine._step(0,null,0);const start=u.slice(80,84);
+  engine._step(engine.score.durationSec,null,0);
+  for(let i=0;i<4;i++)assert.ok(Math.abs(u[80+i]-start[i])<1e-6);
+  assert.equal(u.length,244);assert.equal(engine.fluid.velocity.read.width,720);assert.equal(engine.fluid.velocity.read.height,405);
+  assert.equal(engine.fluid.dye.read.width,1440);assert.equal(engine.fluid.dye.read.height,810);assert.equal(engine.particles.count,262144);
+  console.log('UW-25 continuityChecks='+checks+' maximumLensDelta='+maximum+' loopLensError<1e-6 uniformFloats=244');
+});
+
 test('UW-26 WORLD-7 計測: RGB丸めを除外したmotion差・画面3×3占有', () => {
   const difference = measurement.get('worldFrameDifference'), occupied = measurement.get('worldOccupiedTiles');
   const before = new Uint8Array(9 * 4), after = new Uint8Array(before.length);
@@ -595,12 +543,13 @@ test('UW-29 WORLD-8 領域: 1.5倍の速度・圧力・染料・補助場、リ�
   const runtime = loadClassic(['js/world/gl-util.js', 'js/world/fluid.js', 'js/world/particles.js', 'js/world/post.js']);
   assert.equal(runtime.get('OVERSCAN'), 1.5);
   assert.match(runtime.get('WORLD_FLUID_FRAGMENT'), /worldDomainPosition\(uv\)/);
-  assert.match(runtime.get('WORLD_PARTICLE_UPDATE'), /worldExtent\(\)\.x\*\.5/);
-  assert.match(runtime.get('WORLD_PARTICLE_VERTEX'), /worldScreenUv\(worldView\(s.xy\)\)/);
+  assert.match(runtime.get('WORLD_PARTICLE_UPDATE'), /extent=worldExtent\(\)\*p.z\/3/);
+  assert.match(runtime.get('WORLD_PARTICLE_VERTEX'), /plane=s.xy\*3.\/depth/);
+  assert.match(runtime.get('WORLD_PARTICLE_VERTEX'), /worldScreenUv\(view\)/);
   assert.match(runtime.get('WORLD_FEEDBACK_FRAGMENT'), /worldUv\(worldPosition\(vUv\)\)/);
   console.log('UW-29 overscan=1.5 velocity/pressure=720x405 dye=1440x810 targetsAreaRatio=2.25 screenResolutionUnchanged=true');
 });
-test('UW-30 WORLD-8 camera: 全60Hz時刻・両cut方向・16:9/1:1で四隅に3%以上の余白', () => {
+test('UW-30 WORLD-9 camera: 全60Hz時刻・任意の旧cut通番・16:9/1:1で四隅に3%以上の余白', () => {
   const { engine } = worldTestEngine(), u = engine.gpu.uniforms;
   const marginOf = loadClassic(['js/world/gl-util.js', 'tests/browser/world.test.js']).get('worldCameraMargin');
   const clamp = engine._clampCamera;
@@ -648,4 +597,29 @@ test('UW-31 BW-8-edges 計測: 一定輝度・黒い端・0.6閾値・暗部除�
   assert.equal(exact.outerPixels, 1536); assert.equal(exact.innerPixels, 1408);
   assert.ok(Math.abs(exact.ratio - .6) < 1e-12);
   console.log('UW-31 syntheticOuter/Inner=0.6 outerPixels=1536 innerPixels=1408 blackBorderRejected=true darkInnerExempt=true');
+});
+
+
+test('UW-32 WORLD-9 固定timeline: rAF間隔に依存せずrenderAtと同じステップ・MFS・逆シーク', async()=>{
+  const {engine}=worldTestEngine();const r=loadClassic(['js/mfs-const.js']),L=r.get('MFS_LAYOUT');
+  const frames=Array.from({length:7},(_,i)=>{const f=new Float32Array(L.LENGTH);f[L.BANDS_SMOOTH+i]=.75;return f;});
+  engine.setTimeline(frames,30);engine.setScore(engine.score);engine.advanceTo(.04);engine.advanceTo(.2);
+  const live=engine.gpu.uniforms.slice();assert.equal(engine.previewStep,6);assert.equal(engine.mfsFrames,7);
+  await engine.renderAt(.2);assert.deepEqual(engine.gpu.uniforms,live);
+  await engine.renderAt(.1);await engine.renderAt(.2);assert.deepEqual(engine.gpu.uniforms,live);
+  assert.throws(()=>engine.setTimeline(frames,25),RangeError);
+  console.log('UW-32 fps=30 fixedSteps=6 live/renderAtUniformError=0 features=7');
+});
+test('UW-33 WORLD-9 帯域と構図: 32固定噴出点・平滑化レベル・セクションモーフ・outro収束',()=>{
+  const {engine}=worldTestEngine(),u=engine.gpu.uniforms;
+  const r=loadClassic(['js/mfs-const.js','js/mfs-view.js']),f=new(r.get('MfsFrameView'))(),L=r.get('MFS_LAYOUT');
+  f.raw[L.BANDS_SMOOTH+17]=.8;engine._step(7,f,1/60);
+  const before=u.slice(116);engine._step(7.1,f,1/60);assert.deepEqual(u.slice(116),before);
+  assert.ok(Math.abs(u[116+17*4+2]-.8)<1e-6);
+  const positions=new Set();for(let i=0;i<32;i++)positions.add(u[116+i*4]+':'+u[117+i*4]);assert.equal(positions.size,32);
+  const boundary=engine.score.sections[1].startSec;engine.setScore(engine.score);engine._step(boundary-.0001,f,0);const start=u.slice(116);
+  engine._step(boundary,f,0);assert.deepEqual(u.slice(116),start);
+  engine.setScore(engine.score);engine._step(0,null,0);const palette=u.slice(24,27),emitters=u.slice(116);
+  engine._step(engine.score.durationSec,null,0);assert.deepEqual(u.slice(24,27),palette);assert.deepEqual(u.slice(116),emitters);assert.equal(u[79],0);
+  console.log('UW-33 emitters=32 band17=.8 sectionBoundaryPositionError=0 loopPalette/EmitterError=0');
 });

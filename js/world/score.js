@@ -1,10 +1,10 @@
-// 目的 — 決定的な抽象状態・変奏・モチーフ・三色パレットを編成する — doc/20261004-concept-world-mode.md §2.6・§4・§5
+// 目的 — 決定的な抽象状態・変奏・モチーフ・三色パレットを編成する — doc/20261004-concept-world-mode.md §2.7・§4・§5
 const WORLD_KINDS = ['intro', 'build', 'drop', 'break', 'outro', 'main'];
 const WORLD_ENVIRONMENTS = ['mist', 'convergence', 'explosion', 'drift', 'dissipation', 'galaxy'];
 const WORLD_KIND_ENVIRONMENT = [0, 1, 2, 3, 4, 5];
 const WORLD_BOUNDARIES = ['ignite', 'converge', 'phase-transition', 'drift', 'extinguish', 'morph'];
 // 形態IDはラベルの契約を保持。構図はkindと変奏で独立に編成する。
-const WORLD_COMPOSITIONS = ['vortices', 'ribbons', 'streams', 'horizon', 'arms'];
+const WORLD_COMPOSITIONS = ['vortices', 'ribbons', 'streams', 'nebula', 'arms'];
 const WORLD_KIND_COMPOSITION = [3, 4, 0, 1, 2, 4];
 function worldHash(text, seed) {
   let h = (2166136261 ^ seed) >>> 0;
@@ -52,7 +52,7 @@ function compileWorldScore(songMap, seed) {
       worldScale: 1 + (variation - 1) * .75, cameraSpeed: 1 + (variation - 1) * .4,
       cameraAngle: rng() * Math.PI * 2, intensity: 1 + (variation - 1) * 0.35,
       compositionId, composition: WORLD_COMPOSITIONS[compositionId], compositionSeed,
-      vortexCount: s.kind === 'drop' ? (variation % 2 === 1 ? 2 : 4) : 2,
+      vortexCount: variation % 2 === 1 ? 2 : 1,
       density: 1 - 0.5 / variation, complexity: 1 + variation * 0.55,
       foreshadowSec: nextDrop ? Math.max(s.startSec, s.endSec - 8 * beatSec) : Infinity,
       silenceSec: nextDrop ? Math.max(s.startSec, s.endSec - beatSec) : Infinity });

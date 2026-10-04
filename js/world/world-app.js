@@ -1,4 +1,4 @@
-// 目的 — ドロップ・先行解析・常設操作と評価用の公開口 — doc/20261004-concept-world-mode.md §2.6・§5
+// 目的 — ドロップ・先行解析・常設操作と評価用の公開口 — doc/20261004-concept-world-mode.md §2.7・§5
 class WorldSongMapService extends SongMapService {
   async _collectRows(job, buffer) {
     const rows = await super._collectRows(job, buffer);
@@ -17,7 +17,11 @@ class WorldApp {
     this.controls = document.getElementById('controls'); this.fileInput = document.getElementById('file');
     this.playButton = document.getElementById('play'); this.seekInput = document.getElementById('seek');
     this.timeOutput = document.getElementById('time'); this.fullscreenButton = document.getElementById('fullscreen');
-    this.seeking = false;
+    this.seeking = false; this.prepared = null; this.exportBusy = false;
+    this.fpsInput = document.getElementById('fps'); this.exportButton = document.getElementById('export');
+    this.cancelExportButton = document.getElementById('cancel-export'); this.exportProgress = document.getElementById('export-progress');
+    this.exportStatus = document.getElementById('export-status'); this.exporter = new WorldExporter();
+    this.exporter.onProgress = value => { if (!this.exportBusy) return; this.exportProgress.value = value; this.exportStatus.textContent = Math.round(value * 100) + '%'; };
     this.debug = document.getElementById('debug'); this.audio = document.getElementById('audio');
     this.debugMode = new URLSearchParams(location.search).get('debug') === '1';
     this.debug.hidden = !this.debugMode; this.audioEngine = new AudioEngine(); this.service = new WorldSongMapService();
@@ -37,6 +41,9 @@ class WorldApp {
       const file = this.fileInput.files[0]; if (file && this.engine) this.load(file).catch(this._showError.bind(this));
       this.fileInput.value = '';
     });
+    this.exportButton.addEventListener('click', () => this.exportSong());
+    this.cancelExportButton.addEventListener('click', () => this.exporter.cancel());
+    this.fpsInput.addEventListener('change', () => this.setFps(Number(this.fpsInput.value)).catch(this._showError.bind(this)));
     this.playButton.addEventListener('click', () => this.togglePlay().catch(this._showError.bind(this)));
     this.seekInput.addEventListener('change', () => this.seek(this.seekInput.valueAsNumber).catch(this._showError.bind(this)));
     this.fullscreenButton.addEventListener('click', () => this.toggleFullscreen().catch(this._showError.bind(this)));
@@ -64,14 +71,16 @@ class WorldApp {
   }
   async load(file) {
     if (!this.engine) throw new Error('この環境では利用できません');
-    if (this.previewBusy || this.starting) throw new Error('描画／再生の準備が完了するまでお待ちください');
+    if (this.previewBusy || this.starting || this.exportBusy || this.state === 'analyzing') throw new Error('描画／再生の準備が完了するまでお待ちください');
     const id = ++this.loadId; if (this.file) this.service.cancel(this.file);
     this.audio.pause(); cancelAnimationFrame(this.raf); this.engine.clear(); this.file = file;
-    this.score = null; this.public.score = null; this.public.error = null;
+    this.score = null; this.public.score = null; this.public.error = null; this.exportStatus.textContent = ''; this.exportProgress.value = 0;
     this.state = 'analyzing'; this.prompt.hidden = false; this.prompt.textContent = '曲を解析中…'; this.prompt.classList.add('busy'); this._updateControls();
     try {
       const map = await this.service.request(file); if (id !== this.loadId) return;
-      this.score = compileWorldScore(map, 11); this.engine.setScore(this.score);
+      this.score = compileWorldScore(map, 11);
+      this.prepared = await this.exporter.prepare(file, Number(this.fpsInput.value)); if (id !== this.loadId) return;
+      this.engine.setScore(this.score); this.engine.setTimeline(this.prepared.featureFrames, this.prepared.fps);
       this.public.score = this.score; this.public.events = this.engine.events; this.public.songMap = map;
       if (this.url) URL.revokeObjectURL(this.url); this.url = URL.createObjectURL(file);
       this.audio.src = this.url; this.audio.load(); this.audioEngine.connectMedia(this.audio);
@@ -79,9 +88,30 @@ class WorldApp {
       return this.score;
     } catch (error) { if (id !== this.loadId) return; this._showError(error); throw error; }
   }
+  async setFps(fps) {
+    if (!this.score || !this.prepared) return;
+    if (this.previewBusy || this.starting || this.exportBusy) throw new Error('処理中です');
+    this.audio.pause(); cancelAnimationFrame(this.raf); this.previewBusy = true; this._updateControls();
+    try {
+      this.prepared = await this.exporter.prepare(this.file, fps, this.prepared.audioBuffer);
+      this.engine.setTimeline(this.prepared.featureFrames, fps);
+      await this.engine.renderAt(this.audio.currentTime); this.public.events = this.engine.events; this.prompt.hidden = true; this.state = 'paused';
+    } finally { this.fpsInput.value = String(this.prepared.fps); this.previewBusy = false; this._updateControls(); }
+  }
+  async exportSong() {
+    if (!this.prepared || !this.score || this.exportBusy || this.previewBusy || this.starting) return;
+    this.audio.pause(); cancelAnimationFrame(this.raf); this.state = 'paused'; this.exportBusy = true;
+    this.exportStatus.textContent = '書き出し中…'; this._updateControls();
+    try {
+      const blob = await this.exporter.exportWorld(this.score, this.prepared);
+      if (blob) { this.exporter.download(); this.exportStatus.textContent = '保存しました'; }
+      else this.exportStatus.textContent = '中止しました';
+    } catch (error) { this.exportStatus.textContent = '書き出し失敗: ' + error.message; }
+    finally { this.exportBusy = false; this._updateControls(); }
+  }
   async renderAt(tSec) {
     if (!this.score || !this.engine) throw new Error('曲を読み込んでください');
-    if (this.previewBusy || this.starting) throw new Error('描画／再生の準備が完了するまでお待ちください');
+    if (this.previewBusy || this.starting || this.exportBusy) throw new Error('描画／再生の準備が完了するまでお待ちください');
     this.engine._validatePreview(tSec);
     this.previewBusy = true; this.audio.pause(); cancelAnimationFrame(this.raf);
     this.state = 'preview'; this.prompt.hidden = true; this._updateControls();
@@ -91,7 +121,7 @@ class WorldApp {
   }
   async start() {
     if (!this.score || this.state === 'playing') return;
-    if (this.previewBusy || this.starting) throw new Error('描画／再生の準備が完了するまでお待ちください');
+    if (this.previewBusy || this.starting || this.exportBusy) throw new Error('描画／再生の準備が完了するまでお待ちください');
     this.starting = true;
     if (this.state !== 'paused') {
       this.audio.currentTime = 0; this.audioEngine.resetAnalysis(); this.engine.setScore(this.score); this.public.events = this.engine.events;
@@ -139,7 +169,10 @@ class WorldApp {
     } finally { this.seeking = false; this._updateControls(); }
   }
   _updateControls() {
-    const busy = this.previewBusy || this.starting || this.state === 'analyzing';
+    const busy = this.previewBusy || this.starting || this.exportBusy || this.state === 'analyzing';
+    this.fileInput.disabled = busy; this.fpsInput.disabled = busy;
+    this.exportButton.disabled = !this.prepared || busy || this.state === 'error';
+    this.cancelExportButton.hidden = !this.exportBusy; this.exportProgress.hidden = !this.exportBusy;
     this.playButton.disabled = !this.score || busy || this.state === 'error' || this.state === 'unavailable';
     this.playButton.textContent = this.state === 'playing' ? '一時停止' : '再生';
     this.seekInput.disabled = !this.score || busy;
@@ -152,6 +185,10 @@ class WorldApp {
   _tick(nowMs) {
     if (this.state === 'playing') {
       const dt = this.lastMs ? (nowMs - this.lastMs) / 1000 : 1 / 60; this.lastMs = nowMs;
+      if (this.audio.currentTime + 1e-6 < this.previousSec) {
+        this.engine.setScore(this.score); this.public.events = this.engine.events;
+      }
+      this.previousSec = this.audio.currentTime;
       this.audioEngine.captureFrame(nowMs);
       // 計測時刻は呼び出し側で取得し、描画・シミュレーションには音声時刻とdtを渡す。
       const start = performance.now(); this.engine.render(this.audio.currentTime, this.audioEngine.getFeatures(), dt);

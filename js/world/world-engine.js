@@ -1,17 +1,31 @@
-// 目的 — 世界の状態・演出・HDR合成と計測を統合する — doc/20261004-concept-world-mode.md §2.6・§4〜§5
+// 目的 — 世界の状態・演出・HDR合成と計測を統合する — doc/20261004-concept-world-mode.md §2.7・§4〜§5
 const WORLD_COMPOSITE_FRAGMENT = `#version 300 es
 ${WORLD_GLSL}
 uniform sampler2D dye, velocity;
 out vec4 frag;
 void main(){
- vec2 uv=worldUv(worldPosition(vUv));
+ vec2 p=worldPosition(vUv),uv=worldUv(p);
  vec2 flow=texture(velocity,uv).xy;
  vec3 ink=texture(dye,uv+flow*(.00004/OVERSCAN)).rgb;
- // HDR染料の細い輪郭を光へ変換する。建造物／地形／レイマーチは使わない。
  vec2 dx=1./vec2(textureSize(dye,0));
  vec3 edge=abs(texture(dye,uv+dx).rgb-texture(dye,uv-dx).rgb);
- float valid=smoothstep(0.,.035,uv.x)*(1.-smoothstep(.965,1.,uv.x))*smoothstep(0.,.035,uv.y)*(1.-smoothstep(.965,1.,uv.y));
- frag=vec4((ink*.65+edge*.8)*mood.x*valid,1);
+ vec3 mist=vec3(0);
+ // 3視差層、遠方ほど低いコントラスト。周期位相の3D星雲を重ねる。
+ for(int i=0;i<3;i++){
+  float depth=1.5+float(i)*2.,t=clock.x;
+  vec2 q=(vUv-.5)*vec2(screen.x/screen.y,1.)+lens.xy/depth;
+  q*=(1.+float(i)*.45)/(1.+audio.x*.05*environment.w);
+  float cloud=noise3(vec3(q*3.+vec2(sin(t),cos(t))*.2,depth+sin(t*2.)*.3));
+  float strand=exp(-pow(sin(atan(q.y+.13,q.x+.07)*3.+length(q)*21.+sin(t*3.))/.18,2.));
+  float haze=smoothstep(.28,.8,cloud)*(.06+strand*.3)*exp(-depth*.25);
+  mist+=worldColor(float(i%2))*haze;
+ }
+ // 遠い光源から放射する細い体積光。具体物を作らず、距離で薄くする。
+ vec2 ray=vUv-vec2(.64,.68);float a=atan(ray.y,ray.x);
+ float shafts=pow(max(0.,cos(a*13.+sin(clock.x))),24.)*exp(-length(ray)*5.);
+ mist+=worldColor(1.)*shafts*.025;
+ frag=vec4(mist+(ink*.65+edge*.8)*environment.w,1);
+
 }`;
 class WorldEngine {
   constructor(canvas, seed = 11) {
@@ -20,7 +34,7 @@ class WorldEngine {
     this.particles = new WorldParticles(this.gpu, seed);
     this.post = new WorldPost(this.gpu, canvas.width, canvas.height);
     this.scene = this.gpu.target(canvas.width, canvas.height);
-    this.composite = this.gpu.program(WORLD_COMPOSITE_FRAGMENT);
+    this.composite = this.gpu.program(WORLD_COMPOSITE_FRAGMENT); this.spectrum = new WorldSpectrum(this.gpu);
     this.dyeLoc = this.gpu.texture(this.composite, 'dye');
     this.velocityLoc = this.gpu.texture(this.composite, 'velocity');
     this.score = null; this.events = []; this.sectionIndex = 0; this.eventIndex = 0; this.downbeatIndex = 0;
@@ -33,7 +47,7 @@ class WorldEngine {
     const gl = this.gpu.gl; this.timer = gl.getExtension('EXT_disjoint_timer_query_webgl2');
     this.queries = []; this.queryActive = null;
     if (this.timer) for (let i = 0; i < 32; i++) this.queries.push({ query: gl.createQuery(), pending: false, slot: -1 });
-    this.preview = false;
+    this.preview = false; this.timeline = null; this.fps = 60; this.featureView = new MfsFrameView();
     this.timerDisjoints = 0; this.gpuSamples = 0; this.mfsFrames = 0; this.latestSec = 0;
   }
   setScore(score) {
@@ -86,7 +100,9 @@ class WorldEngine {
   endCpuTiming(ms) { if (this.lastTimeSlot >= 0) this.cpuTimes[this.lastTimeSlot] = ms; }
   render(tSec, features, dt) {
     if (!this.score) return;
-    this._beginTiming(tSec, dt); this._step(tSec, features, dt); this._draw();
+    this._beginTiming(tSec, dt);
+    if (this.timeline) this.advanceTo(tSec); else this._step(tSec, features, dt);
+    this._draw();
     if (this.queryActive) { this.gpu.gl.endQuery(this.timer.TIME_ELAPSED_EXT); this.queryActive = null; }
   }
   _step(tSec, features, dt) {
@@ -110,19 +126,16 @@ class WorldEngine {
       this.beatIndex++;
     }
     if (features) this.mfsFrames++;
-    // 小節頭は解析済みの格子を使う。ライブの拍イベントは光学反応に直結する。
-    let cutNow = false;
-    while (this.downbeatIndex < score.downbeats.length && score.downbeats[this.downbeatIndex] <= tSec) {
-      if (s.kind === 'drop' && score.downbeats[this.downbeatIndex] >= s.startSec) {
-        this.cut++; cutNow = true; this.lastCut = score.downbeats[this.downbeatIndex];
-      } this.downbeatIndex++;
-    }
-    const simDt = silence ? 0 : Math.min(.033, Math.max(0, dt)) * (s.kind === 'break' ? .3 : 1) * (1 - anticipate * .96);
+    // 小節頭はカメラ／構図を切り替えない。拍は光だけに結びつける。
+    const cutNow = false;
+    const simDt = silence ? 0 : Math.max(0, dt) * (s.kind === 'break' ? .3 : 1) * (1 - anticipate * .96);
     this.simTime += simDt;
-    u[0] = this.simTime; u[1] = simDt; u[2] = tSec; u[3] = p;
-    let low = 0, high = 0;
-    for (let i = 0; i < 6; i++) low += f.bands[i];
-    for (let i = 22; i < 32; i++) high += f.bands[i];
+    u[0] = Math.PI * 2 * tSec / score.durationSec; u[1] = simDt; u[2] = tSec; u[3] = p;
+    let low = 0, high = 0, mid = 0;
+    for (let i = 0; i < 6; i++) low += f.bandsSmooth[i];
+    for (let i = 22; i < 32; i++) high += f.bandsSmooth[i];
+    for (let i = 6; i < 22; i++) mid += f.bandsSmooth[i];
+    u[78] = mid / 16;
     u[4] = low / 6; u[5] = high / 10; u[6] = f.loudness.level; u[7] = f.tempo.beatPhase;
     u[8] = flags & 1 ? 1 : 0; u[9] = flags & 4 ? 1 : 0; u[10] = beat;
     u[11] = s.kind === 'drop' ? Math.exp(-(tSec - this.lastDrop) * 6) : 0;
@@ -130,11 +143,11 @@ class WorldEngine {
     u[31] = s.kind === 'drop' ? tSec - this.lastKick : 100;
     u[12] = s.kindId; u[13] = s.variation; u[14] = s.formId; u[15] = anticipate;
     const brightness = s.kind === 'intro' ? .32 + p * .18 : s.kind === 'build' ? .75 * (1 - p * .7) :
-      s.kind === 'drop' ? 1.4 : s.kind === 'break' ? .55 : s.kind === 'outro' ? (1 - p) ** 2 : .9;
-    u[16] = silence || tSec >= score.durationSec ? 0 : brightness * s.intensity;
+      s.kind === 'drop' ? 1.4 : s.kind === 'break' ? .55 : s.kind === 'outro' ? .32 : .9;
+    u[16] = silence ? 0 : brightness * s.intensity;
     u[17] = s.kind === 'build' ? p * 2.8 : s.kind === 'drop' ? -1 : .04;
     u[18] = s.kind === 'break' ? 2.4 : 1; u[19] = s.kind === 'break' ? .8 : s.kind === 'intro' ? .6 : .15;
-    u[20] = s.cameraAngle + (s.kind === 'drop' ? this.cut * 1.618 : this.simTime * (s.kind === 'break' ? .006 : .025));
+    u[20] = .16 * Math.sin(u[0]);
     u[21] = 22 * s.worldScale;
     u[22] = s.kind === 'build' ? p * p * .025 : u[8] * .008; u[23] = s.complexity;
     const invert = s.kind === 'drop';
@@ -146,9 +159,11 @@ class WorldEngine {
     for (let i = 0; i < 3; i++) u[72 + i] = s.accent[i];
     u[75] = this.lastDrop;
     u[76] = s.environmentId; u[77] = s.worldScale;
-    u[78] = 0; u[79] = 0;
+    u[79] = 0;
     this._composition(s, tSec, boundaryNow, s.kind === 'drop' && !!(flags & 1));
+    this._morph(s, tSec, p);
     this._camera(s, tSec, p, boundaryNow, cutNow);
+    this._emitters(f);
     // 衝撃環の中心はイベント時に固定。カメラ移動で殻を引きずらない。
     if (s.kind === 'drop' && (boundaryNow || (flags & 1))) {
       u[47] = u[40] + u[52] * 12 * s.worldScale;
@@ -171,102 +186,119 @@ class WorldEngine {
     // 履歴は固定simulationステップで更新。captureや再描画では進めない。
     if (dt > 0 || this.frame === 1 || boundaryNow) this.post.stepFeedback(this.scene, this.fluid);
   }
+  _blend(s, tSec) {
+    const p = Math.max(0, Math.min(1, (tSec - s.startSec) / Math.min(4, (s.endSec - s.startSec) * .25)));
+    return p * p * (3 - 2 * p);
+  }
+  _previous(s) { const i = this.score.sections.indexOf(s); return this.score.sections[Math.max(0, i - 1)]; }
+  _morph(s, tSec, p) {
+    const u = this.gpu.uniforms, previous = this._previous(s), blend = this._blend(s, tSec);
+    const loop = s.kind === 'outro' ? p * p * (3 - 2 * p) : 0;
+    u[108] = previous.compositionId; u[109] = previous.compositionSeed & 65535;
+    u[110] = previous.vortexCount; u[111] = (previous.compositionSeed & 65535) / 65536 * Math.PI * 2;
+    u[77] = (previous.worldScale + (s.worldScale - previous.worldScale) * blend) * (1 - loop) + this.score.sections[0].worldScale * loop;
+    u[112] = blend; u[113] = loop; u[114] = previous.kindId; u[115] = s.kindId;
+    // intro/outroの継ぎ目は解析的な霧へ収束させ、流体／履歴の初期条件を隠す。
+    u[79] = s.kind === 'intro' ? p * p * (3 - 2 * p) : 1 - loop;
+    for (let i = 0; i < 3; i++) {
+      const oldA = previous.kind === 'drop' ? previous.secondary[i] : previous.primary[i];
+      const oldB = previous.kind === 'drop' ? previous.primary[i] : previous.secondary[i];
+      u[24 + i] = (oldA + (u[24 + i] - oldA) * blend) * (1 - loop) + this.score.sections[0].primary[i] * loop;
+      u[28 + i] = (oldB + (u[28 + i] - oldB) * blend) * (1 - loop) + this.score.sections[0].secondary[i] * loop;
+      u[72 + i] = (previous.accent[i] + (s.accent[i] - previous.accent[i]) * blend) * (1 - loop) + this.score.sections[0].accent[i] * loop;
+    }
+    // 規定のdrop／静寂の明暗は即時。空間・中心力・霧は連続に移行する。
+    u[17] *= blend; u[18] = 1 + (u[18] - 1) * blend;
+  }
   _composition(s, tSec, boundaryNow, kickNow) {
     const u = this.gpu.uniforms, aspect = this.canvas.width / this.canvas.height;
-    u[84] = s.compositionId; u[85] = s.compositionSeed & 65535; u[86] = s.vortexCount;
+    u[84] = s.compositionId; u[85] = Math.max(1, Math.round(this.score.durationSec / 24)); u[86] = s.vortexCount;
     u[87] = (s.compositionSeed & 65535) / 65536 * Math.PI * 2;
-    if (boundaryNow) {
-      this.kickCount = 0;
-      if (s.kind !== 'drop' || this.lastCut < s.startSec) this.lastCut = s.startSec;
-      for (let i = 0; i < 4; i++) {
-        const offset = 88 + i * 4;
-        u[offset] = (i % 2 === 0 ? -1 : 1) * aspect / 6;
-        u[offset + 1] = (i < 2 ? -1 : 1) / 6;
-        u[offset + 2] = i % 2 === 0 ? 1 : -1; u[offset + 3] = tSec;
-      }
+    // 大きい2中心を曲全体で保持。kickで位置を飛ばさない。
+    for (let i = 0; i < 4; i++) {
+      const offset = 88 + i * 4;
+      u[offset] = (i % 2 === 0 ? -1 : 1) * aspect * .22;
+      u[offset + 1] = (i % 2 === 0 ? -.14 : .14);
+      u[offset + 2] = i % 2 === 0 ? 1 : -1; u[offset + 3] = 0;
     }
+    if (boundaryNow) this.kickCount = 0;
     if (s.kind === 'drop' && (boundaryNow || kickNow)) {
       this.kickCount++; this.lastKick = tSec; u[31] = 0;
-      // 数値hashのみ。フレーム経路でRNG/配列/オブジェクトを生成しない。
-      let h = (s.compositionSeed ^ Math.imul(this.kickCount, 0x9e3779b9)) >>> 0;
-      h = Math.imul(h ^ (h >>> 16), 0x85ebca6b) >>> 0; h ^= h >>> 13;
-      const pair = s.vortexCount === 4 ? (this.kickCount - 1) % 2 * 2 : 0;
-      const x = (h & 1 ? 1 : -1) * aspect / 6 + (((h >>> 8) & 255) / 255 - .5) * .12;
-      const y = (h & 2 ? 1 : -1) / 6 + (((h >>> 16) & 255) / 255 - .5) * .08;
-      const angle = ((h >>> 20) & 1023) / 1024 * Math.PI * 2;
-      for (let i = 0; i < 2; i++) {
-        const offset = 88 + (pair + i) * 4, sign = i === 0 ? -1 : 1;
-        u[offset] = x + Math.cos(angle) * .11 * sign;
-        u[offset + 1] = y + Math.sin(angle) * .11 * sign;
-        u[offset + 2] = sign; u[offset + 3] = tSec;
-      }
-      u[105] = x; u[106] = y; u[107] = this.kickCount;
+      const index = this.kickCount % 2;
+      u[105] = u[88 + index * 4]; u[106] = u[89 + index * 4]; u[107] = this.kickCount;
     }
-    u[104] = Math.max(0, tSec - this.lastCut);
+    u[104] = Math.max(0, tSec - s.startSec);
   }
   _camera(s, tSec, p, boundaryNow, cutNow) {
-    const u = this.gpu.uniforms, local = tSec - s.startSec, scale = s.worldScale;
+    const u = this.gpu.uniforms, phase = Math.PI * 2 * tSec / this.score.durationSec;
+    const old = this._previous(s), blend = this._blend(s, tSec), loop = s.kind === 'outro' ? p * p * (3 - 2 * p) : 0;
+    const intro = this.score.sections[0];
+    const angle = (old.cameraAngle + Math.atan2(Math.sin(s.cameraAngle - old.cameraAngle), Math.cos(s.cameraAngle - old.cameraAngle)) * blend);
+    const gain = (old.worldScale + (s.worldScale - old.worldScale) * blend) * (1 - loop) + intro.worldScale * loop;
+    const amplitude = .06 + .02 * (Math.sin(angle) * (1 - loop) + Math.sin(intro.cameraAngle) * loop);
     u.copyWithin(56, 40, 56);
-    let x = 0, y = 0, z = 0, fx = 0, fy = 0, fz = 1, roll = 0;
-    if (s.kind === 'intro') { x = Math.sin(local * .06) * .3; y = .2; z = local * .25; fx = .08; }
-    else if (s.kind === 'build') {
-      z = (local * .9 + local * p * p * 3) * s.cameraSpeed; x = .35 * Math.sin(z * .06); y = Math.sin(local * .12) * .18;
-      fx = Math.sin(local * .09) * .06; fy = Math.cos(local * .13) * .03; roll = p * p * .22;
-    } else if (s.kind === 'drop') {
-      z = local * 4 * s.cameraSpeed;
-      const angle = s.cameraAngle + this.cut * 1.618;
-      if (s.variation === 1) {
-        x = .5 * Math.sin(z * .025); y = .3 * Math.sin(local * .17);
-        fx = (this.cut % 2 === 0 ? -1 : 1) * .85; fy = Math.cos(angle * 1.3) * .2;
-        roll = Math.sin(angle) * .16;
-      } else {
-        // 第二dropの螺旋変奏。基底は計測互換、抽象の回転はcamera.xで駆動する。
-        const orbit = local * .28 + s.cameraAngle;
-        x = Math.cos(orbit) * 3.4; y = Math.sin(orbit) * 2.8;
-        fx = -Math.sin(orbit) * .8 + (this.cut % 2 === 0 ? -.9 : .9);
-        fy = Math.cos(orbit) * .4; roll = Math.sin(orbit) * .38;
-      }
-    } else if (s.kind === 'break') { x = Math.sin(local * .04) * .5; y = 2.8; z = local * .5 * s.cameraSpeed; fx = .16; fy = .12; roll = -.035; }
-    else { x = Math.sin(local * .04) * 5; y = 17.5 + Math.sin(local * .08); z = local * 4 * s.cameraSpeed; fx = -.1; fy = -.24; roll = .06; }
-    const inv = 1 / Math.hypot(fx, fy, fz); fx *= inv; fy *= inv; fz *= inv;
-    const rInv = 1 / Math.hypot(fz, fx), rx = fz * rInv, rz = -fx * rInv;
-    const ux = fy * rz, uy = fz * rx - fx * rz, uz = -fy * rx, c = Math.cos(roll), sn = Math.sin(roll);
-    u[40] = x * scale; u[41] = y * scale; u[42] = z * scale; u[43] = boundaryNow ? 1 : 0;
-    u[44] = rx * c + ux * sn; u[45] = uy * sn; u[46] = rz * c + uz * sn;
-    u[48] = ux * c - rx * sn; u[49] = uy * c; u[50] = uz * c - rz * sn;
-    u[52] = fx; u[53] = fy; u[54] = fz;
-    if (boundaryNow || cutNow) u.copyWithin(56, 40, 56);
-    // 表示に実際に使う2Dカメラ。曲線のパン／ズームはsmoothstepで加減速する。
-    const eased = p * p * (3 - 2 * p), phase = s.cameraAngle;
-    const direction = s.variation % 2 === 1 ? 1 : -1;
-    u[80] = Math.cos(phase) * .08 + direction * (eased - .5) * (s.kind === 'build' ? .24 : .16);
-    u[81] = Math.sin(phase) * .06 + Math.sin(eased * Math.PI) * (s.kind === 'break' ? .08 : -.06);
-    u[82] = s.kind === 'build' ? 1.05 + eased * .45 : s.kind === 'drop' ? 1.08 + Math.sin(local * .65) * .08 : 1.08;
-    const baseRotation = s.compositionId === 1 ? -.2 : s.compositionId === 3 ? .015 : .16;
-    u[83] = baseRotation * direction + eased * direction * .14;
-    if (s.kind === 'drop') {
-      u[80] += Math.sin(local * .4 + phase) * .06;
-      u[81] += Math.cos(local * .33 + phase) * .05;
-      // 小節頭は明確な切り返し。次のカットまで連続した動きを保つ。
-      u[83] += this.cut % 2 === 0 ? -.55 : .55;
-      u[82] += s.variation > 1 ? .16 : 0;
+    u[40] = .18 * Math.sin(phase); u[41] = .12 * Math.sin(phase * 2);
+    // 奥行きは周期領域を前進。粒子の折返しはdepthのfadeで不可視になる。
+    u[42] = tSec * .18; u[43] = this.frame === 1 ? 1 : 0;
+    const fx = .05 * Math.sin(phase), fy = .025 * Math.sin(phase * 2), fz = 1 / Math.hypot(fx, fy, 1);
+    u[52] = fx * fz; u[53] = fy * fz; u[54] = fz;
+    const norm = Math.hypot(u[54], u[52]);
+    u[44] = u[54] / norm; u[45] = 0; u[46] = -u[52] / norm;
+    u[48] = u[53] * u[46]; u[49] = u[54] * u[44] - u[52] * u[46]; u[50] = -u[53] * u[44];
+    u[80] = amplitude * Math.sin(phase); u[81] = amplitude * .7 * Math.sin(phase * 2);
+    u[82] = 1.08 + .08 * Math.sin(phase) ** 2 + .03 * (gain - 1);
+    u[83] = .12 * Math.sin(phase); this._clampCamera();
+  }
+  _emitterPosition(id, i, out, offset) {
+    const v = i / 31, aspect = this.canvas.width / this.canvas.height;
+    if (id === 2) { out[offset] = (v - .5) * aspect * .76; out[offset + 1] = -.24; }
+    else if (id === 4) {
+      const a = v * Math.PI * 3.4, r = .08 + v * .29;
+      out[offset] = Math.cos(a) * r; out[offset + 1] = Math.sin(a) * r;
+    } else {
+      const a = Math.PI * (.12 + v * .76);
+      out[offset] = -Math.cos(a) * aspect * .4; out[offset + 1] = Math.sin(a) * .32 - .26;
     }
-    // 元の±.55rad cutと基底回転の全範囲から、30度cutを残せる最小回転を求める。
-    const cutRotation = Math.max(0, Math.PI / 6 - (.55 - Math.max(Math.abs(baseRotation), Math.abs(baseRotation + .14))));
-    this._clampCamera(s.kind === 'drop' ? cutRotation : 0);
+  }
+  _emitters(f) {
+    const u = this.gpu.uniforms, blend = u[112], loop = u[113];
+    for (let i = 0; i < 32; i++) {
+      const offset = 116 + i * 4;
+      this._emitterPosition(u[108], i, u, offset);
+      const x = u[offset], y = u[offset + 1];
+      this._emitterPosition(u[84], i, u, offset);
+      const nx = x + (u[offset] - x) * blend, ny = y + (u[offset + 1] - y) * blend;
+      this._emitterPosition(this.score.sections[0].compositionId, i, u, offset);
+      u[offset] = nx * (1 - loop) + u[offset] * loop;
+      u[offset + 1] = ny * (1 - loop) + u[offset + 1] * loop;
+      u[offset + 2] = f.bandsSmooth[i]; u[offset + 3] = f.bands[i];
+    }
+  }
+  setTimeline(frames, fps) {
+    if (fps !== 30 && fps !== 60) throw new RangeError('fpsは30/60です');
+    this.timeline = frames; this.fps = fps;
+  }
+  frameFeatures(index) {
+    if (!this.timeline) return null;
+    return this.featureView.setPacked(this.timeline[Math.min(index, this.timeline.length - 1)]);
+  }
+  advanceTo(tSec) {
+    // ライブ・export・renderAt共通の整数ステップ。rAFの間隔に依存しない。
+    const steps = Math.floor(tSec * this.fps + 1e-9);
+    if (!this.frame) this._step(0, this.frameFeatures(0), 0);
+    for (let i = this.previewStep + 1; i <= steps; i++) {
+      this._step(i / this.fps, this.frameFeatures(i), 1 / this.fps); this.previewStep = i;
+    }
   }
   // WORLD-8: 回転矩形の軸方向半径から必要ズームを解析的に求める。
   // まずパンを減らす。中心でも収まらない回転だけを減らし、過大なズームを避ける。
-  _clampCamera(minimumRotation = 0) {
+  _clampCamera() {
     const u = this.gpu.uniforms, aspect = this.canvas.width / this.canvas.height;
     // Float32への丸め後にも安全用フェードの外側に四隅を保つ。
     const bx = aspect * OVERSCAN * (.5 - WORLD_DOMAIN_MARGIN) - 1e-6;
     const by = OVERSCAN * (.5 - WORLD_DOMAIN_MARGIN) - 1e-6;
     const requested = u[82], angle = Math.abs(u[83]);
-    // 既存UW-25の30度cutを残す範囲だけズームを許容し、それ以上の回転を減らす。
-    const cutC = Math.cos(minimumRotation), cutS = Math.sin(minimumRotation);
-    const zoom = Math.max(requested, (aspect * cutC + cutS) / (2 * bx),
-      (aspect * cutS + cutC) / (2 * by));
+    const zoom = requested;
     let c = Math.abs(Math.cos(angle)), sn = Math.abs(Math.sin(angle));
     if ((aspect * c + sn) / (2 * zoom) > bx || (aspect * sn + c) / (2 * zoom) > by) {
       let lo = 0, hi = angle;
@@ -276,7 +308,7 @@ class WorldEngine {
         if ((aspect * ac + as) / (2 * zoom) <= bx && (aspect * as + ac) / (2 * zoom) <= by) lo = a;
         else hi = a;
       }
-      u[83] = Math.sign(u[83]) * Math.max(Math.min(angle, minimumRotation), lo);
+      u[83] = Math.sign(u[83]) * lo;
       c = Math.abs(Math.cos(u[83])); sn = Math.abs(Math.sin(u[83]));
     }
     const hx = (aspect * c + sn) * .5, hy = (aspect * sn + c) * .5;
@@ -291,6 +323,7 @@ class WorldEngine {
     g.bind(this.composite, this.scene);
     g.sampler(this.dyeLoc, 0, this.fluid.dye.read); g.sampler(this.velocityLoc, 1, this.fluid.velocity.read); g.draw();
     this.particles.render(this.scene);
+    this.spectrum.render(this.scene, 1, this.gpu.uniforms[39] ? 0 : 5 * this.gpu.uniforms[79]);
   }
   _draw() { this.post.render(this.scene); }
   _validatePreview(tSec) {
@@ -302,24 +335,27 @@ class WorldEngine {
     this._validatePreview(tSec); this.previewBusy = true;
     try {
       // 毎回0から再生する契約。状態を再利用して途中から近似することはしない。
-      this.setScore(this.score); this.preview = true; this._step(0, null, 0);
+      this.setScore(this.score); this.preview = !this.timeline; this._step(0, this.frameFeatures(0), 0);
       return await this._advancePreview(tSec);
     } finally { this.previewBusy = false; }
   }
   async advancePreview(tSec) {
     this._validatePreview(tSec);
-    if (!this.preview || tSec < this.latestSec) throw new RangeError('previewをrenderAtで初期化し、前進時刻を指定してください');
+    if ((!this.preview && !this.timeline) || tSec < this.latestSec) throw new RangeError('previewをrenderAtで初期化し、前進時刻を指定してください');
     this.previewBusy = true;
     try { return await this._advancePreview(tSec); } finally { this.previewBusy = false; }
   }
   async _advancePreview(tSec) {
-    const steps = Math.floor(tSec * 60 + 1e-9);
+    const steps = Math.floor(tSec * this.fps + 1e-9);
     for (let i = this.previewStep + 1; i <= steps; i++) {
-      this._step(i / 60, null, 1 / 60); this.previewStep = i;
+      this._step(i / this.fps, this.frameFeatures(i), 1 / this.fps); this.previewStep = i;
       // GPUキューとUIを定期的に解放する（dt・シェーダー時刻には影響しない）。
       if (i % 120 === 0) await new Promise(resolve => setTimeout(resolve, 0));
     }
-    if (tSec > steps / 60 + 1e-9) this._step(tSec, null, 0);
+    if (tSec > steps / this.fps + 1e-9) {
+      if (this.timeline) this.latestSec = tSec; // 端数時刻で同じMFSイベントを二度発火しない。
+      else this._step(tSec, null, 0);
+    }
     this._draw(); return this.metrics();
   }
 

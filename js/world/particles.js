@@ -1,4 +1,4 @@
-// 目的 — 流体とカール場で26万粒子を運び、速度方向のHDRストリークを描く — doc/20261004-concept-world-mode.md §2.6
+// 目的 — 流体とカール場で26万粒子を運び、速度方向のHDRストリークを描く — doc/20261004-concept-world-mode.md §2.7
 const WORLD_PARTICLE_SIDE = 512;
 const WORLD_PARTICLE_UPDATE = `#version 300 es
 ${WORLD_GLSL}
@@ -6,63 +6,42 @@ uniform sampler2D particles, particleVelocity, velocity;
 layout(location=0) out vec4 positionOut;
 layout(location=1) out vec4 velocityOut;
 vec3 spawn(vec3 key){
- float seed=hash31(key),lane=floor(seed*12.),a=hash31(key+4.)*6.283185;
- float aspect=screen.x/screen.y;vec2 p;
- if(composition.x==0.){
-  int center=int(mod(lane,composition.z));float r=.025+sqrt(hash31(key+2.))*.32*OVERSCAN;
-  p=worldCenter(center)+vec2(cos(a+r*12.),sin(a+r*12.))*r;
- }else if(composition.x==1.){
-  p=rot(.45)*vec2((hash31(key+2.)-.5)*aspect*1.35*OVERSCAN,(lane-5.5)*.055*OVERSCAN+(hash31(key+5.)-.5)*.018);
- }else if(composition.x==2.){
-  p=vec2((hash31(key+2.)-.5)*aspect*1.2*OVERSCAN,(lane-5.5)*.08*OVERSCAN);
-  p.y+=.035*sin(p.x*9.-clock.x)+(hash31(key+5.)-.5)*.016;
- }else if(composition.x==3.){
-  p=vec2((hash31(key+2.)-.5)*aspect*1.2*OVERSCAN,(lane-5.5)*.033*OVERSCAN);
-  p.y+=.025*sin(p.x*5.+clock.x*.3)+(hash31(key+5.)-.5)*.022;
- }else{
-  float r=.06+sqrt(hash31(key+2.))*.95*OVERSCAN;
-  a=floor(seed*3.)*6.283185/3.-r*7.+composition.w+(hash31(key+5.)-.5)*.09;
-  p=vortices[0].xy+vec2(cos(a),sin(a))*r;
- }
- // 拡張した流線の生成点を領域へ折り返す。中心・流線・色の規則は維持する。
- p=mod(p+worldExtent()*.5,worldExtent())-worldExtent()*.5;
- return vec3(p,.3+hash31(key+3.)*.7);
+ float seed=hash31(key),a=hash31(key+4.)*6.283185;
+ float depth=1.+hash31(key+3.)*8.;
+ int band=int(mod(key.x+key.y*512.,32.));
+ vec2 emitter=emitterWorld(band);
+ vec2 nebula=vec2(cos(a),sin(a))*(.06+sqrt(seed)*worldExtent().x*.44);
+ // 静かな星雲から、帯域に応じた細い噴流へ連続に供給する。
+ vec2 p=mix(nebula,emitter+vec2(cos(a),sin(a))*.009,emitters[band].z*environment.w);
+ return vec3(p*depth/3.,depth);
 }
-// 三つの滑らかな流れ関数の解析的curl。発散のない揺らぎを加える。
 vec2 curlFlow(vec2 p,float t){
- vec2 c=vec2(0);
- for(int i=0;i<3;i++){
-  float f=3.+float(i)*4.,phase=t*(.13+float(i)*.07)+float(i)*2.1;
-  c+=vec2(sin(p.x*f+phase)*cos(p.y*f-phase),-cos(p.x*f+phase)*sin(p.y*f-phase))/(1.+float(i));
- }
- return c*.045;
+ vec2 a=p/worldExtent()*6.283185;
+ return vec2(sin(a.x+sin(t))*cos(a.y-cos(t)),
+ -cos(a.x+sin(t))*sin(a.y-cos(t)))*.045;
 }
 void main(){
  ivec2 id=ivec2(gl_FragCoord.xy);vec4 state=texelFetch(particles,id,0);
  vec3 key=vec3(vec2(id),state.w),p=state.xyz;vec2 v=texelFetch(particleVelocity,id,0).xy;
- if(eye.w>.5){p=spawn(key);v=worldFlow(p.xy)*(story.x==2.?1.2:.1);}
- // キックごとに少量を最新のペアへ供給し、残りは慣性を保つ。
- if(story.x==2.&&hit.x>.5&&hash31(key+shot.w)<.04){
-  int pair=composition.z>2.?int(mod(shot.w-1.,2.))*2:0;
-  int center=pair+int(step(.5,hash31(key+shot.w+3.)));
-  float a=hash31(key+shot.w+7.)*6.283185,r=.01+hash31(key+shot.w+9.)*.06;
-  p.xy=worldCenter(center)+vec2(cos(a),sin(a))*r;v=worldFlow(p.xy)*1.2;
+ if(eye.w>.5){p=spawn(key);v=vec2(0);}
+ int band=(id.x+id.y*512)%32;
+ float level=emitters[band].z;
+ // 毎秒の少量補給。曲の時刻とseedで決定し、拍で構図を変更しない。
+ if(clock.y>0.&&hash31(key+vec3(floor(clock.z/max(.0001,clock.y))))<clock.y*level*.8){
+  p.xy=(emitterWorld(band)+vec2(cos(state.w),sin(state.w))*.006)*p.z/3.;
  }
- vec2 uv=worldUv(p.xy);
- vec2 flow=texture(velocity,clamp(uv,0.,1.)).xy/vec2(textureSize(velocity,0))*worldExtent();
- float tempo=story.x==2.?1.6:story.x==0.?.12:story.x==3.?.18:story.x==4.?.08:.65;
- vec2 desired=worldFlow(p.xy)*tempo;
- vec2 force=(desired-v)*(story.x==2.?6.:2.5);
- if(story.x==2.){
-  vec2 d=p.xy-shot.yz;float r=max(.002,length(d));
-  force+=d/r*(worldShock(p.xy)*5.+hit.w*exp(-r*4.)*2.);
- }
- force+=flow*.9+curlFlow(p.xy,clock.x)*(story.x==3.?.4:1.);
- v+=force*clock.y;v*=exp(-clock.y*(story.x==2.?.35:.6));p.xy+=v*clock.y;
- // カメラ外にも物質を持ち、フレーム端で円盤状に切らない。outroは再供給しない。
- if(story.x!=4.&&(abs(p.x)>worldExtent().x*.5||abs(p.y)>worldExtent().y*.5)){
-  p=spawn(key+floor(clock.x*.1));v=worldFlow(p.xy)*tempo;
- }
+ vec2 plane=p.xy*3./p.z,uv=worldUv(plane);
+ vec2 flow=texture(velocity,fract(uv)).xy/vec2(textureSize(velocity,0))*worldExtent();
+ float tempo=.65+worldKind(2.)*.95-worldKind(0.)*.53-worldKind(3.)*.47;
+ vec2 desired=worldFlow(plane)*tempo;
+ vec2 force=(desired-v)*(2.5+worldKind(2.)*3.5)+flow*.9+curlFlow(plane,worldSlowPhase());
+ vec2 d=plane-shot.yz;float r=max(.002,length(d));
+ force+=d/r*(worldShock(plane)*5.+hit.w*exp(-r*4.)*2.)*worldKind(2.);
+ v+=force*clock.y;v*=exp(-clock.y*.5);p.xy+=v*clock.y*p.z/3.;
+ // カメラの前進。dropでは奥へ散り、空間が広がる。近端／遠端はfadeでつなぐ。
+ p.z-=clock.y*.18;p.z+=clock.y*worldDropSpace()*worldDropFlare()*8.*(.3+hash31(key+7.));
+ if(p.z<1.||p.z>9.){p=spawn(key+floor(clock.z));p.z=8.99;v=vec2(0);}
+ vec2 extent=worldExtent()*p.z/3.;p.xy=mod(p.xy+extent*.5,extent)-extent*.5;
  positionOut=vec4(p,state.w);velocityOut=vec4(v,0,1);
 }`;
 const WORLD_PARTICLE_VERTEX = `#version 300 es
@@ -75,20 +54,26 @@ out float streakWidth;
 void main(){
  ivec2 id=ivec2(gl_VertexID%512,gl_VertexID/512);vec4 s=texelFetch(particles,id,0);
  vec2 velocity=texelFetch(particleVelocity,id,0).xy;
- float seed=hash31(vec3(vec2(id),s.w));
- vec2 uv=worldScreenUv(worldView(s.xy));
- vec2 speed=rot(-lens.w)*velocity*lens.z*screen.y*.025;
+ float seed=hash31(vec3(vec2(id),s.w)),depth=max(1.,s.z);
+ float expansion=1.+worldDropSpace()*(.32+.12*(environment.y-1.))+audio.x*.08;
+ vec2 plane=s.xy*3./depth*expansion;
+ // 本当のzによる透視投影と視差。近い粒子ほど大きく速く見える。
+ vec2 view=rot(-lens.w)*(plane-lens.xy*3./depth)*lens.z;
+ vec2 uv=worldScreenUv(view),speed=rot(-lens.w)*velocity*lens.z*screen.y*.025*3./depth;
  streakAxis=length(speed)>.01?normalize(speed):vec2(0,1);
- float width=mix(.45,.8,s.z)*screen.y/1080.;
- float size=clamp(1.5*screen.y/1080.+length(speed),1.5,8.*screen.y/1080.);
- streakWidth=width/size;gl_PointSize=size;gl_Position=vec4(uv*2.-1.,0,1);
- color=seed<.7?worldColor(0.):seed<.97?worldColor(1.):worldColor(2.);
- color*=1.+length(velocity)*5.+audio.y*2.+hit.y*3.;
- float ring=story.x==2.?worldShock(s.xy):0.;
- float strength=story.x==0.?.6:story.x==3.?.35:story.x==2.?1.4:1.;
- float sparse=story.x==0.?step(seed,.08+clock.w*.04):1.;
- // 1粒ずつが光の筋として見える明るさにする（v6 は暗すぎて霞にしか見えなかった）
- alpha=mood.x*strength*sparse*(.06+.10*s.z)*(1.+ring*3.);
+ float coc=max(0.,3.-depth)*.8;
+ float width=(.5*3./depth+coc)*screen.y/1080.;
+ float size=clamp(1.5*3./depth+length(speed)+coc*2.,1.5,12.)*screen.y/1080.;
+ streakWidth=min(.7,width/size);gl_PointSize=size;gl_Position=vec4(uv*2.-1.,0,1);
+ int band=gl_VertexID%32;float level=emitters[band].z;
+ color=worldColor(band<6?1.:band<22?0.:2.);
+ float sparkle=band>=22?pow(.5+.5*sin(clock.x*24.+s.w),8.):0.;
+ color*=1.+length(velocity)*5.+level*(4.+sparkle*3.)+audio.y*2.+hit.y*3.;
+ float ring=worldShock(plane)*worldKind(2.);
+ float strength=1.-worldKind(0.)*.4-worldKind(3.)*.65+worldKind(2.)*.4;
+ float sparse=mix(1.,step(seed,.1),worldKind(0.));
+ float fade=smoothstep(1.,1.4,depth)*(1.-smoothstep(8.4,9.,depth));
+ alpha=mood.x*strength*sparse*(.06+.1*3./depth)*(1.+ring*3.)*fade*environment.w*exp(-depth*.06)/(1.+coc);
 }`;
 const WORLD_PARTICLE_FRAGMENT = `#version 300 es
 precision highp float;
