@@ -3,6 +3,9 @@ const WORLD_KINDS = ['intro', 'build', 'drop', 'break', 'outro', 'main'];
 const WORLD_ENVIRONMENTS = ['mist', 'convergence', 'explosion', 'drift', 'dissipation', 'galaxy'];
 const WORLD_KIND_ENVIRONMENT = [0, 1, 2, 3, 4, 5];
 const WORLD_BOUNDARIES = ['ignite', 'converge', 'phase-transition', 'drift', 'extinguish', 'morph'];
+// 形態IDはラベルの契約を保持。構図はkindと変奏で独立に編成する。
+const WORLD_COMPOSITIONS = ['vortices', 'ribbons', 'streams', 'horizon', 'arms'];
+const WORLD_KIND_COMPOSITION = [3, 4, 0, 1, 2, 4];
 function worldHash(text, seed) {
   let h = (2166136261 ^ seed) >>> 0;
   for (let i = 0; i < text.length; i++) h = Math.imul(h ^ text.charCodeAt(i), 16777619) >>> 0;
@@ -40,12 +43,16 @@ function compileWorldScore(songMap, seed) {
     const colorIndex = (Math.floor(motif.paletteRotation / (Math.PI * 2) * 3) + variation - 1) % 3;
     const environmentId = WORLD_KIND_ENVIRONMENT[WORLD_KINDS.indexOf(s.kind)];
     const nextDrop = i + 1 < songMap.sections.length && songMap.sections[i + 1].kind === 'drop';
+    const compositionId = (WORLD_KIND_COMPOSITION[WORLD_KINDS.indexOf(s.kind)] + variation - 1) % WORLD_COMPOSITIONS.length;
+    const compositionSeed = worldHash(key, seed);
     sections.push({ startSec: s.startSec, endSec: s.endSec, label: s.label, kind: s.kind,
       kindId: WORLD_KINDS.indexOf(s.kind), formId: motif.formId, variation,
       paletteRotation: motif.paletteRotation, primary: palette[colorIndex], secondary: palette[(colorIndex + 1) % 3],
       accent: palette[(colorIndex + 2) % 3], environmentId, environment: WORLD_ENVIRONMENTS[environmentId],
       worldScale: 1 + (variation - 1) * .75, cameraSpeed: 1 + (variation - 1) * .4,
       cameraAngle: rng() * Math.PI * 2, intensity: 1 + (variation - 1) * 0.35,
+      compositionId, composition: WORLD_COMPOSITIONS[compositionId], compositionSeed,
+      vortexCount: s.kind === 'drop' ? (variation % 2 === 1 ? 2 : 4) : 2,
       density: 1 - 0.5 / variation, complexity: 1 + variation * 0.55,
       foreshadowSec: nextDrop ? Math.max(s.startSec, s.endSec - 8 * beatSec) : Infinity,
       silenceSec: nextDrop ? Math.max(s.startSec, s.endSec - beatSec) : Infinity });
@@ -62,5 +69,5 @@ function compileWorldScore(songMap, seed) {
     palette: { primary: palette[0], secondary: palette[1], accent: palette[2] } };
 }
 if (typeof module !== 'undefined' && module.exports) {
-  module.exports = { compileWorldScore, worldHash, WORLD_KINDS, WORLD_ENVIRONMENTS, WORLD_KIND_ENVIRONMENT };
+  module.exports = { compileWorldScore, worldHash, WORLD_KINDS, WORLD_ENVIRONMENTS, WORLD_KIND_ENVIRONMENT, WORLD_COMPOSITIONS };
 }

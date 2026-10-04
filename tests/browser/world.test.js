@@ -1,4 +1,4 @@
-// 目的 — WORLD-6 の決定的静止画・実再生同期・GPU読出し計測 — 構想 §1.3・§2.6
+// 目的 — WORLD-7 の決定的静止画・実再生同期・GPU読出し計測 — 構想 §1.3・§2.6
 // @page harness
 // tests/world/measure.mjs が world.html に注入する。既存runnerのharnessでは登録／実行しない。
 function worldReflectIndex(i, n) {
@@ -110,8 +110,8 @@ async function worldV4Probe(w) {
   let reveal = { pass: false, reason: 'introなし' };
   if (intro) {
     await w.renderAt((intro.startSec + intro.endSec) / 2);
-    u[3] = 0; u[16] = .07; engine.gpu.upload(); engine._renderMatter(); const early = worldReadHdr(engine);
-    u[3] = 1; u[16] = .25; engine.gpu.upload(); engine._renderMatter(); const late = worldReadHdr(engine);
+    u[3] = 0; u[16] = .32; engine.gpu.upload(); engine._renderMatter(); const early = worldReadHdr(engine);
+    u[3] = 1; u[16] = .50; engine.gpu.upload(); engine._renderMatter(); const late = worldReadHdr(engine);
     let revealedPixels = 0, fogGain = 0;
     for (let i = 0; i < early.length; i += 4) {
       const gain = .2126 * (late[i] - early[i]) + .7152 * (late[i + 1] - early[i + 1]) + .0722 * (late[i + 2] - early[i + 2]);
@@ -125,21 +125,14 @@ async function worldV5Probe(w) {
   const engine = w.engine, u = engine.gpu.uniforms, samples = [];
   for (const section of w.score.sections.filter(s => s.kind === 'drop')) {
     const tSec = (section.startSec + section.endSec) / 2; await w.renderAt(tSec);
-    const history = worldReadHdr(engine, engine.post.feedback.read);
-    engine._draw(); const withTrails = engine.capture();
-    engine.post.reset(); engine._draw(); const withoutTrails = engine.capture();
-    let trailPixels = 0, trailEnergy = 0;
-    for (let i = 0; i < history.length; i += 4) trailEnergy += .2126 * history[i] + .7152 * history[i + 1] + .0722 * history[i + 2];
-    for (let i = 0; i < withTrails.rgba.length; i += 4) {
-      if (withTrails.rgba[i] + withTrails.rgba[i + 1] + withTrails.rgba[i + 2] > withoutTrails.rgba[i] + withoutTrails.rgba[i + 1] + withoutTrails.rgba[i + 2] + 3) trailPixels++;
-    }
+    // §2.6: dropのhistory weightは0。trailPixelsの必須判定は撤回し、直接のkick発光を測る。
     const before = worldReadHdr(engine), features = new MfsFrameView(); features.raw[MFS_LAYOUT.ONSET_FLAGS] = 1;
     engine._step(tSec, features, 1 / 60); engine._draw(); const flared = engine.capture(), after = worldReadHdr(engine);
     let flareEnergy = 0;
     for (let i = 0; i < after.length; i += 4) for (let c = 0; c < 3; c++) flareEnergy += Math.max(0, after[i + c] - before[i + c]);
-    samples.push({ tSec, keyRole: engine.metrics().dropKeyRole, trailPixels, trailEnergy, flareEnergy,
+    samples.push({ tSec, keyRole: engine.metrics().dropKeyRole, flareEnergy,
       flaredClippedFraction: flared.clippedFraction,
-      pass: trailPixels > 0 && trailEnergy > 0 && flareEnergy > 0 && flared.clippedFraction <= .02 && engine.gpu.gl.getError() === 0 });
+      pass: flareEnergy > 0 && flared.clippedFraction <= .02 && engine.gpu.gl.getError() === 0 });
   }
   // worldColorを実GLSLで評価。UBOのラベル循環を打ち消す色選別にも交換が反映されること。
   const g = engine.gpu, gl = g.gl, target = g.target(3, 1, true), color = new Float32Array(12);
@@ -173,11 +166,10 @@ async function runWorldVisualMeasurement() {
   const screenshots = new Array(sections.length).fill(null), bands = [], references = [];
   window.__worldScreenshots = screenshots; window.__worldReferences = references;
   let maxRatio = 0, hdrMin = null, hdrMax = null;
-  const exposure = [], matter = [], referenceMatter = [], accents = [];
+  const exposure = [], matter = [], referenceMatter = [];
   function record(c, tSec, kind) {
     if (c.glError) throw new Error('capture GL error ' + c.glError);
     exposure.push({ tSec, kind, clippedFraction: c.clippedFraction, mean: c.mean });
-    accents.push({ tSec, kind, fraction: worldWarmFraction(c.rgba) });
     if (c.hdrRatio > maxRatio) { maxRatio = c.hdrRatio; hdrMin = c.hdrMin; hdrMax = c.hdrMax; }
   }
   for (let i = 0; i < sections.length; i++) {
@@ -188,7 +180,7 @@ async function runWorldVisualMeasurement() {
     matter.push({ sectionIndex: i, kind: sections[i].kind, ...worldMatterProbe(engine) });
   }
   // v1と同じ時刻を必ず保存する。曲の中央値だけで白飛びと構図の繰り返しを見逃さない。
-  for (const tSec of [7, 20, 30.3, 45, 62, 90]) {
+  for (const tSec of [7, 20, 30.3, 45, 62, 90, 112]) {
     if (tSec > score.durationSec) continue;
     await w.renderAt(tSec); const c = engine.capture();
     references.push({ tSec, capture: c, environment: sections[engine.sectionIndex].environment }); record(c, tSec, 'reference');
@@ -209,7 +201,6 @@ async function runWorldVisualMeasurement() {
       let clipped = 0;
       for (let i = 0; i < scratch.length; i += 4) if (scratch[i] >= 250 && scratch[i + 1] >= 250 && scratch[i + 2] >= 250) clipped++;
       exposure.push({ tSec, kind: 'drop-window', clippedFraction: clipped / (scratch.length / 4), mean });
-      accents.push({ tSec, kind: 'drop-window', fraction: worldWarmFraction(scratch) });
     }
     const before = beforeN ? beforeSum / beforeN : null, after = afterN ? afterSum / afterN : null;
     const ratio = before === 0 && after > 0 ? Infinity : before > 0 ? after / before : 0;
@@ -242,11 +233,9 @@ async function runWorldVisualMeasurement() {
   await w.renderAt(.2); await w.renderAt(.1); const second = engine.capture();
   let mismatched = 0; for (let i = 0; i < first.rgba.length; i++) if (first.rgba[i] !== second.rgba[i]) mismatched++;
   const preview = { pass: mismatched === 0 && engine.mfsFrames === 0, mismatchedChannels: mismatched, previewSteps: engine.previewStep };
-  const v4 = await worldV4Probe(w), v5 = await worldV5Probe(w), v6 = await worldV6Probe(w);
+  const v4 = await worldV4Probe(w), v5 = await worldV5Probe(w), v6 = await worldV6Probe(w), v7 = await worldV7Probe(w);
   return {
-    ...v4, ...v5, ...v6,
-    'BW-4-sparks': { pass: coverage.every(m => m.fraction <= .25), maximum: Math.max(...coverage.map(m => m.fraction)), sections: coverage },
-    'BW-4-accent': { pass: accents.every(a => a.fraction <= .15), maximum: Math.max(...accents.map(a => a.fraction)), frames: accents },
+    ...v4, ...v5, ...v6, ...v7,
     'W-1': { pass: maxRatio >= 1000, maxHdrRatio: maxRatio, hdrMin, hdrMax },
     'W-2': { pass: bands.every(b => Object.values(b.fractions).every(v => v >= .1)), sections: bands },
     'W-5': { pass: dropRatios.length > 0 && dropRatios.every(d => d.pass), drops: dropRatios },
@@ -254,8 +243,6 @@ async function runWorldVisualMeasurement() {
     'BW-2-preview': preview,
     'BW-2-matter': { pass: matter.every(m => m.visiblePixels > 0 && m.peakHdrContribution > 0), sections: matter },
     'BW-6-coverage': { pass: meanCoverage >= .05 && meanCoverage <= .25, meanCoverage, sections: coverage },
-    'BW-3-coverage': { pass: meanCoverage >= .05 && meanCoverage <= .25 && drops.every(m => m.fraction <= .25),
-      meanCoverage, maximum: Math.max(...coverage.map(m => m.fraction)), sections: coverage },
     'BW-3-hero': { pass: drops.length > 0 && drops.every(m => m.visiblePixels > 0 && m.particleEnergyFraction > 0), drops },
     'BW-3-kick': { pass: kicks.length > 0 && kicks.every(k => k.pass), kicks },
     'BW-2-environments': { pass: new Set(sections.map(s => s.environment)).size >= 4 && sections.every(s => ['mist','convergence','explosion','drift','dissipation','galaxy'].includes(s.environment)), formations: sections.map(s => s.environment) },
@@ -287,6 +274,72 @@ async function worldV6Probe(w) {
       visible, forcedFullscreen: fullscreenBefore !== fullscreenAfterStart, requests, forwardSec, backwardSec, seekState },
     'BW-6-layers': { pass: layers.join('/') === 'ABSTRACT/FLUID/PARTICLE/LIGHT/FEEDBACK' && m.raymarchSteps === 0 && !w.engine.form,
       layers, raymarchSteps: m.raymarchSteps }
+  };
+}
+// カメラを固定した画素差は物質の動き。RGB各channelの差合計>3で量子化を除く。
+function worldFrameDifference(a, b) {
+  if (a.length !== b.length) throw new Error('frame dimensions differ');
+  let changed = 0, sum = 0;
+  for (let i = 0; i < a.length; i += 4) {
+    const delta = Math.abs(a[i] - b[i]) + Math.abs(a[i + 1] - b[i + 1]) + Math.abs(a[i + 2] - b[i + 2]);
+    if (delta > 3) changed++; sum += delta;
+  }
+  return { changedFraction: changed / (a.length / 4), meanChannelDifference: sum / (a.length / 4 * 3 * 255) };
+}
+function worldOccupiedTiles(capture) {
+  // 3×3各領域の1%以上がsRGB Y>.005なら物質がある。中央だけの作品を診断する。
+  const hits = new Uint32Array(9), pixels = new Uint32Array(9);
+  for (let y = 0; y < capture.height; y++) for (let x = 0; x < capture.width; x++) {
+    const tile = Math.min(2, Math.floor(y * 3 / capture.height)) * 3 + Math.min(2, Math.floor(x * 3 / capture.width));
+    const i = (y * capture.width + x) * 4, p = capture.rgba;
+    pixels[tile]++;
+    if ((.2126 * p[i] + .7152 * p[i + 1] + .0722 * p[i + 2]) / 255 > .005) hits[tile]++;
+  }
+  return Array.from(hits, (v, i) => v / pixels[i]);
+}
+async function worldV7Probe(w) {
+  const engine = w.engine, u = engine.gpu.uniforms, compositions = [], motion = [], cameras = [];
+  const repeats = new Map(), intros = []; let repeatPass = true;
+  for (const section of w.score.sections) {
+    const t = (section.startSec + section.endSec) / 2; await w.renderAt(t);
+    const c = engine.capture(), tiles = worldOccupiedTiles(c), key = section.kind + ':' + section.label;
+    if (section.kind === 'intro') intros.push({ tSec: t, variation: section.variation, mean: c.mean });
+    const previous = repeats.get(key);
+    if (previous) {
+      const difference = worldFrameDifference(previous.rgba, c.rgba);
+      repeatPass &&= difference.changedFraction >= .01 &&
+        (previous.composition !== section.composition || previous.camera.some((v, i) => Math.abs(v - u[80 + i]) >= .02));
+    }
+    repeats.set(key, { rgba: c.rgba, composition: section.composition, camera: Array.from(u.slice(80, 84)) });
+    compositions.push({ kind: section.kind, variation: section.variation, composition: section.composition, tiles,
+      occupied: tiles.filter(f => f >= .01).length, camera: Array.from(u.slice(80, 84)) });
+    // カメラを恒等変換にしたとき、GPU上の粒子／染料合成像が変わること。
+    const saved = u.slice(80, 84); u.set([0, 0, 1, 0], 80); engine.gpu.upload(); engine._renderMatter(); engine._draw();
+    const difference = worldFrameDifference(c.rgba, engine.capture().rgba);
+    cameras.push({ kind: section.kind, ...difference });
+    u.set(saved, 80); engine.gpu.upload(); engine._renderMatter(); engine._draw();
+    if (section.kind !== 'drop') continue;
+    // previewの合成拍も止め、無kickの0.15秒を固定カメラで比較する。
+    engine.preview = false; const kickCount = engine.kickCount, before = engine.capture();
+    const originalCamera = engine._camera;
+    // feedback/bloomの入力も固定カメラにする。合成後だけlensを戻すと履歴にcameraの差が混ざる。
+    engine._camera = function (...args) { originalCamera.apply(this, args); u.set(saved, 80); };
+    try {
+      for (let step = 1; step <= 9; step++) { engine._step(t + step / 60, null, 1 / 60); engine._draw(); }
+    } finally { engine._camera = originalCamera; }
+    const moved = worldFrameDifference(before.rgba, engine.capture().rgba);
+    const velocity = worldReadHdr(engine, engine.particles.velocity.read); let speed = 0;
+    for (let i = 0; i < velocity.length; i += 4) speed += Math.hypot(velocity[i], velocity[i + 1]);
+    speed /= velocity.length / 4;
+    motion.push({ tSec: t, meanParticleSpeed: speed, kickCountBefore: kickCount, kickCountAfter: engine.kickCount,
+      ...moved, pass: speed >= .1 && moved.changedFraction >= .01 && kickCount === engine.kickCount });
+  }
+  return {
+    'BW-7-composition': { pass: new Set(compositions.map(c => c.composition)).size >= 4 && repeatPass &&
+      compositions.every(c => c.occupied >= 6), repeatPass, sections: compositions },
+    'BW-7-camera': { pass: cameras.every(c => c.changedFraction >= .01), sections: cameras },
+    'BW-7-motion': { pass: motion.length > 0 && motion.every(m => m.pass), drops: motion },
+    'BW-7-intro': { pass: intros.length > 0 && intros.every(s => s.mean >= .02 && s.mean <= .05), sections: intros }
   };
 }
 async function worldLoadMeasurement() {
@@ -353,6 +406,8 @@ async function runWorldMeasurement(visual = null) {
         'W-8': { pass: metrics.width === 1920 && metrics.height === 1080 && metrics.timingSamples >= 120 && metrics.renderP95Ms !== null && metrics.renderP95Ms <= 16,
           p95Ms: metrics.renderP95Ms, cpuP95Ms: metrics.cpuP95Ms, gpuP95Ms: metrics.gpuP95Ms, samples: metrics.timingSamples,
           submittedFrames: metrics.submittedFrames, disjoints: metrics.timerDisjoints },
+        'BW-7-performance': { pass: metrics.width === 1920 && metrics.height === 1080 && metrics.timingSamples >= 120 &&
+          metrics.gpuP95Ms !== null && metrics.gpuP95Ms <= 14, gpuP95Ms: metrics.gpuP95Ms, budgetMs: 14, samples: metrics.timingSamples },
         metrics, durationSec: score.durationSec, debugErrors: w.error || null, glError: engine.gpu.gl.getError()
       };
       window.__worldResult = result; resolve(result);

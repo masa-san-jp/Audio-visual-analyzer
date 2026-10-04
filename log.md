@@ -1,3 +1,37 @@
+## 2026-10-04 — [WORLD-7] 構図と動き
+
+### 作業内容
+- `js/world/score.js`: kind別の初回構図をhorizon／arms／vortices／ribbons／streamsへ分離。kind/label再登場ごとに5構図を循環し、5回後に構図が戻ってもcamera方向・角度を変える。既存formId・paletteRotation・variation・三色・強度の契約を保持。
+- `js/world/gl-util.js`: 共通の世界座標／2D camera変換、2〜4中心の逆回転渦、ペア間の流線、斜めリボン・横断流・層状帯・画面外へ伸びる螺旋の流れと細い染料注入曲線を追加。UBOを80→108 floatsへ拡張（lens=80、composition=84、vortices=88、shot=104）。既存noise3は変更していない。
+- `js/world/world-engine.js`: 染料の合成を粒子と同じpan／zoom／rotationに追従。smoothstepで移動を加減速し、dropの小節頭で切り返す。seedとkick通番の整数hashで三分割位置付近に新渦ペア／shockを生成し、第二dropは4中心を交互に更新。旧3D camera／shock診断uniformは互換のため保持。previewは解析済み拍格子からkickを生成し、ライブはMFSの低域onsetを使用。metricsにcomposition／camera2D／kickCountを追加。
+- `js/world/fluid.js`: 中央固定の力・円形注入を構図の速度場／細い曲線／移動kick中心へ置換。速度場480×270、染料960×540、速度格子単位の移流、粘性4反復・圧力20反復、noiseで切れる薄い注入、境界dye burst×14を維持。outroの横断流はゆっくり散逸させる。
+- `js/world/particles.js`: 構図に沿う全画面生成、継続する渦・ペア間の加速した流れ、移動中心の薄いshock、kickごとの4%再供給を追加。粒子262,144個、全件描画、alphaの`.06+.10*s.z`、1080pのpoint size上限8pxを保持。速度方向も2D cameraで回転する。introは8〜12%の鋭い粒子と細い霧、outroは再供給を止めてゆっくり消える。
+- `js/world/post.js`: introだけ露出gain上限を24へ上げ、薄いHDR霧が黒に潰れることを防ぐ。drop history weight=0／他kind=.3、soft feedback edge、既存bloom／ACES／三色の役割交換は保持。
+- `tests/browser/world.test.js`・`tests/world/measure.mjs`: 指定されたBW-3-coverage／BW-4-sparks／BW-4-accentのlegacy判定を撤回し、BW-6-coverage（平均5〜25%）を唯一の被覆合否基準として保持。BW-5-lightはtrailPixels必須を撤回して直接kickのHDR増光を検査。W-1〜W-8は閾値も含め保持。BW-7-composition／camera／motion／intro／performanceを追加。outroの112秒PNG参照を追加。
+- `tests/unit/world-score.test.mjs`: UW-23〜28で72セクションの構図変奏、seed再現・新渦ペアの交互更新、実2Dカメラの全downbeat cut、画素差／3×3占有の合成入力、preview拍kickとライブ空MFSの分離、GLSL std140配置とJS UBOの一致を検証。
+
+### 検証
+- `node tests/run.mjs --unit`: 最終158件／157成功／0失敗／1スキップ（想定U15-00異常系）、93,077ms、終了コード0。初回も157件／156成功／0失敗／1スキップ、92,746ms。手動確認で新shot uniformの配置ずれを修正し、UW-28のstd140整合テストを追加してから全件を再検証した。
+- `node --test tests/unit/world-score.test.mjs`: 最終UW-01〜28の28件成功／0失敗／0スキップ、2,239.938292ms、終了コード0。
+- UW-23: 72セクション、5構図、隣接再登場66件の構図差、5回後の同構図でもcamera差あり。UW-24: 48新渦ペア、中心数2／4、最小kick中心移動0.040199世界単位、ペア距離0.22、反復差0、mockイベント遅延0フレーム。
+- UW-25: 2D camera 30cut、最小切り返し63.0250°、UBO108 floats、速度480×270／染料960×540／粒子262,144。UW-26: 合成motion差1/9、合成占有3/9。UW-27: drop最初の1秒のpreview kick 3回、反復差0、ライブ空MFSでは境界1回のみ。UW-28: shader/JS配置一致、lens offset80／vortex offset88／shock offset104、packed kick通番1。
+- 既存UW: 120秒7,200固定ステップ、最大simulation dt=0.016666668、全境界6/6、mock MFS→uniform遅延0フレーム、96曲の三色、旧診断camera 30cutの最小角66.0781°、第二drop scale1.75／intensity1.35を保持。
+- 全`.js`／`.mjs`の最終`node --check`: 113ファイル／113成功／0失敗、終了コード0。`git diff --check`: 成功。
+- Chrome禁止に従い、追加BW-7全件、書き換えたBW-5-light、既存W-1〜8／BWは未実行。GLSL実コンパイル、file://コンソール、実画質、3帯エネルギー、intro平均輝度、実被覆、GPU p95は未測定。ユーザー提示のv6 GPU p95=10.6ms／粒子被覆16.6%は変更前の参考値で、v7の合格値ではない。
+
+### spec.md 変更
+- なし。チケットのworld実装・worldテスト・logに限定し、共有`doc/spec.md`／`README.md`、`index.html`、構想SSOT、ゴールデンは編集していない。製品仕様／READMEへの反映はレビュアー側で行う必要がある。
+
+### 備考
+- 実装: Codex gpt-6.1-sol high
+- 判断: 今回の明示的「構図と動きを設計し、決めて記録」に従い、構想§2.6とチケットを旧中央配置／旧建築テストより優先。計画の既存数値・擬似コードの失敗に合わせて閾値を調整していない。新しい画質係数は初期設計として選択し、ブラウザでの受入結果に基づく調整はしていない。
+- 判断: カメラは共通2D世界の表示変換。3Dの遮蔽／レイマーチは追加しない。kind別初回構図を[3,4,0,1,2,4]として変奏ごとに循環。panは三次smoothstep、drop切り返しは±.55rad、zoomは通常1.08・build1.05→1.50・再dropは+.16。渦中心は三分割座標±aspect/6、±1/6付近にseeded jitter、ペア距離.22、orbit半径.055、downbeat時に65%寄せて重なるコアを作る。dropの目標流速倍率1.6、intro .12、break .18、outro .08。追加FBO／パス／粒子数削減はない。
+- 判断: intro明るさは.32→.50、inkRate=.5、particle strength=.6、粒子可視選択8→12%、intro露出上限24（他kindは2のまま）。mean Y=.02〜.05達成は未測定であり、BW-7-introで判定する。outroは横断流を低速にし、セクション中央より前に全物質が画面外へ去ることを避ける。
+- 判断: 音声なしpreviewのkickは拍格子、ライブはMFS onsetで生成。イベント列が違うので両者の画素一致は保証しない（構想§6の次段階）。同じ曲／seed／同じイベント列で渦位置と再構築は再現する。旧診断cameraのテストを残し、実描画2D cameraはUW-25／BW-7-cameraで別に検査。
+- 計測細部: 被覆は従来と同じ合成前後HDR Y差>1e-4、各section中央＋参照7時刻を等重み平均。112秒追加によりv6の6参照時刻との平均値比較は標本数が異なる。最大値は合否に使用しない。構図は3×3各tileでY>.005の画素が1%以上ある領域が6個以上、構図種類4以上、再登場の画素差1%以上。cameraは恒等変換との差1%以上。motionはcameraをfeedback/bloom入力の段階から固定し、kickなし0.15秒で粒子平均速度≥.1世界単位/秒・RGB差合計>3の画素≥1%。これらの追加補助基準は目視のcinematic品質を代替しない。
+- レビュアー確認: 実GPU環境で`node tests/world/measure.mjs`（必要なら既存WORLD_CHROME_WRAPPER）を実行し、GLSLコンパイル／console error 0、W-1〜8、BW-6-coverage平均5〜25%、BW-7全件、とくに1080p GPU p95≤14msを確認すること。7／20／30.3／45／62／90／112秒と各section中央で、全画面の構図差、第二dropの4中心／斜め流線、varying kick、kick間の高速渦、薄い染料フィラメント、introの平均輝度.02〜.05と実細部（W-2各帯≥10%）、outroの散逸、白飛び≤2%を画像・動画で確認すること。失敗した計画基準は係数を勝手に調整せず、該当節・選択肢・推奨案を報告すること。
+- worktreeには開始時から`tests/world/output/report.json`と既存PNG群の未コミット差分があった。これらは本実装では編集／再生成していない。Chrome起動、commit／push／PR作成は行っていない。
+
 ## 2026-10-04 — [WORLD-6] 抽象・流体・粒子・光への転換
 
 ### 作業内容

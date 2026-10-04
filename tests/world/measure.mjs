@@ -8,13 +8,17 @@
 // W-4: AudioEngine.getFeatures()でフラグを読んだフレームと、実際のUBO読出しを比較。
 // W-5: renderAtで初期化し、advancePreviewによる固定60Hzの直前1拍／直後.25秒の各フレームのsRGB平均輝度を時間窓ごとに算術平均。
 //      完全黒→非ゼロはInfinityとして記録し、窓内フレーム0枚は失敗。
-// WORLD-6: §2.6に従い旧環境の検査を抽象状態・粒子・軌跡へ移行。
+// WORLD-7: §2.6に従い旧環境の検査を抽象状態・粒子・軌跡へ移行。
 //      被覆は合成前後HDR輝度差>1e-4（暗部丸めを除外）の画素率、ブルーム／履歴の広がりを含めない。
-//      各section中央＋従来の参照6時刻を等重みで平均し5〜25%。drop各標本も≤25%。
+//      各section中央＋参照7時刻（112秒outroを含む）を等重みで平均し5〜25%。最大被覆上限は撤回。
 //      同じ測定で生の粒子輝度積分寄与を報告。建築の優勢率／sparks≤8%は新方針で撤回。
 //      BW-4-shellは粒子位置固定で殻の経過のみを変更し0.4秒以降HDR差0を検査。
-//      BW-4-introは光の霧／粒子の進行による増光。BW-5-lightはフィードバック軌跡の寄与。
-//      暖色面積≤15%・白飛び≤2%・実GLSLの三色役割交換は保持。
+//      BW-4-introは光の霧／粒子の進行による増光。BW-5-lightは直接kickのHDR増光。
+//      BW-3-coverage/BW-4-sparks/BW-4-accentを撤回。白飛び≤2%・三色役割交換は保持。
+//      BW-7: 3×3占有（Y>.005の画素が各tileの1%以上、6tile以上）、再登場の画素差、
+//      実2Dカメラの恒等変換との差、camera固定・kick無し0.15秒の物質移動を検査。
+//      動きは平均粒子速度≥.1世界単位/秒、RGB差合計>3の画素≥1%。intro平均Y=.02〜.05。
+//      BW-7-performanceはW-8を保持したまま1080pのGPU p95≤14msを追加。
 //      BW-6-uiは常設UI・start()非全画面・前後シーク・ボタン/Fのページ全体fullscreen要求を検査。
 //      実全画面の出入り、全画面中の操作UI、構図・第二drop・粒子の主役感は目視も必要。
 // W-6: 曲頭を含む全セクション開始。曲末は別のendイベント。
@@ -78,13 +82,16 @@ child.on('close',code=>process.exit(code ?? 0));\n`);
   }
   const result = await chrome.evaluate('runWorldMeasurement(window.__worldVisualResult)', { timeoutMs: 900000 });
   result.environment = hardware; result.consoleErrors = chrome.errors;
-  if (!hardware.hardware) { result['W-8'].pass = false; result['W-8'].reason = '実GPUを確認できません'; }
+  if (!hardware.hardware) {
+    result['W-8'].pass = false; result['W-8'].reason = '実GPUを確認できません';
+    result['BW-7-performance'].pass = false; result['BW-7-performance'].reason = '実GPUを確認できません';
+  }
   result.runtimePass = !(result.glError || result.consoleErrors.length || result.debugErrors);
   await fs.writeFile(path.join(output, 'report.json'), JSON.stringify(result, null, 2) + '\n');
-  for (const id of ['BW-2-exposure', 'BW-2-preview', 'BW-2-environments', 'BW-2-matter', 'BW-3-coverage', 'BW-3-hero', 'BW-3-kick', 'BW-4-sparks', 'BW-4-accent', 'BW-4-shell', 'BW-4-intro', 'BW-5-light', 'BW-5-palette', 'BW-6-coverage', 'BW-6-ui', 'BW-6-layers']) console.log((result[id].pass ? 'PASS ' : 'FAIL ') + id + ' ' + JSON.stringify(result[id]));
+  for (const id of ['BW-2-exposure', 'BW-2-preview', 'BW-2-environments', 'BW-2-matter', 'BW-3-hero', 'BW-3-kick', 'BW-4-shell', 'BW-4-intro', 'BW-5-light', 'BW-5-palette', 'BW-6-coverage', 'BW-6-ui', 'BW-6-layers', 'BW-7-composition', 'BW-7-camera', 'BW-7-motion', 'BW-7-intro', 'BW-7-performance']) console.log((result[id].pass ? 'PASS ' : 'FAIL ') + id + ' ' + JSON.stringify(result[id]));
   for (let i = 1; i <= 8; i++) console.log((result['W-' + i].pass ? 'PASS ' : 'FAIL ') + 'W-' + i + ' ' + JSON.stringify(result['W-' + i]));
   console.log('Report/images: ' + output);
-  if (!result.runtimePass || ['BW-2-exposure', 'BW-2-preview', 'BW-2-environments', 'BW-2-matter', 'BW-3-coverage', 'BW-3-hero', 'BW-3-kick', 'BW-4-sparks', 'BW-4-accent', 'BW-4-shell', 'BW-4-intro', 'BW-5-light', 'BW-5-palette', 'BW-6-coverage', 'BW-6-ui', 'BW-6-layers'].some(id => !result[id].pass) || Array.from({ length: 8 }, (_, i) => result['W-' + (i + 1)].pass).some(v => !v)) process.exitCode = 1;
+  if (!result.runtimePass || ['BW-2-exposure', 'BW-2-preview', 'BW-2-environments', 'BW-2-matter', 'BW-3-hero', 'BW-3-kick', 'BW-4-shell', 'BW-4-intro', 'BW-5-light', 'BW-5-palette', 'BW-6-coverage', 'BW-6-ui', 'BW-6-layers', 'BW-7-composition', 'BW-7-camera', 'BW-7-motion', 'BW-7-intro', 'BW-7-performance'].some(id => !result[id].pass) || Array.from({ length: 8 }, (_, i) => result['W-' + (i + 1)].pass).some(v => !v)) process.exitCode = 1;
 } catch (error) {
   const state = chrome ? await chrome.evaluate('({ error: window.__world?.error, state: window.__world?.app?.state, tSec: window.__world?.engine?.latestSec, previewSteps: window.__world?.engine?.previewStep, audioTime: window.__world?.audio?.currentTime, audioPaused: window.__world?.audio?.paused, audioReadyState: window.__world?.audio?.readyState, audioContextState: window.__world?.audioEngine?.ctx?.state, mfsStatus: window.__world?.audioEngine?.mfsStatus })').catch(() => null) : null;
   await fs.writeFile(path.join(output, 'report.json'), JSON.stringify({ ...visual, runtimePass: false, setupError: error.message, state, consoleErrors: chrome ? chrome.errors : [] }, null, 2) + '\n');

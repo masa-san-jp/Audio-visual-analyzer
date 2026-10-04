@@ -8,16 +8,18 @@ void main(){
  vec2 dx=1./vec2(textureSize(field,0)), uv=vUv;
  vec4 c=texture(field,uv),l=texture(field,uv-vec2(dx.x,0)),r=texture(field,uv+vec2(dx.x,0));
  vec4 b=texture(field,uv-vec2(0,dx.y)),t=texture(field,uv+vec2(0,dx.y));
- vec2 q=(uv-.5)*vec2(screen.x/screen.y,1.); float radius=length(q); vec2 radial=q/max(radius,.002);
+ vec2 q=(uv-.5)*vec2(screen.x/screen.y,1.);
  if(mode==0){ // 半ラグランジュ移流。速度は格子セル/秒。
    frag=texture(field,clamp(uv-clock.y*texture(velocity,uv).xy*dx,dx*.5,1.-dx*.5));
    frag.xy*=exp(-clock.y*(.12+story.w*1.8));
- }else if(mode==1){ // 低域の放射力と、中心への収束／ドロップの爆散。
+ }else if(mode==1){ // 構図の流線と、キック位置からの衝撃。
    vec2 v=c.xy;
-   float wave=exp(-pow((radius-.18-(1.-hit.w)*.8)*15.,2.));
-   v+=clock.y*(radial*(hit.x*100.*exp(-radius*4.)+hit.w*180.*wave-mood.y*32.*exp(-radius*2.)));
-   // 音がなくても微小な種渦だけを与える。実際の渦成長は後段の渦度閉じ込め。
-   v+=clock.y*vec2(-q.y,q.x)*(2.+audio.x*16.)*exp(-radius*2.);
+   vec2 d=q-shot.yz;float distance=max(.002,length(d));
+   vec2 desired=worldFlow(q)*(story.x==2.?1.6:story.x==0.?.12:story.x==3.?.18:story.x==4.?.08:.65);
+   // 速度格子のセル/秒へ変換。投影後も渦ペア間の剪断を維持する。
+   vec2 cells=vec2(textureSize(velocity,0))/vec2(screen.x/screen.y,1.);
+   v+=clock.y*(desired*cells-v)*(story.x==2.?5.:1.4);
+   if(story.x==2.)v+=clock.y*d/distance*(worldShock(q)*180.+hit.x*100.*exp(-distance*12.));
    if(uv.x<dx.x||uv.x>1.-dx.x) v.x=0.; if(uv.y<dx.y||uv.y>1.-dx.y) v.y=0.;
    frag=vec4(clamp(v,vec2(-120),vec2(120)),0,1);
  }else if(mode==2){ // curl(v)
@@ -39,13 +41,12 @@ void main(){
    vec3 dye=texture(field,clamp(uv-clock.y*texture(velocity,uv).xy*dv,dx*.5,1.-dx*.5)).rgb;
    dye*=exp(-clock.y*(story.x==4.?1.5:.25));
    float angle=atan(q.y,q.x)+camera.x;
-   float r=.23+.035*sin(angle*3.+clock.x*.3);
    // 細い注入とノイズの途切れで、渦に巻かれて細い筋（フィラメント）が生まれるようにする
-   float plume=exp(-pow((radius-r)/.012,2.))*pow(.5+.5*cos(angle*3.+story.z),4.)*smoothstep(.35,.75,noise3(vec3(q*22.,clock.x*.6)));
-   float burst=exp(-pow((radius-.08-(1.-hit.w)*.45)/.018,2.))*(.4+.6*noise3(vec3(q*30.,7.)));
-   float inkRate=story.x==0.?.15:story.x==3.?.6:story.x==4.?0.:1.;
+   float plume=worldFilament(q)*smoothstep(.35,.75,noise3(vec3(q*22.,clock.x*.6)));
+   float burst=worldShock(q)*(.4+.6*noise3(vec3(q*30.,7.)));
+   float inkRate=story.x==0.?.5:story.x==3.?.6:story.x==4.?0.:1.;
    dye+=clock.y*inkRate*(1.+audio.z*4.+hit.x*12.)*plume*mix(worldColor(0.),worldColor(1.),.5+.5*sin(angle));
-   dye+=clock.y*(hit.w*14.*burst+hit.x*8.*exp(-radius*8.))*worldColor(story.y>1.5?1.:2.);
+   dye+=clock.y*(hit.w*14.*burst+hit.x*8.*burst)*worldColor(story.y>1.5?1.:2.);
    frag=vec4(min(dye,vec3(32)),1);
  }else { // 暗黙的粘性拡散: 初期速度を auxiliary に固定して反復。
    float a=clock.y*mood.w*35.; frag=vec4((texture(auxiliary,uv).xy+a*(l.xy+r.xy+b.xy+t.xy))/(1.+4.*a),0,1);

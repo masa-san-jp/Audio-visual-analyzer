@@ -23,6 +23,10 @@ layout(std140) uniform World {
  vec4 oldEye, oldRight, oldUp, oldForward;
  vec4 accent; // rgb: 第三色、w: drop開始時刻
  vec4 environment; // 抽象状態ID、変奏スケール、予約、予約
+ vec4 lens; // 2Dカメラ: pan.xy、zoom、rotation
+ vec4 composition; // 構図ID、曲seed、中心数、構図位相
+ vec4 vortices[4]; // xy: 世界座標、z: 回転方向、w: 生成時刻
+ vec4 shot; // 小節頭の経過秒、最新kickの中心xy、kick通番
 };
 // 曲の三色から照明役割を選ぶ。第二DROPだけアクセントとsecondaryの役割を交換する。
 vec3 worldColor(float role){
@@ -46,6 +50,61 @@ float noise3(vec3 p){vec3 i=floor(p),f=fract(p);f=f*f*(3.-2.*f);
  return mix(mix(mix(hash31(i),hash31(i+vec3(1,0,0)),f.x),mix(hash31(i+vec3(0,1,0)),hash31(i+vec3(1,1,0)),f.x),f.y),
   mix(mix(hash31(i+vec3(0,0,1)),hash31(i+vec3(1,0,1)),f.x),mix(hash31(i+vec3(0,1,1)),hash31(i+vec3(1,1,1)),f.x),f.y),f.z);}
 mat2 rot(float a){ return mat2(cos(a),sin(a),-sin(a),cos(a)); }
+// 粒子と染料は同じ世界に置き、表示時だけ共通のカメラを適用する。
+vec2 worldUv(vec2 p){return p/vec2(screen.x/screen.y,1.)+.5;}
+vec2 worldView(vec2 p){return rot(-lens.w)*(p-lens.xy)*lens.z;}
+vec2 worldPosition(vec2 uv){return rot(lens.w)*((uv-.5)*vec2(screen.x/screen.y,1.))/lens.z+lens.xy;}
+vec2 worldCenter(int i){
+ vec4 v=vortices[i];float age=max(0.,clock.z-v.w);
+ vec2 orbit=vec2(cos(age*.9+float(i)*2.),sin(age*.9+float(i)*2.))*.055;
+ // 小節頭だけペアを寄せ、再び離す。原点への固定収束はしない。
+ vec2 midpoint=(vortices[i-i%2].xy+vortices[i-i%2+1].xy)*.5;
+ return mix(v.xy+orbit,midpoint,.65*exp(-shot.x*5.));
+}
+vec2 worldFlow(vec2 p){
+ float id=composition.x,t=clock.x;
+ if(id==0.||story.x==2.){
+  vec2 f=vec2(0);
+  for(int i=0;i<4;i++){
+   if(float(i)>=composition.z)break;
+   vec2 d=p-worldCenter(i);float r2=dot(d,d)+.018;
+   f+=vec2(-d.y,d.x)*vortices[i].z*.075/r2;
+  }
+  // ペアの間を貫く細い流線。kickの合間も力は途切れない。
+  vec2 axis=normalize(vortices[1].xy-vortices[0].xy+vec2(.001));
+  vec2 d=p-(vortices[0].xy+vortices[1].xy)*.5;
+  if(id==1.)f+=vec2(.4,.2);
+  return f+axis*.45*exp(-pow(dot(d,vec2(-axis.y,axis.x))/.08,2.));
+ }
+ if(id==1.)return vec2(.55,.28)+vec2(.12*sin(p.y*13.-t),.16*cos(p.x*8.-t));
+ if(id==2.)return vec2(.75,.06*sin(p.x*9.-t*2.));
+ if(id==3.)return vec2(.12+.06*cos(p.y*18.),.018*sin(p.x*5.+t*.3));
+ vec2 d=p-vortices[0].xy;float r=max(.04,length(d));
+ return vec2(-d.y,d.x)/r*.5-d*(story.x==1.?.35+clock.w*.6:-.12);
+}
+// 太い円盤の代わりに細い曲線を注入。armは世界の端まで伸びる。
+float worldFilament(vec2 p){
+ float id=composition.x,t=clock.x,a=composition.w;
+ if(id==0.){
+  float f=0.;
+  for(int i=0;i<4;i++){
+   if(float(i)>=composition.z)break;
+   vec2 d=p-worldCenter(i);float r=length(d);
+   float phase=atan(d.y,d.x)*2.+r*36.-t*2.+float(i);
+   f+=exp(-pow(sin(phase)*r/.009,2.))*exp(-r*3.);
+  }
+  return min(1.,f);
+ }
+ if(id==1.)return exp(-pow(sin((p.y-p.x*.48+.035*sin(p.x*8.-t))*24.+a)/.11,2.));
+ if(id==2.)return exp(-pow(sin((p.y+.035*sin(p.x*9.-t))*32.+a)/.10,2.));
+ if(id==3.)return exp(-pow(sin((p.y+.025*sin(p.x*5.+t*.3))*48.+a)/.14,2.));
+ vec2 d=p-vortices[0].xy;float r=length(d);
+ return exp(-pow(sin(atan(d.y,d.x)*3.+r*22.-t*1.3+a)/.10,2.));
+}
+float worldShock(vec2 p){
+ float age=worldShockAge(),r=length(p-shot.yz);
+ return exp(-pow((r-(.025+age*1.6))/.018,2.))*worldShockFade(age);
+}
 `;
 class WorldGL {
   constructor(canvas) {
@@ -57,7 +116,7 @@ class WorldGL {
     this.linearFloat = !!this.gl.getExtension('OES_texture_float_linear');
     this.textures = []; this.fbos = []; this.programs = [];
     this.vao = this.gl.createVertexArray(); this.gl.bindVertexArray(this.vao);
-    this.uniforms = new Float32Array(80);
+    this.uniforms = new Float32Array(108);
     this.ubo = this.gl.createBuffer();
     this.gl.bindBuffer(this.gl.UNIFORM_BUFFER, this.ubo);
     this.gl.bufferData(this.gl.UNIFORM_BUFFER, this.uniforms.byteLength, this.gl.DYNAMIC_DRAW);

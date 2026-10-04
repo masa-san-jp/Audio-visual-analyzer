@@ -67,7 +67,8 @@ void main(){
  c+=bloom*(.35+worldDropFlare()*.12);
  vec4 meter=texelFetch(exposure,ivec2(0),0);float average=exp(meter.x/max(1.,meter.y));
  float target=.08*min(1.5,mood.x)*(story.x==2.?1.+min(2.,story.y-1.)*.25:1.);
- float gain=clamp(target/max(.0001,average),.035,2.);
+ // 静かな細い霧を黒へ潰さない。introだけ低いHDR入力を持ち上げ、他kindの露出は維持。
+ float gain=clamp(target/max(.0001,average),.035,story.x==0.?24.:2.);
  float vignette=1.-smoothstep(.35,1.1,length((uv-.5)*vec2(screen.x/screen.y,1.)))*(.18+story.w*.72);
  c=aces(c*gain*vignette*(1.+hit.w*.18));
  c=pow(c,vec3(1.13));float lum=dot(c,vec3(.2126,.7152,.0722));c=max(vec3(0),mix(vec3(lum),c,1.06));

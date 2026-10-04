@@ -1,4 +1,4 @@
-// 目的 — WORLD-6 の決定性・全境界・モチーフ・先読みを検証する — 構想 §4
+// 目的 — WORLD-7 の決定性・全境界・モチーフ・先読みを検証する — 構想 §4
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -440,4 +440,142 @@ test('UW-22 WORLD-6 全画面は明示操作のみ・シーク後は位置を維
   startup.app.canvas.requestFullscreen = () => { throw new Error('forced fullscreen'); };
   await startup.app.start(); assert.equal(startup.app.audio.currentTime, 0);
   console.log('UW-22 explicitFullscreenRequests=1 exits=1 seekForwardSec=45 seekBackwardSec=10 defaultStartFullscreenRequests=0');
+});
+
+
+test('UW-23 WORLD-7 構図: 全kindに独立の初回構図・毎再登場で構図かcamera方向を変える', () => {
+  const kinds = ['intro', 'build', 'drop', 'break', 'outro', 'main'];
+  const map = { ...fixture, durationSec: 72, sections: Array.from({ length: 72 }, (_, i) =>
+    ({ startSec: i, endSec: i + 1, kind: kinds[i % 6], label: 'A' })) };
+  const score = compile(map, 11), previous = new Map();
+  assert.equal(new Set(score.sections.slice(0, 6).map(s => s.composition)).size, 5);
+  for (const section of score.sections) {
+    const before = previous.get(section.kind);
+    if (before) {
+      assert.notEqual(section.composition, before.composition);
+      assert.equal(section.formId, before.formId); assert.equal(section.paletteRotation, before.paletteRotation);
+      assert.equal(section.compositionSeed, before.compositionSeed);
+    }
+    previous.set(section.kind, section);
+  }
+  assert.deepEqual(score, compile(map, 11));
+  const { engine } = worldTestEngine();
+  const first = score.sections[2], repeat = score.sections[32];
+  assert.equal(first.composition, repeat.composition);
+  engine._camera(first, first.startSec + .4, .4, false, false); const a = engine.gpu.uniforms.slice(80, 84);
+  engine._camera(repeat, repeat.startSec + .4, .4, false, false); const b = engine.gpu.uniforms.slice(80, 84);
+  assert.notDeepEqual(a, b);
+  console.log('UW-23 sections=72 distinctCompositions=5 adjacentRepeatDifferences=66 fiveRepeatCameraDifference=true');
+});
+test('UW-24 WORLD-7 kick: 同フレームに決定的な新渦ペア・非kick時の固定中心・交互の更新', () => {
+  const { engine } = worldTestEngine(), u = engine.gpu.uniforms;
+  const features = new (loadClassic(['js/mfs-const.js', 'js/mfs-view.js']).get('MfsFrameView'))();
+  features.raw[loadClassic(['js/mfs-const.js']).get('MFS_LAYOUT').ONSET_FLAGS] = 1;
+  let minimumShift = Infinity; const counts = [];
+  for (const section of engine.score.sections.filter(s => s.kind === 'drop')) {
+    const series = () => {
+      engine.setScore(engine.score); engine._step(section.startSec, null, 0);
+      assert.equal(engine.kickCount, 1); assert.equal(u[31], 0); counts.push(u[86]);
+      const samples = [];
+      for (let i = 1; i <= 12; i++) {
+        const t = section.startSec + i * .1, before = u.slice(88, 104), center = u.slice(105, 107);
+        engine._step(t, features, 0);
+        assert.equal(u[8], 1); assert.equal(u[31], 0); assert.equal(engine.kickCount, i + 1);
+        const shift = Math.hypot(u[105] - center[0], u[106] - center[1]);
+        minimumShift = Math.min(minimumShift, shift); assert.ok(shift > 0);
+        assert.ok(Math.abs(u[105]) > .15); assert.ok(Math.abs(u[106]) > .1);
+        const pair = section.vortexCount === 4 ? i % 2 * 2 : 0, offset = 88 + pair * 4;
+        assert.ok(Math.abs(Math.hypot(u[offset] - u[offset + 4], u[offset + 1] - u[offset + 5]) - .22) < 1e-6);
+        if (section.vortexCount === 4) {
+          const untouched = 88 + (pair === 0 ? 2 : 0) * 4;
+          assert.deepEqual(u.slice(untouched, untouched + 8), before.slice(untouched - 88, untouched - 80));
+        }
+        const kicked = u.slice(88, 108); samples.push(Array.from(kicked));
+        engine._step(t + .05, null, 0);
+        assert.deepEqual(u.slice(88, 104), kicked.slice(0, 16));
+        assert.deepEqual(u.slice(105, 108), kicked.slice(17, 20));
+      }
+      return samples;
+    };
+    assert.deepEqual(series(), series());
+  }
+  assert.deepEqual(counts, [2, 2, 4, 4]);
+  console.log('UW-24 kickPairs=48 counts=2/4 minimumCenterShift=' + minimumShift.toFixed(6) +
+    ' pairSeparation=0.22 deterministicDifference=0 eventLatencyFrames=0');
+});
+test('UW-25 WORLD-7 2D camera: 全小節頭30度以上のcut・kind別pan/zoom/rotation', () => {
+  const { engine } = worldTestEngine(), u = engine.gpu.uniforms;
+  let minimumAngle = Infinity, cuts = 0;
+  for (const section of engine.score.sections.filter(s => s.kind === 'drop')) {
+    engine.setScore(engine.score);
+    for (const t of engine.score.downbeats.filter(t => t > section.startSec + .01 && t < section.endSec)) {
+      engine._step(t - .001, null, 0); const angle = u[83];
+      engine._step(t, null, 0);
+      const delta = Math.abs(u[83] - angle) * 180 / Math.PI;
+      minimumAngle = Math.min(minimumAngle, delta); assert.ok(delta >= 30); cuts++;
+      assert.equal(u[104], 0);
+    }
+  }
+  for (const section of engine.score.sections) {
+    engine._camera(section, section.startSec, 0, true, false); const start = u.slice(80, 84);
+    engine._camera(section, (section.startSec + section.endSec) / 2, .5, false, false);
+    assert.notDeepEqual(u.slice(80, 84), start);
+    for (const value of u.slice(80, 84)) assert.ok(Number.isFinite(value));
+    assert.ok(u[82] > 0);
+  }
+  assert.equal(u.length, 108);
+  assert.equal(engine.fluid.velocity.read.width, 480); assert.equal(engine.fluid.velocity.read.height, 270);
+  assert.equal(engine.fluid.dye.read.width, 960); assert.equal(engine.fluid.dye.read.height, 540);
+  assert.equal(engine.particles.count, 262144);
+  console.log('UW-25 camera2DCuts=' + cuts + ' minimumCutDeg=' + minimumAngle.toFixed(4) +
+    ' uniformFloats=108 velocity=480x270 dye=960x540 particles=262144');
+});
+test('UW-26 WORLD-7 計測: RGB丸めを除外したmotion差・画面3×3占有', () => {
+  const difference = measurement.get('worldFrameDifference'), occupied = measurement.get('worldOccupiedTiles');
+  const before = new Uint8Array(9 * 4), after = new Uint8Array(before.length);
+  after[0] = 3; after[4] = 4;
+  assert.equal(difference(before, after).changedFraction, 1 / 9);
+  const rgba = new Uint8Array(9 * 9 * 4);
+  for (let y = 0; y < 3; y++) for (let x = 0; x < 9; x++) rgba[(y * 9 + x) * 4 + 1] = 255;
+  assert.deepEqual(occupied({ width: 9, height: 9, rgba }), [1, 1, 1, 0, 0, 0, 0, 0, 0]);
+  assert.throws(() => difference(before, rgba), /dimensions/);
+  console.log('UW-26 syntheticMotionChanged=1/9 syntheticOccupiedTiles=3/9');
+});
+
+test('UW-27 WORLD-7 preview: 拍格子でkickを生成・反復一致・ライブの空MFSでは生成しない', async () => {
+  const { engine } = worldTestEngine(), section = engine.score.sections.find(s => s.kind === 'drop');
+  engine.fluid.step = () => {}; engine.particles.step = () => {}; engine._renderMatter = () => {};
+  engine.post.stepFeedback = () => {}; engine._draw = () => {};
+  const t = section.startSec + 1;
+  await engine.renderAt(t); const count = engine.kickCount, state = engine.gpu.uniforms.slice(88, 108);
+  assert.ok(count >= 2); assert.equal(engine.mfsFrames, 0);
+  await engine.renderAt(t); assert.equal(engine.kickCount, count); assert.deepEqual(engine.gpu.uniforms.slice(88, 108), state);
+  engine.setScore(engine.score); engine._step(section.startSec, null, 0);
+  engine._step(t, null, 1 / 60); assert.equal(engine.kickCount, 1); assert.equal(engine.mfsFrames, 0);
+  console.log('UW-27 previewKicksInFirstSecond=' + count + ' repeatDifference=0 liveNullMfsKicks=1(boundary)');
+});
+
+test('UW-28 WORLD-7 std140契約: GLSLの各vec4配列とJSのcamera/渦/衝撃の配置が一致', () => {
+  const source = loadClassic(['js/world/gl-util.js']).get('WORLD_GLSL');
+  const block = source.match(/uniform World \{([\s\S]*?)\};/)[1].replace(/\/\/[^\n]*/g, '');
+  const offsets = new Map(); let offset = 0;
+  for (const declaration of block.matchAll(/vec4\s+([^;]+);/g)) {
+    for (const item of declaration[1].split(',')) {
+      const field = item.trim().match(/^(\w+)(?:\[(\d+)\])?$/);
+      assert.ok(field, item); offsets.set(field[1], offset); offset += 4 * (field[2] ? Number(field[2]) : 1);
+    }
+  }
+  const { engine } = worldTestEngine(), u = engine.gpu.uniforms;
+  assert.equal(offset, u.length);
+  const section = engine.score.sections.find(s => s.kind === 'drop');
+  engine._step(section.startSec, null, 0);
+  assert.deepEqual(u.slice(offsets.get('lens'), offsets.get('lens') + 4), new Float32Array(engine.metrics().camera2D));
+  assert.equal(u[offsets.get('composition')], section.compositionId);
+  assert.equal(u[offsets.get('composition') + 2], section.vortexCount);
+  assert.ok(Math.abs(u[offsets.get('vortices') + 2]) === 1);
+  const shot = offsets.get('shot');
+  assert.equal(u[shot + 3], engine.kickCount);
+  assert.ok(Math.abs(u[shot + 1]) > .15 && Math.abs(u[shot + 2]) > .1);
+  console.log('UW-28 shaderUniformFloats=' + offset + ' lensOffset=' + offsets.get('lens') +
+    ' vortexOffset=' + offsets.get('vortices') + ' shockOffset=' + shot + ' packedKickCount=' + u[shot + 3]);
 });

@@ -4,12 +4,14 @@ ${WORLD_GLSL}
 uniform sampler2D dye, velocity;
 out vec4 frag;
 void main(){
- vec2 flow=texture(velocity,vUv).xy;
- vec3 ink=texture(dye,vUv+flow*.00004).rgb;
+ vec2 uv=worldUv(worldPosition(vUv));
+ vec2 flow=texture(velocity,uv).xy;
+ vec3 ink=texture(dye,uv+flow*.00004).rgb;
  // HDR染料の細い輪郭を光へ変換する。建造物／地形／レイマーチは使わない。
  vec2 dx=1./vec2(textureSize(dye,0));
- vec3 edge=abs(texture(dye,vUv+dx).rgb-texture(dye,vUv-dx).rgb);
- frag=vec4((ink*.65+edge*.8)*mood.x,1);
+ vec3 edge=abs(texture(dye,uv+dx).rgb-texture(dye,uv-dx).rgb);
+ float valid=smoothstep(0.,.035,uv.x)*(1.-smoothstep(.965,1.,uv.x))*smoothstep(0.,.035,uv.y)*(1.-smoothstep(.965,1.,uv.y));
+ frag=vec4((ink*.65+edge*.8)*mood.x*valid,1);
 }`;
 class WorldEngine {
   constructor(canvas, seed = 11) {
@@ -23,6 +25,7 @@ class WorldEngine {
     this.velocityLoc = this.gpu.texture(this.composite, 'velocity');
     this.score = null; this.events = []; this.sectionIndex = 0; this.eventIndex = 0; this.downbeatIndex = 0;
     this.frame = 0; this.simTime = 0; this.cut = 0; this.lastDrop = -100; this.lastKick = -100; this.onFrame = null;
+    this.beatIndex = 0; this.kickCount = 0; this.lastCut = 0;
     this.emptyFeatures = new MfsFrameView();
     this.responses = new Float64Array(16384 * 7); this.responseCount = 0;
     this.cpuTimes = new Float64Array(16384); this.gpuTimes = new Float64Array(16384); this.gpuTimes.fill(NaN);
@@ -39,6 +42,7 @@ class WorldEngine {
     this.events = score.events.map(e => ({ tSec: e.tSec, type: e.type, sectionIndex: e.sectionIndex,
       action: e.action || '', firedFrame: -1, firedSec: -1 }));
     this.frame = 0; this.simTime = 0; this.cut = 0; this.lastDrop = -100; this.lastKick = -100;
+    this.beatIndex = 0; this.kickCount = 0; this.lastCut = 0;
     this.responseCount = 0; this.timeCount = 0; this.mfsFrames = 0; this.gpuSamples = 0; this.timerDisjoints = 0;
     this.gpuTimes.fill(NaN); this.cpuTimes.fill(0); this.lastTimeSlot = -1;
     for (let i = 0; i < this.queries.length; i++) this.queries[i].slot = -1;
@@ -98,12 +102,20 @@ class WorldEngine {
     const silence = tSec >= s.silenceSec && tSec < s.endSec;
     const anticipate = tSec >= s.foreshadowSec ? Math.min(1, (tSec - s.foreshadowSec) / Math.max(.001, s.endSec - s.foreshadowSec)) : 0;
     const f = features || this.emptyFeatures;
-    const flags = features ? f.onset.flags : 0, beat = features && f.tempo.beatFlag ? 1 : 0;
+    let flags = features ? f.onset.flags : 0;
+    const beat = features && f.tempo.beatFlag ? 1 : 0;
+    // 音声なしpreviewにも解析済みの拍格子を使う。ライブのonsetはMFSだけを使う。
+    while (this.beatIndex < score.beats.length && score.beats[this.beatIndex] <= tSec) {
+      if (this.preview && s.kind === 'drop' && score.beats[this.beatIndex] >= s.startSec) flags |= 1;
+      this.beatIndex++;
+    }
     if (features) this.mfsFrames++;
     // 小節頭は解析済みの格子を使う。ライブの拍イベントは光学反応に直結する。
     let cutNow = false;
     while (this.downbeatIndex < score.downbeats.length && score.downbeats[this.downbeatIndex] <= tSec) {
-      if (s.kind === 'drop' && score.downbeats[this.downbeatIndex] >= s.startSec) { this.cut++; cutNow = true; } this.downbeatIndex++;
+      if (s.kind === 'drop' && score.downbeats[this.downbeatIndex] >= s.startSec) {
+        this.cut++; cutNow = true; this.lastCut = score.downbeats[this.downbeatIndex];
+      } this.downbeatIndex++;
     }
     const simDt = silence ? 0 : Math.min(.033, Math.max(0, dt)) * (s.kind === 'break' ? .3 : 1) * (1 - anticipate * .96);
     this.simTime += simDt;
@@ -117,7 +129,7 @@ class WorldEngine {
     if (s.kind === 'drop' && (flags & 1)) this.lastKick = tSec;
     u[31] = s.kind === 'drop' ? tSec - this.lastKick : 100;
     u[12] = s.kindId; u[13] = s.variation; u[14] = s.formId; u[15] = anticipate;
-    const brightness = s.kind === 'intro' ? .07 + p * .18 : s.kind === 'build' ? .75 * (1 - p * .7) :
+    const brightness = s.kind === 'intro' ? .32 + p * .18 : s.kind === 'build' ? .75 * (1 - p * .7) :
       s.kind === 'drop' ? 1.4 : s.kind === 'break' ? .55 : s.kind === 'outro' ? (1 - p) ** 2 : .9;
     u[16] = silence || tSec >= score.durationSec ? 0 : brightness * s.intensity;
     u[17] = s.kind === 'build' ? p * 2.8 : s.kind === 'drop' ? -1 : .04;
@@ -135,6 +147,7 @@ class WorldEngine {
     u[75] = this.lastDrop;
     u[76] = s.environmentId; u[77] = s.worldScale;
     u[78] = 0; u[79] = 0;
+    this._composition(s, tSec, boundaryNow, s.kind === 'drop' && !!(flags & 1));
     this._camera(s, tSec, p, boundaryNow, cutNow);
     // 衝撃環の中心はイベント時に固定。カメラ移動で殻を引きずらない。
     if (s.kind === 'drop' && (boundaryNow || (flags & 1))) {
@@ -157,6 +170,39 @@ class WorldEngine {
     this._renderMatter();
     // 履歴は固定simulationステップで更新。captureや再描画では進めない。
     if (dt > 0 || this.frame === 1 || boundaryNow) this.post.stepFeedback(this.scene, this.fluid);
+  }
+  _composition(s, tSec, boundaryNow, kickNow) {
+    const u = this.gpu.uniforms, aspect = this.canvas.width / this.canvas.height;
+    u[84] = s.compositionId; u[85] = s.compositionSeed & 65535; u[86] = s.vortexCount;
+    u[87] = (s.compositionSeed & 65535) / 65536 * Math.PI * 2;
+    if (boundaryNow) {
+      this.kickCount = 0;
+      if (s.kind !== 'drop' || this.lastCut < s.startSec) this.lastCut = s.startSec;
+      for (let i = 0; i < 4; i++) {
+        const offset = 88 + i * 4;
+        u[offset] = (i % 2 === 0 ? -1 : 1) * aspect / 6;
+        u[offset + 1] = (i < 2 ? -1 : 1) / 6;
+        u[offset + 2] = i % 2 === 0 ? 1 : -1; u[offset + 3] = tSec;
+      }
+    }
+    if (s.kind === 'drop' && (boundaryNow || kickNow)) {
+      this.kickCount++; this.lastKick = tSec; u[31] = 0;
+      // 数値hashのみ。フレーム経路でRNG/配列/オブジェクトを生成しない。
+      let h = (s.compositionSeed ^ Math.imul(this.kickCount, 0x9e3779b9)) >>> 0;
+      h = Math.imul(h ^ (h >>> 16), 0x85ebca6b) >>> 0; h ^= h >>> 13;
+      const pair = s.vortexCount === 4 ? (this.kickCount - 1) % 2 * 2 : 0;
+      const x = (h & 1 ? 1 : -1) * aspect / 6 + (((h >>> 8) & 255) / 255 - .5) * .12;
+      const y = (h & 2 ? 1 : -1) / 6 + (((h >>> 16) & 255) / 255 - .5) * .08;
+      const angle = ((h >>> 20) & 1023) / 1024 * Math.PI * 2;
+      for (let i = 0; i < 2; i++) {
+        const offset = 88 + (pair + i) * 4, sign = i === 0 ? -1 : 1;
+        u[offset] = x + Math.cos(angle) * .11 * sign;
+        u[offset + 1] = y + Math.sin(angle) * .11 * sign;
+        u[offset + 2] = sign; u[offset + 3] = tSec;
+      }
+      u[105] = x; u[106] = y; u[107] = this.kickCount;
+    }
+    u[104] = Math.max(0, tSec - this.lastCut);
   }
   _camera(s, tSec, p, boundaryNow, cutNow) {
     const u = this.gpu.uniforms, local = tSec - s.startSec, scale = s.worldScale;
@@ -190,6 +236,20 @@ class WorldEngine {
     u[48] = ux * c - rx * sn; u[49] = uy * c; u[50] = uz * c - rz * sn;
     u[52] = fx; u[53] = fy; u[54] = fz;
     if (boundaryNow || cutNow) u.copyWithin(56, 40, 56);
+    // 表示に実際に使う2Dカメラ。曲線のパン／ズームはsmoothstepで加減速する。
+    const eased = p * p * (3 - 2 * p), phase = s.cameraAngle;
+    const direction = s.variation % 2 === 1 ? 1 : -1;
+    u[80] = Math.cos(phase) * .08 + direction * (eased - .5) * (s.kind === 'build' ? .24 : .16);
+    u[81] = Math.sin(phase) * .06 + Math.sin(eased * Math.PI) * (s.kind === 'break' ? .08 : -.06);
+    u[82] = s.kind === 'build' ? 1.05 + eased * .45 : s.kind === 'drop' ? 1.08 + Math.sin(local * .65) * .08 : 1.08;
+    u[83] = (s.compositionId === 1 ? -.2 : s.compositionId === 3 ? .015 : .16) * direction + eased * direction * .14;
+    if (s.kind === 'drop') {
+      u[80] += Math.sin(local * .4 + phase) * .06;
+      u[81] += Math.cos(local * .33 + phase) * .05;
+      // 小節頭は明確な切り返し。次のカットまで連続した動きを保つ。
+      u[83] += this.cut % 2 === 0 ? -.55 : .55;
+      u[82] += s.variation > 1 ? .16 : 0;
+    }
   }
   _renderMatter() {
     const g = this.gpu;
@@ -245,6 +305,8 @@ class WorldEngine {
       environment: this.score ? this.score.sections[this.sectionIndex].environment : null,
       layers: ['ABSTRACT', 'FLUID', 'PARTICLE', 'LIGHT', 'FEEDBACK'],
       formation: this.score ? this.score.sections[this.sectionIndex].environment : null,
+      composition: this.score ? this.score.sections[this.sectionIndex].composition : null,
+      camera2D: Array.from(this.gpu.uniforms.slice(80, 84)), kickCount: this.kickCount,
       dropKeyRole: this.score && this.score.sections[this.sectionIndex].kind === 'drop' ?
         (this.score.sections[this.sectionIndex].variation === 1 ? 'accent' : 'secondary') : null,
       raymarchSteps: 0, previewSteps: this.previewStep || 0,
