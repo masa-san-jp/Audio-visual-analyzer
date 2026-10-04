@@ -132,7 +132,7 @@ test('UW-06 GPU命令: 流体射影20反復・全粒子・同時合成・MFS即�
   const gl = worldCommandGl(), canvas = { width: 1920, height: 1080, getContext: () => gl };
   gl.canvas = canvas;
   const runtime = loadClassic(['js/vis-utils.js', 'js/mfs-const.js', 'js/mfs-view.js', 'js/world/gl-util.js',
-    'js/world/fluid.js', 'js/world/particles.js', 'js/world/post.js', 'js/world/score.js', 'js/world/analyzer-types.js', 'js/world/g-fluid.js', 'js/world/g-rings.js', 'js/world/g-galaxy.js', 'js/world/world-engine.js']);
+    'js/world/fluid.js', 'js/world/particles.js', 'js/world/score.js', 'js/world/analyzer-types.js', 'js/world/g-fluid.js', 'js/world/g-rings.js', 'js/world/g-galaxy.js', 'js/world/g-gargantua.js', 'js/world/post.js', 'js/world/world-engine.js']);
   const engine = new (runtime.get('WorldEngine'))(canvas), score = runtime.get('compileWorldScore')(fixture, 11);
   const features = new (runtime.get('MfsFrameView'))(), layout = runtime.get('MFS_LAYOUT');
   engine.setScore(score);
@@ -172,7 +172,7 @@ test('UW-07 曲の三色だけで全抽象状態を配色・種別をまたぐ�
 function worldTestEngine() {
   const gl = worldCommandGl(), canvas = { width: 1920, height: 1080, getContext: () => gl }; gl.canvas = canvas;
   const runtime = loadClassic(['js/vis-utils.js', 'js/mfs-const.js', 'js/mfs-view.js', 'js/world/gl-util.js',
-    'js/world/fluid.js', 'js/world/particles.js', 'js/world/post.js', 'js/world/score.js', 'js/world/analyzer-types.js', 'js/world/g-fluid.js', 'js/world/g-rings.js', 'js/world/g-galaxy.js', 'js/world/world-engine.js']);
+    'js/world/fluid.js', 'js/world/particles.js', 'js/world/score.js', 'js/world/analyzer-types.js', 'js/world/g-fluid.js', 'js/world/g-rings.js', 'js/world/g-galaxy.js', 'js/world/g-gargantua.js', 'js/world/post.js', 'js/world/world-engine.js']);
   const engine = new (runtime.get('WorldEngine'))(canvas); engine.setScore(runtime.get('compileWorldScore')(fixture, 11));
   return { engine, gl };
 }
@@ -532,7 +532,7 @@ test('UW-29 WORLD-8 領域: 1.5倍の速度・圧力・染料・補助場、リ�
     assert.equal(f.dye.read.width, Math.ceil(w * 1.5 / 2)); assert.equal(f.dye.read.height, Math.ceil(h * 1.5 / 2));
     assert.equal(engine.scene.width, w); assert.equal(engine.scene.height, h);
   }
-  const runtime = loadClassic(['js/world/gl-util.js', 'js/world/fluid.js', 'js/world/particles.js', 'js/world/post.js']);
+  const runtime = loadClassic(['js/world/gl-util.js', 'js/world/fluid.js', 'js/world/particles.js', 'js/world/analyzer-types.js', 'js/world/g-gargantua.js', 'js/world/post.js']);
   assert.equal(runtime.get('OVERSCAN'), 1.5);
   assert.match(runtime.get('WORLD_FLUID_FRAGMENT'), /worldDomainPosition\(uv\)/);
   assert.match(runtime.get('WORLD_PARTICLE_UPDATE'), /extent=worldExtent\(\)\*p.z\/3/);
@@ -655,22 +655,24 @@ test('UW-38 WORLD-12 帯域曲線: 半径.32・220度円弧・ジッター・流
   console.log('UW-38 radiusError='+radiusError+' arcDegrees=220 minBandSpacing='+minSpacing+' maxDriftSpeed='+maxDriftSpeed+' maxJitter='+maxJitter+' resetError=0');
 });
 
-test('UW-39 WORLD-11 タイプ契約: 独立shader・32帯域・即時反応・共通HDR・0.5秒切替',()=>{
-  const {engine,gl}=worldTestEngine(),r=loadClassic(['js/mfs-const.js','js/mfs-view.js']),f=new(r.get('MfsFrameView'))(),L=r.get('MFS_LAYOUT');
-  f.bandsSmooth[17]=.8;f.raw[L.LEVEL]=.7;f.raw[L.BEAT_FLAG]=1;f.raw[L.ONSET_ENV+1]=.9;
-  let fluidSteps=0;engine.fluid.step=()=>fluidSteps++;
-  engine._step(2,f,0);engine.selectType('g-rings');assert.equal(engine.fadeElapsed,0);
+test('UW-39 WORLD-13 タイプ契約: ブラックホールkey2・32帯域・半解像度・0.5秒切替',()=>{
+  const {engine}=worldTestEngine(),r=loadClassic(['js/mfs-const.js','js/mfs-view.js']),f=new(r.get('MfsFrameView'))(),L=r.get('MFS_LAYOUT');
+  f.bandsSmooth[17]=.8;f.raw[L.LEVEL]=.7;f.raw[L.BEAT_FLAG]=1;
+  let fluidSteps=0,feedbackSteps=0;engine.fluid.step=()=>fluidSteps++;engine.post.stepFeedback=()=>feedbackSteps++;
+  engine._step(2,f,0);feedbackSteps=0;engine.selectType('g-gargantua');assert.equal(engine.fadeElapsed,0);
   const resources=[engine.gpu.textures.length,engine.gpu.fbos.length,engine.gpu.programs.length];
-  engine._step(2.25,f,.25);assert.equal(engine.fadeElapsed,.25);assert.equal(engine.type.rayCount,64);
-  assert.ok(Math.abs(engine.type.bandUniforms[17*4]-Math.pow((Math.fround(.8)-.12)/.7,.8))<1e-6);assert.ok(Math.abs(engine.type.bandUniforms[17*4+3]-.9)<1e-6);
-  assert.equal(engine.type.beats[0],0);assert.equal(engine.pulse,1);
-  engine.selectType('g-galaxy');engine._step(2.5,f,.25);engine._step(2.75,f,.25);
-  assert.equal(engine.fadeElapsed,.5);assert.equal(engine.type.orbitCount,32);assert.equal(engine.type.particleCount,32768);
-  assert.equal(fluidSteps,0);engine._draw();assert.equal(engine.post.analyzerMode,1);assert.equal(engine.post.pulse,0);
-  assert.ok(gl.calls.some(c=>c.type===gl.TRIANGLES&&c.count===32768*6));
+  engine._step(2.25,f,.25);assert.equal(engine.fadeElapsed,.25);
+  assert.ok(Math.abs(engine.type.bandUniforms[17*4]-Math.pow((Math.fround(.8)-.12)/.7,.8))<1e-6);
+  engine._step(2.5,f,.25);assert.equal(engine.fadeElapsed,.5);
+  assert.equal(engine.type.half.width,960);assert.equal(engine.type.half.height,540);
+  assert.equal(fluidSteps,0);assert.equal(feedbackSteps,0);engine._draw();
+  assert.equal(engine.post.analyzerMode,1);assert.equal(engine.post.pulse,0);assert.equal(engine.post.gargantua,true);
   assert.deepEqual([engine.gpu.textures.length,engine.gpu.fbos.length,engine.gpu.programs.length],resources);
-  assert.throws(()=>engine.selectType('g-terrain'),RangeError);
-  console.log('UW-39 rays=64 orbits=32 galaxyParticles=32768 latencyFrames=0 fadeSec=.5 inactiveFluidSteps=0 GPUResourceGrowth=0');
+  for(const id of ['g-terrain','g-rings','g-galaxy'])assert.throws(()=>engine.selectType(id),RangeError);
+  const types=loadClassic(['js/world/gl-util.js','js/world/analyzer-types.js']).get('WORLD_ANALYZER_TYPES');
+  assert.deepEqual(Array.from(types,t=>t.id),['g-fluid','g-gargantua','g-terrain','g-ribbons','g-kaleido']);
+  assert.equal(types[1].key,2);assert.equal(types[1].label,'ブラックホール');
+  console.log('UW-39 availableTypes=2 annuli=32 internal=960x540 latencyFrames=0 fadeSec=.5 inactiveFluidSteps=0 feedbackSteps=0 GPUResourceGrowth=0');
 });
 test('UW-40 WORLD-11 曲固有値: クロマ上位・BPM比例・重心/オンセット密度・入力不変',()=>{
   const r=loadClassic(['js/vis-utils.js','js/world/score.js']),variation=r.get('worldSongVariation');
@@ -696,12 +698,14 @@ test('UW-41 WORLD-11 計測: Pearsonの無変化拒否・輝度重み色ヒス�
 });
 test('UW-43 WORLD-11 決定性: タイプ選択を保ってlive/renderAt/逆シークの位相と残光一致',async()=>{
   const {engine}=worldTestEngine(),L=loadClassic(['js/mfs-const.js']).get('MFS_LAYOUT');
-  const frames=Array.from({length:31},(_,i)=>{const f=new Float32Array(L.LENGTH);f[L.BANDS_SMOOTH+4]=i/30;f[L.LEVEL]=.7;f[L.BEAT_FLAG]=i===15?1:0;return f;});
-  for(const typeId of ['g-rings','g-galaxy']){
+  const frames=Array.from({length:31},(_,i)=>{const f=new Float32Array(L.LENGTH);f[L.BANDS_SMOOTH+4]=i/30;f[L.LEVEL]=.7;f[L.BEAT_FLAG]=i===15?1:0;f[L.ONSET_FLAGS]=i===15?5:0;return f;});
+  for(const typeId of ['g-fluid','g-gargantua']){
     engine.selectType(typeId,true);engine.setScore(engine.score);engine.setTimeline(frames,30);
     engine.render(.11,null,.17);engine.render(1,null,.9);const expected=engine.type.bandUniforms.slice(),beats=engine.type.beats.slice();
+    const camera=typeId==='g-gargantua'?engine.type.camera.slice():null,music=typeId==='g-gargantua'?engine.type.music.slice():null,spots=typeId==='g-gargantua'?engine.type.hotspots.slice():null;
     await engine.renderAt(.4);await engine.renderAt(1);assert.equal(engine.type.id,typeId);
     assert.deepEqual(engine.type.bandUniforms,expected);assert.deepEqual(engine.type.beats,beats);
+    if(camera){assert.deepEqual(engine.type.camera,camera);assert.deepEqual(engine.type.music,music);assert.deepEqual(engine.type.hotspots,spots);}
   }
   console.log('UW-43 types=2 fixedSteps=30 live/replayBandStateError=0 beatStateError=0');
 });
@@ -727,6 +731,8 @@ test('UW-44 WORLD-12 共通整形: 下限/上限・残光exp(-6dt)・4/13/8帯�
 });
 test('UW-45 WORLD-12 火花: onset閾値・8個×鏡像2光線・時刻/先端固定・既存GPUパス/資源',()=>{
   const {engine,gl}=worldTestEngine(),r=loadClassic(['js/mfs-const.js','js/mfs-view.js']),f=new(r.get('MfsFrameView'))();
+  const legacy=loadClassic(['js/world/gl-util.js','js/world/analyzer-types.js','js/world/g-rings.js']);
+  const retained=new(legacy.get('WorldRingsAnalyzer'))();retained.init(engine.gpu);engine.types.push(retained);
   engine.selectType('g-rings',true);const rings=engine.type;
   const resources=[engine.gpu.textures.length,engine.gpu.fbos.length,engine.gpu.programs.length];
   f.bandsSmooth.fill(.82);f.onset.env[1]=.59;engine._step(2.1,f,1/60);assert.equal(rings.sparkEvents[17*4],-100);

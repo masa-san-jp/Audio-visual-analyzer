@@ -66,6 +66,7 @@ if(typeof avzTest==='function')avzTest('BW-12-design','指定GLSLを実コンパ
     const rows=child.eval(`(()=>{
       const e=__world.engine,score=compileWorldScore({bpm:128,durationSec:4,beats:[],downbeatIndices:[],sections:[{startSec:0,endSec:4,kind:'main',label:'v1'}]},11),f=new MfsFrameView(),rows=[];
       for(const id of ['g-rings','g-galaxy','g-fluid'])for(const raw of [0,.82]){
+        if(!e.types.some(type=>type.id===id)){const legacy=id==='g-rings'?new WorldRingsAnalyzer():new WorldGalaxyAnalyzer();legacy.init(e.gpu);e.types.push(legacy);}
         e.selectType(id,true);e.setScore(score);f.raw.fill(0);f.bandsSmooth.fill(raw);f.raw[MFS_LAYOUT.LEVEL]=.7;
         f.raw[MFS_LAYOUT.BEAT_FLAG]=1;f.raw[MFS_LAYOUT.DOWNBEAT_FLAG]=1;f.onset.env.fill(.9);
         for(let i=0;i<30;i++){e._step(i/60,f,1/60);f.raw[MFS_LAYOUT.BEAT_FLAG]=0;f.raw[MFS_LAYOUT.DOWNBEAT_FLAG]=0;}
@@ -95,6 +96,7 @@ if(typeof avzTest==='function')avzTest('BW-12-sparks-ramp','実GPUのbandRampと
         rampError=Math.max(rampError,Math.abs(pixels[i*4+channel]-(ab+(c[channel]-ab)*l)));
       }
       const score=compileWorldScore({bpm:120,durationSec:4,beats:[],downbeatIndices:[],sections:[{startSec:0,endSec:4,kind:'main',label:'spark'}]},11),f=new MfsFrameView();
+      const legacy=new WorldRingsAnalyzer();legacy.init(e.gpu);e.types.push(legacy);
       e.selectType('g-rings',true);e.setScore(score);f.bandsSmooth.fill(.82);f.onset.env[1]=.9;e._step(2.1,f,1/60);
       const flowTarget=g.target(5,1,true),flowProgram=g.program('#version 300 es\\n'+WORLD_GLSL+'\\nout vec4 frag;void main(){frag=vec4(worldFlow(vec2(vUv.x*.4-.2,.1)),0,1);}');
       g.bind(flowProgram,flowTarget);g.draw();const flows=new Float32Array(20),cpuFlow=new Float64Array(2);gl.readPixels(0,0,5,1,gl.RGBA,gl.FLOAT,flows);

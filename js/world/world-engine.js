@@ -18,7 +18,7 @@ class WorldEngine {
     this.post = new WorldPost(this.gpu, canvas.width, canvas.height);
     this.scene = this.gpu.target(canvas.width, canvas.height);
     this.spectrum = new WorldSpectrum(this.gpu);
-    this.types = [new WorldFluidAnalyzer(), new WorldRingsAnalyzer(), new WorldGalaxyAnalyzer()];
+    this.types = [new WorldFluidAnalyzer(), new WorldGargantuaAnalyzer()];
     for (let i = 0; i < this.types.length; i++) this.types[i].init(this.gpu);
     this.type = this.types[0]; this.fadeElapsed = .5; this.previousPostMode = 0;
     // 従来計測の公開口は保持。shader/programの所有者はg-fluid。
@@ -63,6 +63,7 @@ class WorldEngine {
     if (this.canvas.width === w && this.canvas.height === h) return;
     this.canvas.width = w; this.canvas.height = h;
     this.fluid.resize(w, h); this.post.resize(w, h);
+    for (let i = 0; i < this.types.length; i++) if (this.types[i].resize) this.types[i].resize(w, h);
     this.gpu.releaseTarget(this.scene); this.scene = this.gpu.target(w, h);
     this.gpu.releaseTarget(this.typeTarget); this.gpu.releaseTarget(this.typeSnapshot);
     this.typeTarget = this.gpu.target(w, h); this.typeSnapshot = this.gpu.target(w, h); this.fadeElapsed = .5;
@@ -184,7 +185,7 @@ class WorldEngine {
     this.type.step(input);
     this._renderMatter();
     // 履歴は固定simulationステップで更新。captureや再描画では進めない。
-    if (dt > 0 || this.frame === 1 || boundaryNow) this.post.stepFeedback(this.scene, this.fluid);
+    if (this.type.id !== 'g-gargantua' && (dt > 0 || this.frame === 1 || boundaryNow)) this.post.stepFeedback(this.scene, this.fluid);
   }
   _blend(s, tSec) {
     const p = Math.max(0, Math.min(1, (tSec - s.startSec) / Math.min(4, (s.endSec - s.startSec) * .25)));
@@ -370,7 +371,7 @@ class WorldEngine {
     if (!this.score || this.fadeElapsed >= .5 || !this.frame) return;
     this.fadeElapsed = Math.min(.5, this.fadeElapsed + Math.max(0, dt));
     this.typeInput.dt = 0; this.typeInput.boundaryNow = false;
-    this._renderMatter(); this.post.stepFeedback(this.scene, this.fluid); this._draw();
+    this._renderMatter(); if (this.type.id !== 'g-gargantua') this.post.stepFeedback(this.scene, this.fluid); this._draw();
   }
   _renderFluid(target) {
     const g = this.gpu;
@@ -385,6 +386,8 @@ class WorldEngine {
     // 詳細設計の各タイプで拍の露出・スケールを適用済み。旧postの二重pulseを止める。
     this.post.pulse = 0;
     this.post.analyzerMode = this.previousPostMode * (1 - blend) + (this.type.id === 'g-fluid' ? 0 : 1) * blend;
+    this.post.gargantua = this.type.id === 'g-gargantua';
+    this.post.exposureMultiplier = this.post.gargantua ? this.type.exposureMultiplier : 1;
     this.post.render(this.scene);
   }
   _validatePreview(tSec) {

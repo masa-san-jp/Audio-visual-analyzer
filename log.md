@@ -1,3 +1,43 @@
+## 2026-10-04 — [WORLD-13] g-gargantua
+
+### 作業内容
+- `js/world/g-gargantua.js`（追加）: SSOT §1〜4の名前つき定数・黒体表・6kindカメラ表を実装。h²保存量、180ステップの非正規化積分、y=0通過の補間、最大3サンプルの前方合成、地平面／逃走を半解像度の全画面shaderで計算し、線形texture補間で拡大。ケプラー回転、4オクターブのfilament fbm、包絡、20%パレット、clamped Doppler、32環（外側低域）、低域オンセットの内側フレア、高域オンセットの固定12枠hotspotと星の位相、ラウドネス露出、4秒カメラeaseと第二dropを接続。背景は最終逃走方向から星・明滅・上位0.5%の4方向光条・2層の天の川を引き、線形HDRの各RGBを.04以下に制限。
+- `js/world/analyzer-types.js`、`world.html`: 選択肢からg-ringsを除き、g-galaxyをg-gargantua（ブラックホール、key2）へ置換。選択可能2タイプ＋予約3枠。旧2shaderは既存回帰テストを維持するため読み込みだけ残す。新classic scriptとpostの依存順を明示。
+- `js/world/world-engine.js`、`js/world/post.js`: 新タイプの初期化・半解像度targetのresize・既存0.5秒fadeを接続。選択中はfeedback更新／露出縮約を停止し、現在像からthreshold1.0／strength.35の既存多段bloom、既存ACES・sRGB変換を適用。既存の新タイプ基準露出.75に(.85+.3*loudnessNorm)を掛ける。bloom strengthは新タイプの名前つき定数からGLSLへ展開し二重定義を避ける。旧postのbeat、静寂／dropフラッシュ、履歴、色収差、vignette、追加色補正はこの分岐へ持ち込まない。DOFのパスは追加しない。
+- `tests/world/shoot-live.mjs`: 既定をg-gargantua、t=7/20/31/45/62/90へ変更。曲頭からt−1.5まで既存timelineで再演して累積カメラ位相・4秒ease・寿命6秒のhotspotを復元し、seeked待ちの後に実再生で指定時刻の最初のrAFを撮影。直接像の32環の平均線形HDR輝度／L・画素数・表示sRGB輝度・cameraをJSONへ保存し、各撮影と6撮影全体のG-1中央値≥.6を判定。別の定常入力でキック直後[0,.1)の平均とage=.1秒の実標本の両方で内側直接像の輝度増加≥40%と、1080p・全パスGPU p95≤16ms（実GPU／120標本以上／disjointなし）を検査しreport.jsonへ保存。
+- `tests/browser/world13.test.js`（追加）: BW-13-renderで実GLSL、960×540、直接像、beat無反応、hotspot上限／位相を検査。BW-13-kick-gpuで内側直接像のキック増光と実GPU p95を検査。BW-13-formulasで実GLSLの黒体5端点、外側低域の32環／100msキック式、8,192方向の星空上限を読み戻す（未実行）。G-1領域はraytrace targetのalphaへ保持した半径を使い、最初の平面通過・近側・内向き・有効円盤サンプル1回だけを採用し、高次像と背景を除外する。alphaは測定情報であり、postのRGBへ影響しない。
+- `tests/browser/world11.test.js`、`tests/browser/world12.test.js`: 現行タイプ選択／export検査をfluid/gargantuaへ更新。旧G-1〜4・光線／銀河／火花の回帰検査はテスト内で旧タイプを明示的に登録し、既存ID・閾値を維持。measure.mjsの旧G結果は旧shaderの回帰であり、新ブラックホールの受け入れを意味しない。
+- `tests/unit/world-gargantua.test.mjs`（追加）: UW-48〜51でカメラ表／ease／第二drop、キック包絡、hotspot上限／決定性／同時刻の重複消費防止／連続フレームの別オンセット、露出、直接像の32環／G-1／100msキック判定を検査。文字列生成を避けた数値FNVの60ケースが従来の位置hashと完全一致することを検査。
+- `tests/unit/world-score.test.mjs`、`tests/unit/world-exporter.test.mjs`、`tests/unit/world-shaders.test.mjs`: UW-39の現行タイプと半解像度／feedbackなし／資源再利用、UW-42の選択export、UW-43のcamera／kick／hotspotを含むlive・再演・逆シーク一致、UW-47の新2fragmentを含む21shaderのprecisionを検査。UW-45の旧火花回帰はテスト内だけの登録で維持。
+- `README.md`、`doc/spec.md`: TYPE、ブラックホールの音楽対応、設計書への参照、撮影・受け入れコマンドを更新。
+
+### 検証
+- `node tests/run.mjs --unit`: 181件／180成功／0失敗／想定U15-00スキップ1、27,462ms、終了コード0。再開直後の差分確認時も180件／179成功／0失敗／同スキップ1、27,340ms。最新出力はignoredの`tests/output/world13-unit-suite.txt`。
+- `node --test tests/unit/world-gargantua.test.mjs tests/unit/world-score.test.mjs tests/unit/world-shaders.test.mjs tests/unit/world-exporter.test.mjs`: 51件／51成功／0失敗／0スキップ、2,385.546ms。出力はignoredの`tests/output/world13-targeted.txt`。
+- 全JS/MJSの`node --check`: 128件／128成功／0失敗。出力はignoredの`tests/output/world13-syntax.txt`。`git diff --check`: 成功。shoot-liveの`--help`: 成功、Chrome起動なし。
+- UW-39（GPU命令モック）: availableTypes=2、32環、内部960×540、MFS→帯域uniform遅延0フレーム、fade=.5秒、非選択fluid更新0、選択中feedback更新0、選択／描画によるGPU資源増加0。
+- UW-48: 全6kind表一致、4秒easeの2秒地点dist=18.5、第二drop dist=13／周回速度=.09／円盤係数=2.025、MAX_STEPS=180。
+- UW-49: 100ms後kickEnv=.40289032459259033、hotspot固定容量12／イベント15／規定寿命6秒、同時刻の二重生成0、連続オンセット2件を両方消費、seed再演差0、loudness=.5時の露出係数1。
+- UW-43（GPU命令モック）: fluid／gargantuaで固定30Hzのlive・renderAt・逆シーク後の帯域／拍状態一致。gargantuaのcamera／music／hotspotも完全一致。
+- UW-50（合成測定データ）: 32環、外側band0／内側band31、直接像から除外1画素、Pearson中央値1／定数入力拒否、合成キック増加率.41を合格・.39を不合格。実画素のG-1・実キックの合格を意味しない。
+- UW-51: 数値FNVと従来位置hashの比較60ケース、差0。文字列連結を新しい描画経路から除去。
+- UW-47: 21shader（vertex5／fragment16）、precisionヘッダー違反0。これは実GPUコンパイルの検証ではない。
+- Chromeは禁止のため起動していない。新規BW-13-render／BW-13-kick-gpu／BW-13-formulas、更新BW-11-types／BW-11-export、維持BW-12-*、shoot-liveの6時刻・G-1・キック・GPU p95、file:// console、既存ブラウザ全件は未実行。実GLSL・実画素・実GPU数値は未測定。ゴールデンは変更していない。
+
+### spec.md 変更
+- v2.20（2026-10-04）。§1.1のTYPEとブラックホールのユーザー向け挙動を更新し、新SSOTを参照。数式・定数の再記載はしない。
+
+### 備考
+- 実装: Codex gpt-6.1-sol high
+- 指定SSOTの値・受け入れ閾値は調整していない。MAX_STEPSは180のまま。§5の140への性能退避は実GPU測定なしでは採用していない。
+- §1の「地平面→黒」は地平面からの放射／透過先が0と解釈し、手前の円盤の前方合成は保持する。選択肢は蓄積光も全消去／地平面の背景だけ0。円盤が穴を遮る物理像と指定の前方合成を両立する後者を推奨して実装。設計者の確認が必要。
+- §2・§3のsmoothstep(6.5,3,rd)はGLSLの逆順edgeで未定義。指定の下降曲線を1−smoothstep(3,6.5,rd)で表現。黒体のTは外縁で表の.33より低くなるため、表の端点へclamp（外挿との選択では表の保持を推奨）。fbmは4段の通常のvalue noise、2倍周波数／半分振幅を使う。定数の数式はそのまま。
+- §3の帯幅15%は境界の両側7.5%ずつ、隣接Lを境界で50:50へsmoothstep補間。片側15%とする選択肢より指定の総幅を保持する解釈を推奨。hotspotの未指定の決定的位置はseed＋イベント通番のworldHash（再開後は同一出力の数値FNVへ置換）、ガウス半径は標準偏差.18、寿命内のHDR6の減衰は線形で6秒に0。再開時にMFSの実契約（AudioEngineの未消費ホップ集約、再取得時0）を確認し、前回差分の立ち上がり検出を修正。連続フレームの同一bitは別イベントとして両方を消費し、同時刻の再描画だけ二重消費を防ぐ。初回カメラには前のkindがないため表の値から開始し、kind変更で4秒easeする。
+- §4の未指定の細部: 星のセル内位置／色／位相は同じ決定的hash、星の半径.6画素は出力画素に対するガウス標準偏差。phase_starにt×.25を加え、ゆっくり明滅させる。光条は細い4方向、長さ6画素で線形減衰。セルの近隣27個も評価して端で光条を切らない。天の川は大きいfbm2層に固定した銀河面のガウス包絡を掛ける。背景の.04上限は線形HDRで適用（ACES／sRGB変換後の表示RGB上限ではない）。これらの未指定形状／時間尺度／減衰の解釈は設計者が確認すること。
+- §6の「キック直後0.1秒」は直前[−.1,0)と直後[0,.1)の各6枚の平均線形HDR輝度に加え、age=.1の単一実標本も比較し、両方に≥40%を要求する。窓平均だけ／100msの単一枚だけの選択肢に対し、曖昧さを隠さず両方の結果を残す方式を推奨。表示sRGBも併記する。直接像の領域で比較し、空領域や標本不足を合格にしない。§6は測定する輝度の段階を指定していないため、G-1とキックはSSOTの発光式／HDR6／背景上限と同じ線形HDR輝度を採用。最終sRGB輝度を合否へ使う選択肢より、音楽が増やした光の量を直接検査する方式を推奨し、表示輝度も保存する。設計者がこの測定段階を確認すること。shoot-liveのG-1は各1.5秒窓と全6窓をともに検査する。
+- レビュアー確認: M4 Maxの実GPUで`WORLD_CHROME_WRAPPER=/path/to/gpu-wrapper node tests/world/shoot-live.mjs`を実行し、6枚の像・G-1中央値≥.6・キック≥40%・GPU p95≤16msを確認。BW-13-*（formulasを含む）、BW-11-*、BW-12-*、既存W/BW、file://初期化／console0、流体↔ブラックホールのfade、逆シーク／書き出し一致、レンズの上下像／光子リング、背景階層と瞬き、第二dropのカメラを確認すること。失敗時は測定値と該当SSOT節を報告し、定数を独断で調整しない。
+- 依頼どおり見出しは2026-10-04。全編集はこのworktree内。既に未追跡だったSSOT `doc/20261004-design-gargantua-v1.md`は変更していない。commit／push／PR／Chrome起動は行っていない。
+
 ## 2026-10-03 — [WORLD-12] GLSL precision 宣言順序の修正
 
 ### 作業内容

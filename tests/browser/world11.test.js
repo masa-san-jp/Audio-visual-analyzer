@@ -71,6 +71,9 @@ function world11SyntheticSong(bpm,key,harmonics,duration=6){
 }
 async function runWorldAnalyzerMeasurement(){
   const engine=window.__world.engine,originalScore=engine.score,originalTimeline=engine.timeline,originalFps=engine.fps,originalType=engine.type.id;
+  // 選択肢から外したshaderも、従来G閾値を保った回帰として明示的に登録する。
+  const retained=[new WorldRingsAnalyzer(),new WorldGalaxyAnalyzer()];
+  for(const analyzer of retained){analyzer.init(engine.gpu);engine.types.push(analyzer);}
   const types=['g-fluid','g-rings','g-galaxy'],G1=[],G2=[],G3=[],G4=[];let glErrors=0;
   const nextFrame=()=>new Promise(resolve=>requestAnimationFrame(resolve));
   const feature=new MfsFrameView(),score=compileWorldScore({bpm:120,durationSec:12,beats:[],downbeatIndices:[],sections:[{startSec:0,endSec:12,kind:'main',label:'G'}]},11);
@@ -127,10 +130,10 @@ async function runWorldAnalyzerMeasurement(){
         pass:m.width===1920&&m.height===1080&&m.timerAvailable&&m.timerDisjoints===0&&m.timingSamples>=120&&m.gpuP95Ms!==null&&m.gpuP95Ms<=16});
     }
     return {analyzerGlErrors:glErrors,'G-1':{pass:G1.every(r=>r.pass),types:G1},'G-2':{pass:G2.every(r=>r.pass),types:G2},'G-3':{pass:G3.every(r=>r.pass),types:G3},'G-4':{pass:G4.every(r=>r.pass),types:G4}};
-  }finally{engine.selectType(originalType,true);engine.setScore(originalScore);engine.setTimeline(originalTimeline,originalFps);}
+  }finally{engine.selectType(originalType,true);engine.setScore(originalScore);engine.setTimeline(originalTimeline,originalFps);engine.types.splice(engine.types.length-retained.length,retained.length);}
 }
 if(typeof avzTest==='function'){
-  avzTest('BW-11-types','タイプ選択・番号1〜6・0.5秒crossfade・逆シークで選択維持',async()=>{
+  avzTest('BW-11-types','タイプ選択・ブラックホールkey2・0.5秒crossfade・逆シークで選択維持',async()=>{
     const iframe=document.createElement('iframe');iframe.src=new URL('../../world.html',location.href).href;
     const ready=new Promise(resolve=>iframe.onload=resolve);document.body.appendChild(iframe);
     try{await ready;const child=iframe.contentWindow,w=child.__world;avzAssert.ok(w?.engine,w?.error);
@@ -144,16 +147,16 @@ if(typeof avzTest==='function'){
         document.dispatchEvent(new KeyboardEvent('keydown',{code:'Digit4',bubbles:true}));const galaxy=e.type.id;
         e.redrawTransition(.5);return {slots,selected,first,halfway,reserved,galaxy,end:e.fadeElapsed,glError:e.gpu.gl.getError()};
       })()`);
-      avzAssert.equal(result.slots.length,6);avzAssert.equal(result.slots.filter(o=>!o.disabled).length,3);
-      avzAssert.equal(result.selected,'g-rings');avzAssert.equal(result.first,0);avzAssert.equal(result.halfway,.25);
-      avzAssert.equal(result.reserved,'g-rings');avzAssert.equal(result.galaxy,'g-galaxy');avzAssert.equal(result.end,.5);avzAssert.equal(result.glError,0);
-      await w.engine.renderAt(.2);avzAssert.equal(w.engine.type.id,'g-galaxy');
+      avzAssert.equal(result.slots.length,5);avzAssert.equal(result.slots.filter(o=>!o.disabled).length,2);
+      avzAssert.equal(result.selected,'g-gargantua');avzAssert.equal(result.first,0);avzAssert.equal(result.halfway,.25);
+      avzAssert.equal(result.reserved,'g-gargantua');avzAssert.equal(result.galaxy,'g-gargantua');avzAssert.equal(result.end,.5);avzAssert.equal(result.glError,0);
+      await w.engine.renderAt(.2);avzAssert.equal(w.engine.type.id,'g-gargantua');
     }finally{iframe.contentWindow.__world?.engine?.dispose();iframe.remove();}
   },{timeoutMs:30000});
 }
 if(typeof module!=='undefined'&&module.exports){module.exports={world11Correlation,world11Histogram,world11HistogramDistance,world11RegionSamples};}
 
-if(typeof avzTest==='function')avzTest('BW-11-export','選択rings/galaxyをUIから音声入りexport・live/renderAt・復号画像で検査',async()=>{
+if(typeof avzTest==='function')avzTest('BW-11-export','選択fluid/gargantuaをUIから音声入りexport・live/renderAt・復号画像で検査',async()=>{
   const iframe=document.createElement('iframe');iframe.src=new URL('../../world.html',location.href).href;
   const ready=new Promise(resolve=>iframe.onload=resolve);document.body.appendChild(iframe);
   let decoded=null,decoder=null;
@@ -165,7 +168,7 @@ if(typeof avzTest==='function')avzTest('BW-11-export','選択rings/galaxyをUI�
     }
     await w.app.load(new child.File([encodeWav16(world11SyntheticSong(120,0,3))],'types-export.wav',{type:'audio/wav',lastModified:1}));
     await w.app.setFps(30);let downloads=0;w.app.exporter.download=()=>downloads++;
-    for(const typeId of ['g-rings','g-galaxy']){
+    for(const typeId of ['g-fluid','g-gargantua']){
       w.app.selectType(typeId);await w.app.renderAt(3);const reference=w.engine.capture();
       w.engine.setScore(w.score);for(const t of [.12,.34,.72,1.5,2.2,3])w.engine.render(t,null,.017);
       const live=w.engine.capture();avzAssert.deepEqual(Array.from(live.rgba),Array.from(reference.rgba),'selected-type fixed-step pixels');

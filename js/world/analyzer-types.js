@@ -1,10 +1,9 @@
 // 目的 — GPUタイプの登録・MFS帯域uniform・残光状態を共有する — doc/20261004-design-gpu-analyzers-v1.md §1
-// 未実装の3枠は選択不能。番号はSSOTの表の順序を保持する。
+// タイプ表はブラックホール設計 §6に従う。未実装の3枠は選択不能。
 const WORLD_ANALYZER_TYPES = [
   { id: 'g-fluid', label: 'スペクトル流体', key: 1, available: true },
-  { id: 'g-rings', label: '光の放射リング', key: 2, available: true },
+  { id: 'g-gargantua', label: 'ブラックホール', key: 2, available: true },
   { id: 'g-terrain', label: '粒子スペクトラム地形（準備中）', key: 3, available: false },
-  { id: 'g-galaxy', label: '周波数の銀河', key: 4, available: true },
   { id: 'g-ribbons', label: '光のリボン（準備中）', key: 5, available: false },
   { id: 'g-kaleido', label: '万華鏡フィードバック（準備中）', key: 6, available: false }
 ];
