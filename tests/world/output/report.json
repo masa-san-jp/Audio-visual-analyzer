@@ -1,0 +1,2024 @@
+{
+  "BW-4-shell": {
+    "pass": true,
+    "shells": [
+      {
+        "tSec": 30.60644166470972,
+        "maximumAliveDifference": 4.9482421875,
+        "expiredDifference": 0,
+        "pass": true
+      },
+      {
+        "tSec": 75.6043281617743,
+        "maximumAliveDifference": 3.3330078125,
+        "expiredDifference": 0,
+        "pass": true
+      }
+    ]
+  },
+  "BW-4-intro": {
+    "pass": true,
+    "revealedPixels": 224024,
+    "environmentGain": 81.2970484841956
+  },
+  "BW-5-light": {
+    "pass": true,
+    "samples": [
+      {
+        "tSec": 45.00573716373124,
+        "keyRole": "accent",
+        "shaftPixels": 167128,
+        "shaftEnergy": 1098.0141725777628,
+        "flareEnergy": 23955.38748112857,
+        "flaredClippedFraction": 0,
+        "layers": [
+          {
+            "name": "foreground",
+            "pixels": 119517,
+            "luminance": 4555.971492002639,
+            "meanHdrLuminance": 0.03811986154273148
+          },
+          {
+            "name": "hero",
+            "pixels": 343992,
+            "luminance": 5928.554504763377,
+            "meanHdrLuminance": 0.01723457087596042
+          },
+          {
+            "name": "far",
+            "pixels": 54891,
+            "luminance": 944.9769699023931,
+            "meanHdrLuminance": 0.017215517478318725
+          }
+        ],
+        "pass": true
+      },
+      {
+        "tSec": 90.00362366079582,
+        "keyRole": "secondary",
+        "shaftPixels": 302939,
+        "shaftEnergy": 899.5124138315387,
+        "flareEnergy": 2429.4053530877427,
+        "flaredClippedFraction": 0,
+        "layers": [
+          {
+            "name": "foreground",
+            "pixels": 1547,
+            "luminance": 59.1564683956265,
+            "meanHdrLuminance": 0.03823947536886005
+          },
+          {
+            "name": "hero",
+            "pixels": 69586,
+            "luminance": 1318.8419733037842,
+            "meanHdrLuminance": 0.018952691249731042
+          },
+          {
+            "name": "far",
+            "pixels": 447267,
+            "luminance": 2343.4360087097884,
+            "meanHdrLuminance": 0.005239456540969462
+          }
+        ],
+        "pass": true
+      }
+    ]
+  },
+  "BW-5-palette": {
+    "pass": true,
+    "swapError": 2.99673894171848e-8,
+    "ambientError": 0,
+    "first": [
+      0.027486156672239304,
+      0.08447227627038956,
+      0.17484216392040253,
+      1,
+      0.034251511096954346,
+      0.021993018686771393,
+      0.3903830349445343,
+      1,
+      0.9244182705879211,
+      0.62729811668396,
+      0.15611830353736877,
+      1
+    ],
+    "second": [
+      0.027486156672239304,
+      0.08447227627038956,
+      0.17484216392040253,
+      1,
+      0.4895346164703369,
+      0.34706929326057434,
+      0.1211446151137352,
+      1,
+      0.05774461477994919,
+      0.03217877447605133,
+      0.8004787564277649,
+      1
+    ]
+  },
+  "BW-4-sparks": {
+    "pass": true,
+    "maximum": 0.00022135416666666666,
+    "sections": [
+      {
+        "sectionIndex": 0,
+        "kind": "intro",
+        "visiblePixels": 192,
+        "fraction": 0.00009259259259259259,
+        "peakHdrContribution": 0.011461808025836944,
+        "meanHdrContribution": 2.3400650675879948e-8,
+        "environmentDominantFraction": 0.999994212962963,
+        "environmentEnergyFraction": 0.9999846645952202
+      },
+      {
+        "sectionIndex": 1,
+        "kind": "build",
+        "visiblePixels": 340,
+        "fraction": 0.00016396604938271605,
+        "peakHdrContribution": 2.2991648620605467,
+        "meanHdrContribution": 0.000010295356664875603,
+        "environmentDominantFraction": 0.9999609375,
+        "environmentEnergyFraction": 0.999836667932924
+      },
+      {
+        "sectionIndex": 2,
+        "kind": "drop",
+        "visiblePixels": 47,
+        "fraction": 0.000022665895061728396,
+        "peakHdrContribution": 2.184504704284668,
+        "meanHdrContribution": 0.0000025044751919714026,
+        "environmentDominantFraction": 0.9999879436728395,
+        "environmentEnergyFraction": 0.99988638036511
+      },
+      {
+        "sectionIndex": 3,
+        "kind": "break",
+        "visiblePixels": 183,
+        "fraction": 0.00008825231481481481,
+        "peakHdrContribution": 0.9545076042175293,
+        "meanHdrContribution": 0.000003354849987784056,
+        "environmentDominantFraction": 0.9999744405864197,
+        "environmentEnergyFraction": 0.9998487300072545
+      },
+      {
+        "sectionIndex": 4,
+        "kind": "drop",
+        "visiblePixels": 0,
+        "fraction": 0,
+        "peakHdrContribution": 0,
+        "meanHdrContribution": 0,
+        "environmentDominantFraction": 1,
+        "environmentEnergyFraction": 1
+      },
+      {
+        "sectionIndex": 5,
+        "kind": "outro",
+        "visiblePixels": 347,
+        "fraction": 0.00016734182098765432,
+        "peakHdrContribution": 1.1902806886672974,
+        "meanHdrContribution": 0.000006140603702567103,
+        "environmentDominantFraction": 0.9999358603395062,
+        "environmentEnergyFraction": 0.9989640400216441
+      },
+      {
+        "tSec": 7,
+        "kind": "intro",
+        "visiblePixels": 202,
+        "fraction": 0.00009741512345679012,
+        "peakHdrContribution": 0.01231535232067108,
+        "meanHdrContribution": 2.5595447048544883e-8,
+        "environmentDominantFraction": 0.9999937307098765,
+        "environmentEnergyFraction": 0.9999821569541479
+      },
+      {
+        "tSec": 20,
+        "kind": "build",
+        "visiblePixels": 279,
+        "fraction": 0.0001345486111111111,
+        "peakHdrContribution": 2.410564286804199,
+        "meanHdrContribution": 0.00001222553910772648,
+        "environmentDominantFraction": 0.9999546682098766,
+        "environmentEnergyFraction": 0.9998446768950168
+      },
+      {
+        "tSec": 30.3,
+        "kind": "drop",
+        "visiblePixels": 160,
+        "fraction": 0.00007716049382716049,
+        "peakHdrContribution": 12.519889782714845,
+        "meanHdrContribution": 0.000024065431648014496,
+        "environmentDominantFraction": 0.9999696180555555,
+        "environmentEnergyFraction": 0.9995962363265033
+      },
+      {
+        "tSec": 45,
+        "kind": "drop",
+        "visiblePixels": 41,
+        "fraction": 0.000019772376543209878,
+        "peakHdrContribution": 6.872652400207519,
+        "meanHdrContribution": 0.000012705032690163743,
+        "environmentDominantFraction": 0.9999879436728395,
+        "environmentEnergyFraction": 0.9994250392255036
+      },
+      {
+        "tSec": 62,
+        "kind": "break",
+        "visiblePixels": 91,
+        "fraction": 0.000043885030864197534,
+        "peakHdrContribution": 0.8325492378234864,
+        "meanHdrContribution": 8.155392740312733e-7,
+        "environmentDominantFraction": 0.9999855324074074,
+        "environmentEnergyFraction": 0.9999693274193698
+      },
+      {
+        "tSec": 90,
+        "kind": "drop",
+        "visiblePixels": 459,
+        "fraction": 0.00022135416666666666,
+        "peakHdrContribution": 0.44542946701049807,
+        "meanHdrContribution": 0.000006127656249444428,
+        "environmentDominantFraction": 0.999888599537037,
+        "environmentEnergyFraction": 0.999515928178436
+      }
+    ]
+  },
+  "BW-4-accent": {
+    "pass": false,
+    "maximum": 0.7000882523148149,
+    "frames": [
+      {
+        "tSec": 7.503573082844096,
+        "kind": "intro",
+        "fraction": 0.04123263888888889
+      },
+      {
+        "tSec": 22.506793915198955,
+        "kind": "build",
+        "fraction": 0.03456645447530864
+      },
+      {
+        "tSec": 45.00573716373124,
+        "kind": "drop",
+        "fraction": 0.1389327739197531
+      },
+      {
+        "tSec": 67.50468041226354,
+        "kind": "break",
+        "fraction": 0.011435667438271605
+      },
+      {
+        "tSec": 90.00362366079582,
+        "kind": "drop",
+        "fraction": 0.07016685956790124
+      },
+      {
+        "tSec": 112.50145957990867,
+        "kind": "outro",
+        "fraction": 0.0483203125
+      },
+      {
+        "tSec": 7,
+        "kind": "reference",
+        "fraction": 0.04034722222222222
+      },
+      {
+        "tSec": 20,
+        "kind": "reference",
+        "fraction": 0.045598958333333335
+      },
+      {
+        "tSec": 30.3,
+        "kind": "reference",
+        "fraction": 0.6191922260802469
+      },
+      {
+        "tSec": 45,
+        "kind": "reference",
+        "fraction": 0.1391531635802469
+      },
+      {
+        "tSec": 62,
+        "kind": "reference",
+        "fraction": 0.014331114969135802
+      },
+      {
+        "tSec": 90,
+        "kind": "reference",
+        "fraction": 0.15496238425925926
+      },
+      {
+        "tSec": 29.55,
+        "kind": "drop-window",
+        "fraction": 0
+      },
+      {
+        "tSec": 29.566666666666666,
+        "kind": "drop-window",
+        "fraction": 0
+      },
+      {
+        "tSec": 29.583333333333332,
+        "kind": "drop-window",
+        "fraction": 0
+      },
+      {
+        "tSec": 29.6,
+        "kind": "drop-window",
+        "fraction": 0
+      },
+      {
+        "tSec": 29.616666666666667,
+        "kind": "drop-window",
+        "fraction": 0
+      },
+      {
+        "tSec": 29.633333333333333,
+        "kind": "drop-window",
+        "fraction": 0
+      },
+      {
+        "tSec": 29.65,
+        "kind": "drop-window",
+        "fraction": 0
+      },
+      {
+        "tSec": 29.666666666666668,
+        "kind": "drop-window",
+        "fraction": 0
+      },
+      {
+        "tSec": 29.683333333333334,
+        "kind": "drop-window",
+        "fraction": 0
+      },
+      {
+        "tSec": 29.7,
+        "kind": "drop-window",
+        "fraction": 0
+      },
+      {
+        "tSec": 29.716666666666665,
+        "kind": "drop-window",
+        "fraction": 0
+      },
+      {
+        "tSec": 29.733333333333334,
+        "kind": "drop-window",
+        "fraction": 0
+      },
+      {
+        "tSec": 29.75,
+        "kind": "drop-window",
+        "fraction": 0
+      },
+      {
+        "tSec": 29.766666666666666,
+        "kind": "drop-window",
+        "fraction": 0
+      },
+      {
+        "tSec": 29.783333333333335,
+        "kind": "drop-window",
+        "fraction": 0
+      },
+      {
+        "tSec": 29.8,
+        "kind": "drop-window",
+        "fraction": 0
+      },
+      {
+        "tSec": 29.816666666666666,
+        "kind": "drop-window",
+        "fraction": 0
+      },
+      {
+        "tSec": 29.833333333333332,
+        "kind": "drop-window",
+        "fraction": 0
+      },
+      {
+        "tSec": 29.85,
+        "kind": "drop-window",
+        "fraction": 0
+      },
+      {
+        "tSec": 29.866666666666667,
+        "kind": "drop-window",
+        "fraction": 0
+      },
+      {
+        "tSec": 29.883333333333333,
+        "kind": "drop-window",
+        "fraction": 0
+      },
+      {
+        "tSec": 29.9,
+        "kind": "drop-window",
+        "fraction": 0
+      },
+      {
+        "tSec": 29.916666666666668,
+        "kind": "drop-window",
+        "fraction": 0
+      },
+      {
+        "tSec": 29.933333333333334,
+        "kind": "drop-window",
+        "fraction": 0
+      },
+      {
+        "tSec": 29.95,
+        "kind": "drop-window",
+        "fraction": 0
+      },
+      {
+        "tSec": 29.966666666666665,
+        "kind": "drop-window",
+        "fraction": 0
+      },
+      {
+        "tSec": 29.983333333333334,
+        "kind": "drop-window",
+        "fraction": 0
+      },
+      {
+        "tSec": 30,
+        "kind": "drop-window",
+        "fraction": 0
+      },
+      {
+        "tSec": 30.016666666666666,
+        "kind": "drop-window",
+        "fraction": 0.3294579475308642
+      },
+      {
+        "tSec": 30.033333333333335,
+        "kind": "drop-window",
+        "fraction": 0.3111713927469136
+      },
+      {
+        "tSec": 30.05,
+        "kind": "drop-window",
+        "fraction": 0.29563126929012346
+      },
+      {
+        "tSec": 30.066666666666666,
+        "kind": "drop-window",
+        "fraction": 0.2787234760802469
+      },
+      {
+        "tSec": 30.083333333333332,
+        "kind": "drop-window",
+        "fraction": 0.2698697916666667
+      },
+      {
+        "tSec": 30.1,
+        "kind": "drop-window",
+        "fraction": 0.25895833333333335
+      },
+      {
+        "tSec": 30.116666666666667,
+        "kind": "drop-window",
+        "fraction": 0.2423466435185185
+      },
+      {
+        "tSec": 30.133333333333333,
+        "kind": "drop-window",
+        "fraction": 0.24311873070987655
+      },
+      {
+        "tSec": 30.15,
+        "kind": "drop-window",
+        "fraction": 0.26339023919753085
+      },
+      {
+        "tSec": 30.166666666666668,
+        "kind": "drop-window",
+        "fraction": 0.29592881944444444
+      },
+      {
+        "tSec": 30.183333333333334,
+        "kind": "drop-window",
+        "fraction": 0.3464891975308642
+      },
+      {
+        "tSec": 30.2,
+        "kind": "drop-window",
+        "fraction": 0.4315581597222222
+      },
+      {
+        "tSec": 30.216666666666665,
+        "kind": "drop-window",
+        "fraction": 0.5213450038580247
+      },
+      {
+        "tSec": 30.233333333333334,
+        "kind": "drop-window",
+        "fraction": 0.5831042631172839
+      },
+      {
+        "tSec": 30.25,
+        "kind": "drop-window",
+        "fraction": 0.7000882523148149
+      },
+      {
+        "tSec": 74.55,
+        "kind": "drop-window",
+        "fraction": 0
+      },
+      {
+        "tSec": 74.56666666666666,
+        "kind": "drop-window",
+        "fraction": 0
+      },
+      {
+        "tSec": 74.58333333333333,
+        "kind": "drop-window",
+        "fraction": 0
+      },
+      {
+        "tSec": 74.6,
+        "kind": "drop-window",
+        "fraction": 0
+      },
+      {
+        "tSec": 74.61666666666666,
+        "kind": "drop-window",
+        "fraction": 0
+      },
+      {
+        "tSec": 74.63333333333334,
+        "kind": "drop-window",
+        "fraction": 0
+      },
+      {
+        "tSec": 74.65,
+        "kind": "drop-window",
+        "fraction": 0
+      },
+      {
+        "tSec": 74.66666666666667,
+        "kind": "drop-window",
+        "fraction": 0
+      },
+      {
+        "tSec": 74.68333333333334,
+        "kind": "drop-window",
+        "fraction": 0
+      },
+      {
+        "tSec": 74.7,
+        "kind": "drop-window",
+        "fraction": 0
+      },
+      {
+        "tSec": 74.71666666666667,
+        "kind": "drop-window",
+        "fraction": 0
+      },
+      {
+        "tSec": 74.73333333333333,
+        "kind": "drop-window",
+        "fraction": 0
+      },
+      {
+        "tSec": 74.75,
+        "kind": "drop-window",
+        "fraction": 0
+      },
+      {
+        "tSec": 74.76666666666667,
+        "kind": "drop-window",
+        "fraction": 0
+      },
+      {
+        "tSec": 74.78333333333333,
+        "kind": "drop-window",
+        "fraction": 0
+      },
+      {
+        "tSec": 74.8,
+        "kind": "drop-window",
+        "fraction": 0
+      },
+      {
+        "tSec": 74.81666666666666,
+        "kind": "drop-window",
+        "fraction": 0
+      },
+      {
+        "tSec": 74.83333333333333,
+        "kind": "drop-window",
+        "fraction": 0
+      },
+      {
+        "tSec": 74.85,
+        "kind": "drop-window",
+        "fraction": 0
+      },
+      {
+        "tSec": 74.86666666666666,
+        "kind": "drop-window",
+        "fraction": 0
+      },
+      {
+        "tSec": 74.88333333333334,
+        "kind": "drop-window",
+        "fraction": 0
+      },
+      {
+        "tSec": 74.9,
+        "kind": "drop-window",
+        "fraction": 0
+      },
+      {
+        "tSec": 74.91666666666667,
+        "kind": "drop-window",
+        "fraction": 0
+      },
+      {
+        "tSec": 74.93333333333334,
+        "kind": "drop-window",
+        "fraction": 0
+      },
+      {
+        "tSec": 74.95,
+        "kind": "drop-window",
+        "fraction": 0
+      },
+      {
+        "tSec": 74.96666666666667,
+        "kind": "drop-window",
+        "fraction": 0
+      },
+      {
+        "tSec": 74.98333333333333,
+        "kind": "drop-window",
+        "fraction": 0
+      },
+      {
+        "tSec": 75,
+        "kind": "drop-window",
+        "fraction": 0
+      },
+      {
+        "tSec": 75.01666666666667,
+        "kind": "drop-window",
+        "fraction": 0.05878616898148148
+      },
+      {
+        "tSec": 75.03333333333333,
+        "kind": "drop-window",
+        "fraction": 0.057607542438271604
+      },
+      {
+        "tSec": 75.05,
+        "kind": "drop-window",
+        "fraction": 0.055872878086419754
+      },
+      {
+        "tSec": 75.06666666666666,
+        "kind": "drop-window",
+        "fraction": 0.053888406635802466
+      },
+      {
+        "tSec": 75.08333333333333,
+        "kind": "drop-window",
+        "fraction": 0.0521141975308642
+      },
+      {
+        "tSec": 75.1,
+        "kind": "drop-window",
+        "fraction": 0.0503173225308642
+      },
+      {
+        "tSec": 75.11666666666666,
+        "kind": "drop-window",
+        "fraction": 0.048584587191358025
+      },
+      {
+        "tSec": 75.13333333333334,
+        "kind": "drop-window",
+        "fraction": 0.04685233410493827
+      },
+      {
+        "tSec": 75.15,
+        "kind": "drop-window",
+        "fraction": 0.04512924382716049
+      },
+      {
+        "tSec": 75.16666666666667,
+        "kind": "drop-window",
+        "fraction": 0.043306327160493825
+      },
+      {
+        "tSec": 75.18333333333334,
+        "kind": "drop-window",
+        "fraction": 0.0415625
+      },
+      {
+        "tSec": 75.2,
+        "kind": "drop-window",
+        "fraction": 0.039441550925925925
+      },
+      {
+        "tSec": 75.21666666666667,
+        "kind": "drop-window",
+        "fraction": 0.03512393904320988
+      },
+      {
+        "tSec": 75.23333333333333,
+        "kind": "drop-window",
+        "fraction": 0.025265239197530865
+      },
+      {
+        "tSec": 75.25,
+        "kind": "drop-window",
+        "fraction": 0.007249710648148148
+      }
+    ]
+  },
+  "W-1": {
+    "pass": true,
+    "maxHdrRatio": 2542931.93359375,
+    "hdrMin": 0,
+    "hdrMax": 2.5429319335937497
+  },
+  "W-2": {
+    "pass": false,
+    "sections": [
+      {
+        "sectionIndex": 0,
+        "targetSec": 7.503573082844096,
+        "capturedSec": 7.503573082844096,
+        "environment": "void",
+        "energies": {
+          "low": 536.5123962947864,
+          "middle": 5.400093348690334,
+          "high": 0.3520001108235712
+        },
+        "fractions": {
+          "low": 0.9893924577983703,
+          "middle": 0.009958412270619292,
+          "high": 0.0006491299310103491
+        },
+        "mean": 0.011767010327780648
+      },
+      {
+        "sectionIndex": 1,
+        "targetSec": 22.506793915198955,
+        "capturedSec": 22.506793915198955,
+        "environment": "tunnel",
+        "energies": {
+          "low": 5329.40387580728,
+          "middle": 1288.7976457381383,
+          "high": 235.75799718898878
+        },
+        "fractions": {
+          "low": 0.7775657065437938,
+          "middle": 0.18803695035189183,
+          "high": 0.03439734310431437
+        },
+        "mean": 0.392556333944933
+      },
+      {
+        "sectionIndex": 2,
+        "targetSec": 45.00573716373124,
+        "capturedSec": 45.00573716373124,
+        "environment": "fractal",
+        "energies": {
+          "low": 1901.737525514845,
+          "middle": 694.5661458020417,
+          "high": 407.40967302599546
+        },
+        "fractions": {
+          "low": 0.6331288333810313,
+          "middle": 0.23123582918129323,
+          "high": 0.13563533743767545
+        },
+        "mean": 0.12065940021786835
+      },
+      {
+        "sectionIndex": 3,
+        "targetSec": 67.50468041226354,
+        "capturedSec": 67.50468041226354,
+        "environment": "cathedral",
+        "energies": {
+          "low": 3369.46280867607,
+          "middle": 258.6847093990454,
+          "high": 84.3897703187444
+        },
+        "fractions": {
+          "low": 0.9075902938967617,
+          "middle": 0.06967868314959312,
+          "high": 0.022731022953645163
+        },
+        "mean": 0.17586268335905034
+      },
+      {
+        "sectionIndex": 4,
+        "targetSec": 90.00362366079582,
+        "capturedSec": 90.00362366079582,
+        "environment": "fractal",
+        "energies": {
+          "low": 1386.7642691079977,
+          "middle": 167.85150914169992,
+          "high": 88.28980428873201
+        },
+        "fractions": {
+          "low": 0.8440924931092683,
+          "middle": 0.102167471415098,
+          "high": 0.053740035475633795
+        },
+        "mean": 0.11814678920658168
+      },
+      {
+        "sectionIndex": 5,
+        "targetSec": 112.50145957990867,
+        "capturedSec": 112.50145957990867,
+        "environment": "terrain",
+        "energies": {
+          "low": 1764.933589466478,
+          "middle": 173.0956956383115,
+          "high": 77.2205322557565
+        },
+        "fractions": {
+          "low": 0.8757889837092668,
+          "middle": 0.08589292213162035,
+          "high": 0.038318094159112914
+        },
+        "mean": 0.11461796860475496
+      }
+    ]
+  },
+  "W-5": {
+    "pass": true,
+    "drops": [
+      {
+        "tSec": 30.00644166470972,
+        "beforeN": 28,
+        "afterN": 15,
+        "beforeMean": 0,
+        "afterMean": 0.3624353123787469,
+        "ratio": "Infinity",
+        "pass": true
+      },
+      {
+        "tSec": 75.00432816177431,
+        "beforeN": 28,
+        "afterN": 15,
+        "beforeMean": 0,
+        "afterMean": 0.27729805620466846,
+        "ratio": "Infinity",
+        "pass": true
+      }
+    ]
+  },
+  "BW-2-exposure": {
+    "pass": true,
+    "maximum": 0,
+    "frames": [
+      {
+        "tSec": 7.503573082844096,
+        "kind": "intro",
+        "clippedFraction": 0,
+        "mean": 0.011767010327779801
+      },
+      {
+        "tSec": 22.506793915198955,
+        "kind": "build",
+        "clippedFraction": 0,
+        "mean": 0.3925563339451757
+      },
+      {
+        "tSec": 45.00573716373124,
+        "kind": "drop",
+        "clippedFraction": 0,
+        "mean": 0.12065940021743822
+      },
+      {
+        "tSec": 67.50468041226354,
+        "kind": "break",
+        "clippedFraction": 0,
+        "mean": 0.17586268335804442
+      },
+      {
+        "tSec": 90.00362366079582,
+        "kind": "drop",
+        "clippedFraction": 0,
+        "mean": 0.11814678920640456
+      },
+      {
+        "tSec": 112.50145957990867,
+        "kind": "outro",
+        "clippedFraction": 0,
+        "mean": 0.11461796860462718
+      },
+      {
+        "tSec": 7,
+        "kind": "reference",
+        "clippedFraction": 0,
+        "mean": 0.01097614534200112
+      },
+      {
+        "tSec": 20,
+        "kind": "reference",
+        "clippedFraction": 0,
+        "mean": 0.39837464865915023
+      },
+      {
+        "tSec": 30.3,
+        "kind": "reference",
+        "clippedFraction": 0,
+        "mean": 0.3555694205081198
+      },
+      {
+        "tSec": 45,
+        "kind": "reference",
+        "clippedFraction": 0,
+        "mean": 0.12236365614442828
+      },
+      {
+        "tSec": 62,
+        "kind": "reference",
+        "clippedFraction": 0,
+        "mean": 0.20598435343793278
+      },
+      {
+        "tSec": 90,
+        "kind": "reference",
+        "clippedFraction": 0,
+        "mean": 0.20582315691356975
+      },
+      {
+        "tSec": 29.55,
+        "kind": "drop-window",
+        "clippedFraction": 0,
+        "mean": 0
+      },
+      {
+        "tSec": 29.566666666666666,
+        "kind": "drop-window",
+        "clippedFraction": 0,
+        "mean": 0
+      },
+      {
+        "tSec": 29.583333333333332,
+        "kind": "drop-window",
+        "clippedFraction": 0,
+        "mean": 0
+      },
+      {
+        "tSec": 29.6,
+        "kind": "drop-window",
+        "clippedFraction": 0,
+        "mean": 0
+      },
+      {
+        "tSec": 29.616666666666667,
+        "kind": "drop-window",
+        "clippedFraction": 0,
+        "mean": 0
+      },
+      {
+        "tSec": 29.633333333333333,
+        "kind": "drop-window",
+        "clippedFraction": 0,
+        "mean": 0
+      },
+      {
+        "tSec": 29.65,
+        "kind": "drop-window",
+        "clippedFraction": 0,
+        "mean": 0
+      },
+      {
+        "tSec": 29.666666666666668,
+        "kind": "drop-window",
+        "clippedFraction": 0,
+        "mean": 0
+      },
+      {
+        "tSec": 29.683333333333334,
+        "kind": "drop-window",
+        "clippedFraction": 0,
+        "mean": 0
+      },
+      {
+        "tSec": 29.7,
+        "kind": "drop-window",
+        "clippedFraction": 0,
+        "mean": 0
+      },
+      {
+        "tSec": 29.716666666666665,
+        "kind": "drop-window",
+        "clippedFraction": 0,
+        "mean": 0
+      },
+      {
+        "tSec": 29.733333333333334,
+        "kind": "drop-window",
+        "clippedFraction": 0,
+        "mean": 0
+      },
+      {
+        "tSec": 29.75,
+        "kind": "drop-window",
+        "clippedFraction": 0,
+        "mean": 0
+      },
+      {
+        "tSec": 29.766666666666666,
+        "kind": "drop-window",
+        "clippedFraction": 0,
+        "mean": 0
+      },
+      {
+        "tSec": 29.783333333333335,
+        "kind": "drop-window",
+        "clippedFraction": 0,
+        "mean": 0
+      },
+      {
+        "tSec": 29.8,
+        "kind": "drop-window",
+        "clippedFraction": 0,
+        "mean": 0
+      },
+      {
+        "tSec": 29.816666666666666,
+        "kind": "drop-window",
+        "clippedFraction": 0,
+        "mean": 0
+      },
+      {
+        "tSec": 29.833333333333332,
+        "kind": "drop-window",
+        "clippedFraction": 0,
+        "mean": 0
+      },
+      {
+        "tSec": 29.85,
+        "kind": "drop-window",
+        "clippedFraction": 0,
+        "mean": 0
+      },
+      {
+        "tSec": 29.866666666666667,
+        "kind": "drop-window",
+        "clippedFraction": 0,
+        "mean": 0
+      },
+      {
+        "tSec": 29.883333333333333,
+        "kind": "drop-window",
+        "clippedFraction": 0,
+        "mean": 0
+      },
+      {
+        "tSec": 29.9,
+        "kind": "drop-window",
+        "clippedFraction": 0,
+        "mean": 0
+      },
+      {
+        "tSec": 29.916666666666668,
+        "kind": "drop-window",
+        "clippedFraction": 0,
+        "mean": 0
+      },
+      {
+        "tSec": 29.933333333333334,
+        "kind": "drop-window",
+        "clippedFraction": 0,
+        "mean": 0
+      },
+      {
+        "tSec": 29.95,
+        "kind": "drop-window",
+        "clippedFraction": 0,
+        "mean": 0
+      },
+      {
+        "tSec": 29.966666666666665,
+        "kind": "drop-window",
+        "clippedFraction": 0,
+        "mean": 0
+      },
+      {
+        "tSec": 29.983333333333334,
+        "kind": "drop-window",
+        "clippedFraction": 0,
+        "mean": 0
+      },
+      {
+        "tSec": 30,
+        "kind": "drop-window",
+        "clippedFraction": 0,
+        "mean": 0
+      },
+      {
+        "tSec": 30.016666666666666,
+        "kind": "drop-window",
+        "clippedFraction": 0,
+        "mean": 0.31058233649514105
+      },
+      {
+        "tSec": 30.033333333333335,
+        "kind": "drop-window",
+        "clippedFraction": 0,
+        "mean": 0.31074742767186925
+      },
+      {
+        "tSec": 30.05,
+        "kind": "drop-window",
+        "clippedFraction": 0,
+        "mean": 0.3117212082280336
+      },
+      {
+        "tSec": 30.066666666666666,
+        "kind": "drop-window",
+        "clippedFraction": 0,
+        "mean": 0.3170284961060578
+      },
+      {
+        "tSec": 30.083333333333332,
+        "kind": "drop-window",
+        "clippedFraction": 0,
+        "mean": 0.32226064914155095
+      },
+      {
+        "tSec": 30.1,
+        "kind": "drop-window",
+        "clippedFraction": 0,
+        "mean": 0.3390352971063368
+      },
+      {
+        "tSec": 30.116666666666667,
+        "kind": "drop-window",
+        "clippedFraction": 0,
+        "mean": 0.36033859895361436
+      },
+      {
+        "tSec": 30.133333333333333,
+        "kind": "drop-window",
+        "clippedFraction": 0,
+        "mean": 0.3668151129304691
+      },
+      {
+        "tSec": 30.15,
+        "kind": "drop-window",
+        "clippedFraction": 0,
+        "mean": 0.3760482678346703
+      },
+      {
+        "tSec": 30.166666666666668,
+        "kind": "drop-window",
+        "clippedFraction": 0,
+        "mean": 0.38848205821821896
+      },
+      {
+        "tSec": 30.183333333333334,
+        "kind": "drop-window",
+        "clippedFraction": 0,
+        "mean": 0.40469357488756763
+      },
+      {
+        "tSec": 30.2,
+        "kind": "drop-window",
+        "clippedFraction": 0,
+        "mean": 0.41030518191412196
+      },
+      {
+        "tSec": 30.216666666666665,
+        "kind": "drop-window",
+        "clippedFraction": 0,
+        "mean": 0.41178951803128905
+      },
+      {
+        "tSec": 30.233333333333334,
+        "kind": "drop-window",
+        "clippedFraction": 0,
+        "mean": 0.4037067572206511
+      },
+      {
+        "tSec": 30.25,
+        "kind": "drop-window",
+        "clippedFraction": 0,
+        "mean": 0.4029752009416112
+      },
+      {
+        "tSec": 74.55,
+        "kind": "drop-window",
+        "clippedFraction": 0,
+        "mean": 0
+      },
+      {
+        "tSec": 74.56666666666666,
+        "kind": "drop-window",
+        "clippedFraction": 0,
+        "mean": 0
+      },
+      {
+        "tSec": 74.58333333333333,
+        "kind": "drop-window",
+        "clippedFraction": 0,
+        "mean": 0
+      },
+      {
+        "tSec": 74.6,
+        "kind": "drop-window",
+        "clippedFraction": 0,
+        "mean": 0
+      },
+      {
+        "tSec": 74.61666666666666,
+        "kind": "drop-window",
+        "clippedFraction": 0,
+        "mean": 0
+      },
+      {
+        "tSec": 74.63333333333334,
+        "kind": "drop-window",
+        "clippedFraction": 0,
+        "mean": 0
+      },
+      {
+        "tSec": 74.65,
+        "kind": "drop-window",
+        "clippedFraction": 0,
+        "mean": 0
+      },
+      {
+        "tSec": 74.66666666666667,
+        "kind": "drop-window",
+        "clippedFraction": 0,
+        "mean": 0
+      },
+      {
+        "tSec": 74.68333333333334,
+        "kind": "drop-window",
+        "clippedFraction": 0,
+        "mean": 0
+      },
+      {
+        "tSec": 74.7,
+        "kind": "drop-window",
+        "clippedFraction": 0,
+        "mean": 0
+      },
+      {
+        "tSec": 74.71666666666667,
+        "kind": "drop-window",
+        "clippedFraction": 0,
+        "mean": 0
+      },
+      {
+        "tSec": 74.73333333333333,
+        "kind": "drop-window",
+        "clippedFraction": 0,
+        "mean": 0
+      },
+      {
+        "tSec": 74.75,
+        "kind": "drop-window",
+        "clippedFraction": 0,
+        "mean": 0
+      },
+      {
+        "tSec": 74.76666666666667,
+        "kind": "drop-window",
+        "clippedFraction": 0,
+        "mean": 0
+      },
+      {
+        "tSec": 74.78333333333333,
+        "kind": "drop-window",
+        "clippedFraction": 0,
+        "mean": 0
+      },
+      {
+        "tSec": 74.8,
+        "kind": "drop-window",
+        "clippedFraction": 0,
+        "mean": 0
+      },
+      {
+        "tSec": 74.81666666666666,
+        "kind": "drop-window",
+        "clippedFraction": 0,
+        "mean": 0
+      },
+      {
+        "tSec": 74.83333333333333,
+        "kind": "drop-window",
+        "clippedFraction": 0,
+        "mean": 0
+      },
+      {
+        "tSec": 74.85,
+        "kind": "drop-window",
+        "clippedFraction": 0,
+        "mean": 0
+      },
+      {
+        "tSec": 74.86666666666666,
+        "kind": "drop-window",
+        "clippedFraction": 0,
+        "mean": 0
+      },
+      {
+        "tSec": 74.88333333333334,
+        "kind": "drop-window",
+        "clippedFraction": 0,
+        "mean": 0
+      },
+      {
+        "tSec": 74.9,
+        "kind": "drop-window",
+        "clippedFraction": 0,
+        "mean": 0
+      },
+      {
+        "tSec": 74.91666666666667,
+        "kind": "drop-window",
+        "clippedFraction": 0,
+        "mean": 0
+      },
+      {
+        "tSec": 74.93333333333334,
+        "kind": "drop-window",
+        "clippedFraction": 0,
+        "mean": 0
+      },
+      {
+        "tSec": 74.95,
+        "kind": "drop-window",
+        "clippedFraction": 0,
+        "mean": 0
+      },
+      {
+        "tSec": 74.96666666666667,
+        "kind": "drop-window",
+        "clippedFraction": 0,
+        "mean": 0
+      },
+      {
+        "tSec": 74.98333333333333,
+        "kind": "drop-window",
+        "clippedFraction": 0,
+        "mean": 0
+      },
+      {
+        "tSec": 75,
+        "kind": "drop-window",
+        "clippedFraction": 0,
+        "mean": 0
+      },
+      {
+        "tSec": 75.01666666666667,
+        "kind": "drop-window",
+        "clippedFraction": 0,
+        "mean": 0.26860818989957747
+      },
+      {
+        "tSec": 75.03333333333333,
+        "kind": "drop-window",
+        "clippedFraction": 0,
+        "mean": 0.26783400030371957
+      },
+      {
+        "tSec": 75.05,
+        "kind": "drop-window",
+        "clippedFraction": 0,
+        "mean": 0.26482005716759677
+      },
+      {
+        "tSec": 75.06666666666666,
+        "kind": "drop-window",
+        "clippedFraction": 0,
+        "mean": 0.26404508709998165
+      },
+      {
+        "tSec": 75.08333333333333,
+        "kind": "drop-window",
+        "clippedFraction": 0,
+        "mean": 0.2635567644473179
+      },
+      {
+        "tSec": 75.1,
+        "kind": "drop-window",
+        "clippedFraction": 0,
+        "mean": 0.26270202612157895
+      },
+      {
+        "tSec": 75.11666666666666,
+        "kind": "drop-window",
+        "clippedFraction": 0,
+        "mean": 0.26190826571993814
+      },
+      {
+        "tSec": 75.13333333333334,
+        "kind": "drop-window",
+        "clippedFraction": 0,
+        "mean": 0.26712639990372117
+      },
+      {
+        "tSec": 75.15,
+        "kind": "drop-window",
+        "clippedFraction": 0,
+        "mean": 0.2929127125624343
+      },
+      {
+        "tSec": 75.16666666666667,
+        "kind": "drop-window",
+        "clippedFraction": 0,
+        "mean": 0.29925166697615185
+      },
+      {
+        "tSec": 75.18333333333334,
+        "kind": "drop-window",
+        "clippedFraction": 0,
+        "mean": 0.29715644500956606
+      },
+      {
+        "tSec": 75.2,
+        "kind": "drop-window",
+        "clippedFraction": 0,
+        "mean": 0.2944771024547707
+      },
+      {
+        "tSec": 75.21666666666667,
+        "kind": "drop-window",
+        "clippedFraction": 0,
+        "mean": 0.2922096249177543
+      },
+      {
+        "tSec": 75.23333333333333,
+        "kind": "drop-window",
+        "clippedFraction": 0,
+        "mean": 0.2868998420450424
+      },
+      {
+        "tSec": 75.25,
+        "kind": "drop-window",
+        "clippedFraction": 0,
+        "mean": 0.27596265844087664
+      }
+    ]
+  },
+  "BW-2-preview": {
+    "pass": true,
+    "mismatchedChannels": 0,
+    "previewSteps": 6
+  },
+  "BW-2-matter": {
+    "pass": false,
+    "sections": [
+      {
+        "sectionIndex": 0,
+        "kind": "intro",
+        "visiblePixels": 192,
+        "fraction": 0.00009259259259259259,
+        "peakHdrContribution": 0.011461808025836944,
+        "meanHdrContribution": 2.3400650675879948e-8,
+        "environmentDominantFraction": 0.999994212962963,
+        "environmentEnergyFraction": 0.9999846645952202
+      },
+      {
+        "sectionIndex": 1,
+        "kind": "build",
+        "visiblePixels": 340,
+        "fraction": 0.00016396604938271605,
+        "peakHdrContribution": 2.2991648620605467,
+        "meanHdrContribution": 0.000010295356664875603,
+        "environmentDominantFraction": 0.9999609375,
+        "environmentEnergyFraction": 0.999836667932924
+      },
+      {
+        "sectionIndex": 2,
+        "kind": "drop",
+        "visiblePixels": 47,
+        "fraction": 0.000022665895061728396,
+        "peakHdrContribution": 2.184504704284668,
+        "meanHdrContribution": 0.0000025044751919714026,
+        "environmentDominantFraction": 0.9999879436728395,
+        "environmentEnergyFraction": 0.99988638036511
+      },
+      {
+        "sectionIndex": 3,
+        "kind": "break",
+        "visiblePixels": 183,
+        "fraction": 0.00008825231481481481,
+        "peakHdrContribution": 0.9545076042175293,
+        "meanHdrContribution": 0.000003354849987784056,
+        "environmentDominantFraction": 0.9999744405864197,
+        "environmentEnergyFraction": 0.9998487300072545
+      },
+      {
+        "sectionIndex": 4,
+        "kind": "drop",
+        "visiblePixels": 0,
+        "fraction": 0,
+        "peakHdrContribution": 0,
+        "meanHdrContribution": 0,
+        "environmentDominantFraction": 1,
+        "environmentEnergyFraction": 1
+      },
+      {
+        "sectionIndex": 5,
+        "kind": "outro",
+        "visiblePixels": 347,
+        "fraction": 0.00016734182098765432,
+        "peakHdrContribution": 1.1902806886672974,
+        "meanHdrContribution": 0.000006140603702567103,
+        "environmentDominantFraction": 0.9999358603395062,
+        "environmentEnergyFraction": 0.9989640400216441
+      }
+    ]
+  },
+  "BW-3-coverage": {
+    "pass": true,
+    "meanCoverage": 0.0000940795396090535,
+    "maximum": 0.00022135416666666666,
+    "sections": [
+      {
+        "sectionIndex": 0,
+        "kind": "intro",
+        "visiblePixels": 192,
+        "fraction": 0.00009259259259259259,
+        "peakHdrContribution": 0.011461808025836944,
+        "meanHdrContribution": 2.3400650675879948e-8,
+        "environmentDominantFraction": 0.999994212962963,
+        "environmentEnergyFraction": 0.9999846645952202
+      },
+      {
+        "sectionIndex": 1,
+        "kind": "build",
+        "visiblePixels": 340,
+        "fraction": 0.00016396604938271605,
+        "peakHdrContribution": 2.2991648620605467,
+        "meanHdrContribution": 0.000010295356664875603,
+        "environmentDominantFraction": 0.9999609375,
+        "environmentEnergyFraction": 0.999836667932924
+      },
+      {
+        "sectionIndex": 2,
+        "kind": "drop",
+        "visiblePixels": 47,
+        "fraction": 0.000022665895061728396,
+        "peakHdrContribution": 2.184504704284668,
+        "meanHdrContribution": 0.0000025044751919714026,
+        "environmentDominantFraction": 0.9999879436728395,
+        "environmentEnergyFraction": 0.99988638036511
+      },
+      {
+        "sectionIndex": 3,
+        "kind": "break",
+        "visiblePixels": 183,
+        "fraction": 0.00008825231481481481,
+        "peakHdrContribution": 0.9545076042175293,
+        "meanHdrContribution": 0.000003354849987784056,
+        "environmentDominantFraction": 0.9999744405864197,
+        "environmentEnergyFraction": 0.9998487300072545
+      },
+      {
+        "sectionIndex": 4,
+        "kind": "drop",
+        "visiblePixels": 0,
+        "fraction": 0,
+        "peakHdrContribution": 0,
+        "meanHdrContribution": 0,
+        "environmentDominantFraction": 1,
+        "environmentEnergyFraction": 1
+      },
+      {
+        "sectionIndex": 5,
+        "kind": "outro",
+        "visiblePixels": 347,
+        "fraction": 0.00016734182098765432,
+        "peakHdrContribution": 1.1902806886672974,
+        "meanHdrContribution": 0.000006140603702567103,
+        "environmentDominantFraction": 0.9999358603395062,
+        "environmentEnergyFraction": 0.9989640400216441
+      },
+      {
+        "tSec": 7,
+        "kind": "intro",
+        "visiblePixels": 202,
+        "fraction": 0.00009741512345679012,
+        "peakHdrContribution": 0.01231535232067108,
+        "meanHdrContribution": 2.5595447048544883e-8,
+        "environmentDominantFraction": 0.9999937307098765,
+        "environmentEnergyFraction": 0.9999821569541479
+      },
+      {
+        "tSec": 20,
+        "kind": "build",
+        "visiblePixels": 279,
+        "fraction": 0.0001345486111111111,
+        "peakHdrContribution": 2.410564286804199,
+        "meanHdrContribution": 0.00001222553910772648,
+        "environmentDominantFraction": 0.9999546682098766,
+        "environmentEnergyFraction": 0.9998446768950168
+      },
+      {
+        "tSec": 30.3,
+        "kind": "drop",
+        "visiblePixels": 160,
+        "fraction": 0.00007716049382716049,
+        "peakHdrContribution": 12.519889782714845,
+        "meanHdrContribution": 0.000024065431648014496,
+        "environmentDominantFraction": 0.9999696180555555,
+        "environmentEnergyFraction": 0.9995962363265033
+      },
+      {
+        "tSec": 45,
+        "kind": "drop",
+        "visiblePixels": 41,
+        "fraction": 0.000019772376543209878,
+        "peakHdrContribution": 6.872652400207519,
+        "meanHdrContribution": 0.000012705032690163743,
+        "environmentDominantFraction": 0.9999879436728395,
+        "environmentEnergyFraction": 0.9994250392255036
+      },
+      {
+        "tSec": 62,
+        "kind": "break",
+        "visiblePixels": 91,
+        "fraction": 0.000043885030864197534,
+        "peakHdrContribution": 0.8325492378234864,
+        "meanHdrContribution": 8.155392740312733e-7,
+        "environmentDominantFraction": 0.9999855324074074,
+        "environmentEnergyFraction": 0.9999693274193698
+      },
+      {
+        "tSec": 90,
+        "kind": "drop",
+        "visiblePixels": 459,
+        "fraction": 0.00022135416666666666,
+        "peakHdrContribution": 0.44542946701049807,
+        "meanHdrContribution": 0.000006127656249444428,
+        "environmentDominantFraction": 0.999888599537037,
+        "environmentEnergyFraction": 0.999515928178436
+      }
+    ]
+  },
+  "BW-3-hero": {
+    "pass": true,
+    "drops": [
+      {
+        "sectionIndex": 2,
+        "kind": "drop",
+        "visiblePixels": 47,
+        "fraction": 0.000022665895061728396,
+        "peakHdrContribution": 2.184504704284668,
+        "meanHdrContribution": 0.0000025044751919714026,
+        "environmentDominantFraction": 0.9999879436728395,
+        "environmentEnergyFraction": 0.99988638036511
+      },
+      {
+        "sectionIndex": 4,
+        "kind": "drop",
+        "visiblePixels": 0,
+        "fraction": 0,
+        "peakHdrContribution": 0,
+        "meanHdrContribution": 0,
+        "environmentDominantFraction": 1,
+        "environmentEnergyFraction": 1
+      },
+      {
+        "tSec": 30.3,
+        "kind": "drop",
+        "visiblePixels": 160,
+        "fraction": 0.00007716049382716049,
+        "peakHdrContribution": 12.519889782714845,
+        "meanHdrContribution": 0.000024065431648014496,
+        "environmentDominantFraction": 0.9999696180555555,
+        "environmentEnergyFraction": 0.9995962363265033
+      },
+      {
+        "tSec": 45,
+        "kind": "drop",
+        "visiblePixels": 41,
+        "fraction": 0.000019772376543209878,
+        "peakHdrContribution": 6.872652400207519,
+        "meanHdrContribution": 0.000012705032690163743,
+        "environmentDominantFraction": 0.9999879436728395,
+        "environmentEnergyFraction": 0.9994250392255036
+      },
+      {
+        "tSec": 90,
+        "kind": "drop",
+        "visiblePixels": 459,
+        "fraction": 0.00022135416666666666,
+        "peakHdrContribution": 0.44542946701049807,
+        "meanHdrContribution": 0.000006127656249444428,
+        "environmentDominantFraction": 0.999888599537037,
+        "environmentEnergyFraction": 0.999515928178436
+      }
+    ]
+  },
+  "BW-3-kick": {
+    "pass": true,
+    "kicks": [
+      {
+        "tSec": 30.60644166470972,
+        "immediateAge": 0,
+        "advancedAge": 0.11999999731779099,
+        "changedPixels": 1848271,
+        "anchorDrift": 0,
+        "pass": true
+      },
+      {
+        "tSec": 75.6043281617743,
+        "immediateAge": 0,
+        "advancedAge": 0.11999999731779099,
+        "changedPixels": 2027982,
+        "anchorDrift": 0,
+        "pass": true
+      }
+    ]
+  },
+  "BW-2-environments": {
+    "pass": true,
+    "environments": [
+      "void",
+      "tunnel",
+      "fractal",
+      "cathedral",
+      "fractal",
+      "terrain"
+    ]
+  },
+  "references": [
+    {
+      "tSec": 7,
+      "environment": "void",
+      "mean": 0.01097614534200112,
+      "clippedFraction": 0
+    },
+    {
+      "tSec": 20,
+      "environment": "tunnel",
+      "mean": 0.39837464865915023,
+      "clippedFraction": 0
+    },
+    {
+      "tSec": 30.3,
+      "environment": "fractal",
+      "mean": 0.3555694205081198,
+      "clippedFraction": 0
+    },
+    {
+      "tSec": 45,
+      "environment": "fractal",
+      "mean": 0.12236365614442828,
+      "clippedFraction": 0
+    },
+    {
+      "tSec": 62,
+      "environment": "cathedral",
+      "mean": 0.20598435343793278,
+      "clippedFraction": 0
+    },
+    {
+      "tSec": 90,
+      "environment": "fractal",
+      "mean": 0.20582315691356975,
+      "clippedFraction": 0
+    }
+  ],
+  "W-3": {
+    "pass": true,
+    "width": 1920,
+    "height": 1080,
+    "particleCount": 262144,
+    "fluidWidth": 480,
+    "fluidHeight": 270,
+    "formWidth": 960,
+    "formHeight": 540,
+    "hdrFormat": "RGBA16F",
+    "cpuP95Ms": 0.20000028610229492,
+    "gpuP95Ms": 48.993375,
+    "renderP95Ms": 48.993375,
+    "frameP95Ms": 26.60000000000582,
+    "timingSamples": 7955,
+    "submittedFrames": 7961,
+    "timerAvailable": true,
+    "timerDisjoints": 0,
+    "mfsFrames": 8085,
+    "responseCount": 653,
+    "environment": "terrain",
+    "particleCoverageBudget": 0.08,
+    "fractalRegime": null,
+    "dropKeyRole": null,
+    "raymarchSteps": 64,
+    "previewSteps": 0,
+    "frame": 8087,
+    "tSec": 120,
+    "sectionIndex": 5,
+    "boundaryCount": 6,
+    "expectedBoundaryCount": 6
+  },
+  "W-4": {
+    "pass": true,
+    "checked": 653,
+    "maxDelayFrames": 0,
+    "uniformFailures": 0
+  },
+  "W-6": {
+    "pass": true,
+    "fired": 6,
+    "expected": 6,
+    "events": [
+      {
+        "tSec": 0,
+        "type": "boundary",
+        "sectionIndex": 0,
+        "action": "ignite",
+        "firedFrame": 1,
+        "firedSec": 0.003513
+      },
+      {
+        "tSec": 15.007146165688193,
+        "type": "boundary",
+        "sectionIndex": 1,
+        "action": "converge",
+        "firedFrame": 1102,
+        "firedSec": 15.013333
+      },
+      {
+        "tSec": 26.24910311285062,
+        "type": "foreshadow",
+        "sectionIndex": 1,
+        "action": "",
+        "firedFrame": 1945,
+        "firedSec": 26.260067
+      },
+      {
+        "tSec": 29.53677434572733,
+        "type": "silence",
+        "sectionIndex": 1,
+        "action": "",
+        "firedFrame": 2191,
+        "firedSec": 29.540373
+      },
+      {
+        "tSec": 30.00644166470972,
+        "type": "boundary",
+        "sectionIndex": 2,
+        "action": "phase-transition",
+        "firedFrame": 2226,
+        "firedSec": 30.008218
+      },
+      {
+        "tSec": 60.00503266275277,
+        "type": "boundary",
+        "sectionIndex": 3,
+        "action": "drift",
+        "firedFrame": 4511,
+        "firedSec": 60.016
+      },
+      {
+        "tSec": 71.2469896099152,
+        "type": "foreshadow",
+        "sectionIndex": 3,
+        "action": "",
+        "firedFrame": 5353,
+        "firedSec": 71.247645
+      },
+      {
+        "tSec": 74.53466084279192,
+        "type": "silence",
+        "sectionIndex": 3,
+        "action": "",
+        "firedFrame": 5600,
+        "firedSec": 74.541727
+      },
+      {
+        "tSec": 75.00432816177431,
+        "type": "boundary",
+        "sectionIndex": 4,
+        "action": "phase-transition",
+        "firedFrame": 5635,
+        "firedSec": 75.008
+      },
+      {
+        "tSec": 105.00291915981735,
+        "type": "boundary",
+        "sectionIndex": 5,
+        "action": "extinguish",
+        "firedFrame": 7420,
+        "firedSec": 105.114667
+      },
+      {
+        "tSec": 120,
+        "type": "end",
+        "sectionIndex": 5,
+        "action": "",
+        "firedFrame": 8087,
+        "firedSec": 120
+      }
+    ]
+  },
+  "W-7": {
+    "pass": true,
+    "sections": [
+      {
+        "kind": "intro",
+        "label": "A",
+        "environment": "void",
+        "formId": 1,
+        "variation": 1
+      },
+      {
+        "kind": "build",
+        "label": "B",
+        "environment": "tunnel",
+        "formId": 4,
+        "variation": 1
+      },
+      {
+        "kind": "drop",
+        "label": "C",
+        "environment": "fractal",
+        "formId": 3,
+        "variation": 1
+      },
+      {
+        "kind": "break",
+        "label": "A",
+        "environment": "cathedral",
+        "formId": 1,
+        "variation": 1
+      },
+      {
+        "kind": "drop",
+        "label": "C",
+        "environment": "fractal",
+        "formId": 3,
+        "variation": 2
+      },
+      {
+        "kind": "outro",
+        "label": "A",
+        "environment": "terrain",
+        "formId": 1,
+        "variation": 1
+      }
+    ]
+  },
+  "W-8": {
+    "pass": false,
+    "p95Ms": 48.993375,
+    "cpuP95Ms": 0.20000028610229492,
+    "gpuP95Ms": 48.993375,
+    "samples": 7955,
+    "submittedFrames": 7961,
+    "disjoints": 0
+  },
+  "metrics": {
+    "width": 1920,
+    "height": 1080,
+    "particleCount": 262144,
+    "fluidWidth": 480,
+    "fluidHeight": 270,
+    "formWidth": 960,
+    "formHeight": 540,
+    "hdrFormat": "RGBA16F",
+    "cpuP95Ms": 0.20000028610229492,
+    "gpuP95Ms": 48.993375,
+    "renderP95Ms": 48.993375,
+    "frameP95Ms": 26.60000000000582,
+    "timingSamples": 7955,
+    "submittedFrames": 7961,
+    "timerAvailable": true,
+    "timerDisjoints": 0,
+    "mfsFrames": 8085,
+    "responseCount": 653,
+    "environment": "terrain",
+    "particleCoverageBudget": 0.08,
+    "fractalRegime": null,
+    "dropKeyRole": null,
+    "raymarchSteps": 64,
+    "previewSteps": 0,
+    "frame": 8087,
+    "tSec": 120,
+    "sectionIndex": 5,
+    "boundaryCount": 6,
+    "expectedBoundaryCount": 6
+  },
+  "durationSec": 120,
+  "debugErrors": null,
+  "glError": 0,
+  "environment": {
+    "renderer": "ANGLE (Apple, ANGLE Metal Renderer: Apple M4 Max, Unspecified Version)",
+    "hardware": true,
+    "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36"
+  },
+  "consoleErrors": [],
+  "runtimePass": true
+}

@@ -1,0 +1,104 @@
+// 目的 — 移流・粘性拡散・渦度閉じ込め・圧力投影による Stable Fluids — doc/20261004-concept-world-mode.md §2.6・§3
+const WORLD_FLUID_FRAGMENT = `#version 300 es
+${WORLD_GLSL}
+uniform sampler2D field, velocity, auxiliary;
+uniform int mode;
+out vec4 frag;
+void main(){
+ vec2 dx=1./vec2(textureSize(field,0)), uv=vUv;
+ vec4 c=texture(field,uv),l=texture(field,uv-vec2(dx.x,0)),r=texture(field,uv+vec2(dx.x,0));
+ vec4 b=texture(field,uv-vec2(0,dx.y)),t=texture(field,uv+vec2(0,dx.y));
+ vec2 q=(uv-.5)*vec2(screen.x/screen.y,1.); float radius=length(q); vec2 radial=q/max(radius,.002);
+ if(mode==0){ // 半ラグランジュ移流。速度は格子セル/秒。
+   frag=texture(field,clamp(uv-clock.y*texture(velocity,uv).xy*dx,dx*.5,1.-dx*.5));
+   frag.xy*=exp(-clock.y*(.12+story.w*1.8));
+ }else if(mode==1){ // 低域の放射力と、中心への収束／ドロップの爆散。
+   vec2 v=c.xy;
+   float wave=exp(-pow((radius-.18-(1.-hit.w)*.8)*15.,2.));
+   v+=clock.y*(radial*(hit.x*100.*exp(-radius*4.)+hit.w*180.*wave-mood.y*32.*exp(-radius*2.)));
+   // 音がなくても微小な種渦だけを与える。実際の渦成長は後段の渦度閉じ込め。
+   v+=clock.y*vec2(-q.y,q.x)*(2.+audio.x*16.)*exp(-radius*2.);
+   if(uv.x<dx.x||uv.x>1.-dx.x) v.x=0.; if(uv.y<dx.y||uv.y>1.-dx.y) v.y=0.;
+   frag=vec4(clamp(v,vec2(-120),vec2(120)),0,1);
+ }else if(mode==2){ // curl(v)
+   frag=vec4(.5*(r.y-l.y-t.x+b.x),0,0,1);
+ }else if(mode==3){ // 渦度閉じ込め: ∇|curl| × curl。
+   vec2 n=.5*vec2(abs(r.x)-abs(l.x),abs(t.x)-abs(b.x)); n/=length(n)+.0001;
+   vec2 v=texture(velocity,uv).xy+clock.y*(8.+audio.x*35.)*vec2(n.y,-n.x)*c.x;
+   frag=vec4(clamp(v,vec2(-120),vec2(120)),0,1);
+ }else if(mode==4){ // 非圧縮条件の右辺。
+   frag=vec4(.5*(r.x-l.x+t.y-b.y),0,0,1);
+ }else if(mode==5){ // Poisson 方程式の Jacobi 反復。
+   frag=vec4((l.x+r.x+b.x+t.x-texture(auxiliary,uv).x)*.25,0,0,1);
+ }else if(mode==6){ // 圧力勾配を引いて発散を除く。
+   vec2 v=texture(velocity,uv).xy-.5*vec2(r.x-l.x,t.x-b.x);
+   if(uv.x<dx.x||uv.x>1.-dx.x) v.x=0.; if(uv.y<dx.y||uv.y>1.-dx.y) v.y=0.;
+   frag=vec4(v,0,1);
+ }else if(mode==7){ // 染料の移流と減衰。三色の発光性の煙と全方位バースト。
+   vec2 dv=1./vec2(textureSize(velocity,0)); // 染料は速度格子の2倍の解像度。変位は速度格子のセル単位
+   vec3 dye=texture(field,clamp(uv-clock.y*texture(velocity,uv).xy*dv,dx*.5,1.-dx*.5)).rgb;
+   dye*=exp(-clock.y*(story.x==4.?1.5:.25));
+   float angle=atan(q.y,q.x)+camera.x;
+   float r=.23+.035*sin(angle*3.+clock.x*.3);
+   // 細い注入とノイズの途切れで、渦に巻かれて細い筋（フィラメント）が生まれるようにする
+   float plume=exp(-pow((radius-r)/.012,2.))*pow(.5+.5*cos(angle*3.+story.z),4.)*smoothstep(.35,.75,noise3(vec3(q*22.,clock.x*.6)));
+   float burst=exp(-pow((radius-.08-(1.-hit.w)*.45)/.018,2.))*(.4+.6*noise3(vec3(q*30.,7.)));
+   float inkRate=story.x==0.?.15:story.x==3.?.6:story.x==4.?0.:1.;
+   dye+=clock.y*inkRate*(1.+audio.z*4.+hit.x*12.)*plume*mix(worldColor(0.),worldColor(1.),.5+.5*sin(angle));
+   dye+=clock.y*(hit.w*14.*burst+hit.x*8.*exp(-radius*8.))*worldColor(story.y>1.5?1.:2.);
+   frag=vec4(min(dye,vec3(32)),1);
+ }else { // 暗黙的粘性拡散: 初期速度を auxiliary に固定して反復。
+   float a=clock.y*mood.w*35.; frag=vec4((texture(auxiliary,uv).xy+a*(l.xy+r.xy+b.xy+t.xy))/(1.+4.*a),0,1);
+ }
+}`;
+class WorldFluid {
+  constructor(gpu, w, h) {
+    this.gpu = gpu; this.program = gpu.program(WORLD_FLUID_FRAGMENT);
+    this.fieldLoc = gpu.texture(this.program, 'field'); this.velocityLoc = gpu.texture(this.program, 'velocity');
+    this.auxLoc = gpu.texture(this.program, 'auxiliary'); this.modeLoc = gpu.texture(this.program, 'mode');
+    this.resize(w, h);
+  }
+  resize(w, h) {
+    const g = this.gpu;
+    if (this.velocity) {
+      g.releaseTarget(this.velocity.read); g.releaseTarget(this.velocity.write);
+      g.releaseTarget(this.pressure.read); g.releaseTarget(this.pressure.write);
+      g.releaseTarget(this.dye.read); g.releaseTarget(this.dye.write);
+      g.releaseTarget(this.curl); g.releaseTarget(this.divergence); g.releaseTarget(this.base);
+    }
+    const fw = Math.max(2, Math.ceil(w / 4)), fh = Math.max(2, Math.ceil(h / 4));
+    const dw = Math.max(2, Math.ceil(w / 2)), dh = Math.max(2, Math.ceil(h / 2)); // 染料は画面の1/2（細部を保つ）
+    this.velocity = g.pair(fw, fh); this.pressure = g.pair(fw, fh); this.dye = g.pair(dw, dh);
+    this.curl = g.target(fw, fh); this.divergence = g.target(fw, fh); this.base = g.target(fw, fh);
+  }
+  reset() {
+    const g = this.gpu;
+    g.clearTarget(this.velocity.read); g.clearTarget(this.velocity.write);
+    g.clearTarget(this.pressure.read); g.clearTarget(this.pressure.write);
+    g.clearTarget(this.dye.read); g.clearTarget(this.dye.write);
+    g.clearTarget(this.curl); g.clearTarget(this.divergence); g.clearTarget(this.base);
+  }
+  pass(mode, field, target, auxiliary = this.divergence) {
+    const g = this.gpu, p = this.program; g.bind(p, target);
+    g.sampler(this.fieldLoc, 0, field); g.sampler(this.velocityLoc, 1, this.velocity.read);
+    g.sampler(this.auxLoc, 2, auxiliary === target ? this.base : auxiliary); g.gl.uniform1i(this.modeLoc, mode); g.draw();
+  }
+  step() {
+    const g = this.gpu;
+    this.pass(0, this.velocity.read, this.base);
+    this.pass(1, this.base, this.velocity.write); g.swap(this.velocity);
+    // 粘性の反復で使う固定 RHS。コピーも GPU 内で完結する。
+    g.gl.bindFramebuffer(g.gl.READ_FRAMEBUFFER, this.velocity.read.fbo);
+    g.gl.bindFramebuffer(g.gl.DRAW_FRAMEBUFFER, this.base.fbo);
+    g.gl.blitFramebuffer(0, 0, this.base.width, this.base.height, 0, 0, this.base.width, this.base.height, g.gl.COLOR_BUFFER_BIT, g.gl.NEAREST);
+    for (let i = 0; i < 4; i++) { this.pass(8, this.velocity.read, this.velocity.write, this.base); g.swap(this.velocity); }
+    this.pass(2, this.velocity.read, this.curl);
+    this.pass(3, this.curl, this.velocity.write); g.swap(this.velocity);
+    this.pass(4, this.velocity.read, this.divergence);
+    // 前フレームの圧力を初期値にする。20反復で射影する。
+    for (let i = 0; i < 20; i++) { this.pass(5, this.pressure.read, this.pressure.write); g.swap(this.pressure); }
+    this.pass(6, this.pressure.read, this.velocity.write); g.swap(this.velocity);
+    this.pass(7, this.dye.read, this.dye.write); g.swap(this.dye);
+  }
+}
+if (typeof module !== 'undefined' && module.exports) { module.exports = { WorldFluid }; }

@@ -1,4 +1,237 @@
+## 2026-10-04 — [WORLD-6] 抽象・流体・粒子・光への転換
+
+### 作業内容
+- `world.html`・`js/world/world-app.js`: ファイル選択／ドロップ、再生・一時停止、シーク、全画面ボタンを常設。開始時の全画面要求・カーソル隠しを撤去。ボタンとFでページ全体を全画面にして操作UIを保持し、Spaceも維持。全画面拒否では鑑賞を止めない。シークは停止→固定60Hz再構築→音声位置／MFSリセット→元の再生状態へ復帰。
+- `js/world/form.js`: 削除。大聖堂・建築トンネル・地形・フラクタル建築・全環境レイマーチ・深度／motion FBOを撤去。
+- `js/world/fluid.js`: 既存Stable Fluids（粘性4反復、渦度閉じ込め、圧力20反復）と1/4解像度を保持。三色のHDR発光染料、低域onsetによる放射注入、bass swirl、dropの全方位バーストを実装。
+- `js/world/particles.js`: 512²GPU位置／速度MRTと262,144全粒子の更新・描画を保持。外接面積予算による171〜232候補への間引きと建築深度遮蔽を撤去。流体速度＋三つの流れ関数の解析的curlで移流し、速度方向の加算ストリーク、速度／HDRの発光、soft falloffで描画。銀河状渦／build収束／drop放出殻／break漂流／outro散逸を切替。第二dropは広い三葉の放出分布、強い回転・初速、配色の役割交換で変奏。
+- `js/world/post.js`: 半解像度HDRピンポン履歴にkind別zoom・rotation・velocity warpを適用。buildはzoom-in、dropは5分割→第二8分割の万華鏡バーストと減衰。四段mip-chain bloom、控えめな色収差、ACES、深い黒、色相保持のハイライト肩を使用。深度ボケ／建築motion bufferを撤去。履歴からGPU輝度縮約を行う。
+- `js/world/score.js`・`js/world/gl-util.js`・`js/world/world-engine.js`: 抽象状態名へ移行し、kind/label変奏・三色・伏線・静寂・相転移・全境界を維持。流体＋粒子の直接HDR合成を描画ステップごとに行い、履歴も同じステップで更新。再描画／captureでは履歴を進めず、再上演／renderAtで履歴をクリア。未使用の環境GLSL、adaptive march品質調整を撤去。`renderAt`／`advancePreview`／`__world`、80-float UBOと旧カメラ／衝撃中心の診断値は維持。metricsは抽象レイヤー・formation・feedback解像度・raymarchSteps=0を公開。
+- `tests/browser/world.test.js`・`tests/world/measure.mjs`: 建築優勢／shaft／表面の検査を抽象状態・直接粒子・履歴軌跡・霧の進行へ移行。旧sparks≤8%を§2.6の≤25%へ移行し、平均5〜25%のBW-6-coverageを追加。BW-6-uiで常設UI・開始時非全画面・前後シーク・ボタン/Fのページ全体要求、BW-6-layersで抽象5レイヤー／レイマーチ撤去を検査。W/BWの測定出力、PNG、ライブGPU timing、同期、白飛び≤2%、三帯各≥10%、暖色≤15%、0.4秒の直接殻消失を保持。
+- `tests/unit/world-score.test.mjs`: 旧環境／間引き検査を新方針へ移行し、UW-20被覆計測、UW-21履歴ライフサイクル、UW-22任意全画面・シーク復帰を追加。
+
+### 検証
+- `node tests/run.mjs --unit`: 152件／151成功／0失敗／1スキップ（想定のU15-00異常系）、131,146ms、終了コード0。最後のUI拒否処理／縮約サイズ変更は下記のWORLD単体と個別構文検査で再確認。
+- `node --test tests/unit/world-score.test.mjs`: 最終UW-01〜22の22件すべて成功、0失敗／0スキップ、2,703.548791ms、終了コード0。
+- 全`.js`／`.mjs`113ファイルの`node --check`: 113成功／0失敗。最後に変更したpost/app/unitの3ファイルも再検査し終了コード0。`git diff --check`: 成功。
+- mock命令監査: 粒子262,144、流体480×270、履歴960×540、圧力20反復、レイマーチ0、境界6/6、MFS→uniform遅延0フレーム。120秒7,200固定ステップ、最大simulation dt=0.016666668、逆向き／反復uniform差0、非キック時の診断中心ドリフト0。
+- UW-20: 合成100画素のうち10画素=10%を計測、閾値未満の1画素と負差分を除外。これは実描画被覆の測定ではない。UW-21: simulation更新2回、再描画による更新0、reset1回、1280×720時の流体320×180／履歴640×360。UW-22: 明示全画面要求1／解除1、45秒→10秒シーク、default startの全画面要求0、全画面拒否でもpaused状態を維持。
+- 第二dropのscore: scale=1.75／intensity=1.35／cameraSpeed=1.4。旧診断カメラ30cutの最小切り返し66.0781°。三色96曲、正規化RGB最小彩度0.985、補色色相差180°。これらも実画質／実GPUの測定ではない。
+- 新規BW-6-coverage/ui/layers、移行したBW-2〜5、W-1〜8は未実行。Chrome禁止のためGLSL実コンパイル、file://コンソール、実粒子被覆、HDR比、三帯エネルギー、画質、GPU p95を未確認／未測定。
+
+### spec.md 変更
+- なし。指定対象のworld実装・worldテスト・logに限定し、共有`README.md`／`doc/spec.md`、`index.html`、構想SSOT、ゴールデンは編集していない。共有仕様の更新／本体統合はレビュアー側で扱う必要がある。
+
+### 備考
+- 実装: Codex gpt-6.1-sol high
+- 判断: ユーザー指定の§2.6を旧§2／§2.5／§3の建築・全画面強制・旧8%粒子予算より優先。抽象描画にはレイマーチを全く使わずform.jsを削除。本文に数値表のない画質係数は今回の明示的「決めて記録」に従って選択し、GPU／画質の未実行結果での調整はしていない。粒子数、Stable Fluids反復数、W-1〜8の閾値は保持。
+- 判断: 粒子位置は画面のアスペクト比に合う2D場＋奥行き重み。具体物カメラによる遮蔽は使用しない。curl noiseは三周波数の滑らかな流れ関数の解析的curlで、divergence-freeな揺らぎを加える。粒子point sizeは1080pで1.5〜8px、幅0.45〜0.8px、個別加算alphaは0.008〜0.020にkind／速度／音反応を掛ける。低解像度でpoint size下限を1.5pxとする。新しい値は実GPU被覆の達成を保証するものではない。
+- 判断: 履歴は960×540、染料は480×270、最終描画は1920×1080。履歴のsource注入はsimulation dtに比例し、静寂で両履歴への残光を消す。dropの直接衝撃殻は0.4秒で失効するが、履歴には芸術的な余韻が残る。ライブのdtは既存のrAF入力／clampを保持し、ライブと固定dt書き出しの一致は構想§6の次段階に残す。
+- 計測細部: 直接粒子の合成前後HDR輝度差>1e-4を可視被覆と定義し、半精度の暗部丸めだけを除外。ブルーム／履歴の広がりは含めない。section中央＋従来6参照時刻の全標本を等重みで平均し、5〜25%を検査。各drop標本≤25%も維持。建築が主役という旧BW-3-hero判定を粒子の可視寄与へ変更。BW-6-uiのfullscreen APIは要求対象をmockし、実全画面の見え方は手動検査対象。
+- 制限: シークは状態を近似せず曲頭から再構築するため、長い曲の後半へ移動すると待ち時間が生じる。開始時のボタン／Fのみ全画面を要求し、拒否は鑑賞を停止しない。
+- レビュアー確認: M4 Max実GPUのheaded Chromeで`node tests/world/measure.mjs`（必要なら既存`WORLD_CHROME_WRAPPER`）を実行しreport.json／PNGを確認。1080p GPU p95≤16ms（十分なtimer標本）、直接粒子平均被覆5〜25%、W-1〜8、GLSL／GLエラー0、コンソール0、実曲MFS同期を判定すること。7／20／30.3／45／62／90秒の抽象の主役感、流体の発光と渦、収束→爆発、第一／第二dropの構図・規模・配色・万華鏡差、深い黒・白飛び・ディテールを目視で審査。常設操作、F／ボタン／Esc、全画面中も操作可能、Space、再生中／停止中の前後シーク、曲末／再上演、file選択とドロップも確認。
+- 既存`tests/world/output/`のreport.json／PNGはv5由来で、今回再生成していない。v6の合格証拠として扱わない。
+- 未コミットの変更として納品。コミット・push・PR作成・Chrome起動は行っていない。
+
+## 2026-10-04 — [WORLD-5] ワールドモード v5
+
+### 作業内容
+- `js/world/form.js`: DROP専用の暗い材質、アクセントのスポットキー、弱い冷色fill、強い距離減衰へ変更。キー光源をフラクタル空洞内に置き、同じ円錐・光源・減衰を表面と霧に使用。半解像度の既存レイマーチで距離場の4点遮蔽と位相関数を伴うin-scatteringを積分。近景の照明/継ぎ目を減衰し、中景を照らし、遠景を冷色霧へ溶かす。計測専用の`shaftStrength`（通常1、0でshaftだけ除去）を追加。
+- `js/world/gl-util.js`: 第一DROPのaccentキーと第二DROPのsecondaryキーを明示し、再登場時にaccent/secondaryの照明役割を交換。ambientの冷色と曲の三色制限は維持。低域onsetの当該フレーム・経過時刻・drop境界から共通のflareを計算。
+- `js/world/post.js`: DROPのbloomも共通flareに反応。既存ACES、色相を保つ肩、露出目標と白飛び判定を保持。
+- `js/world/world-engine.js`: 小節頭で視線の左右を必ず切り返す。第二DROPでは既存螺旋軌道の接線に切り返しを加える。cut時のmotion履歴リセット、境界/キックで固定する世界座標のshock中心を維持。`metrics().dropKeyRole`を追加。
+- `tests/browser/world.test.js`: `BW-5-light`で同視点HDRのshaft無効/有効・flare寄与とflare時白飛び率を比較。近/中/遠の深度層の画素数と平均HDR輝度を報告。`BW-5-palette`で実GLSLの色差方向交換とambient固定を検査。計測の読込を分離し、ライブはgesture不要resume→`app.start(false)`で開始。resumeの10秒上限と音声時刻の10秒停止監視を追加。既存W/BWテストを保持。
+- `tests/world/measure.mjs`: `WORLD_CHROME_WRAPPER`指定時にはChrome探索・内部adapter生成を省く。静止画とライブを別CDP呼び出しにし、renderAtのvisual結果/PNGをライブより先に保存。ライブ失敗でもvisual結果を残し、AudioContext/media/MFSの診断をreport.jsonに出す。新規BW-5を終了コード判定に含める。
+- `tests/unit/world-score.test.mjs`: `UW-18`で全小節頭カットの角度・motion履歴・照明役割、`UW-19`で計測開始順序と4つの失敗ケースを追加。
+
+### 検証
+- `node tests/run.mjs --unit`: 149件 / 148成功 / 0失敗 / 1スキップ（想定のU15-00異常系）、109,958ms、終了コード0。
+- `node --test tests/unit/world-score.test.mjs`: UW-01〜19の19件すべて成功、2,086.675375ms、終了コード0。UW-18: 30カット、最小視線角66.0781°（CPUカメラ基底の検証）。UW-19: resume→start(false)、fullscreen=false、resume上限10,000ms、4失敗ケースをmock検証。
+- 既存UW: 120秒7,200固定ステップ、境界6/6、mock MFS反応0フレーム、shock中心の非キック時ドリフト0、粒子262,144個、form960×540。第二DROPのscale1.75/intensity1.35、経路半径の第一最大0.5299/第二最小2.8763を保持。これらは実GPUの画質/同期/性能測定ではない。
+- 全`.js`/`.mjs`114ファイルの`node --check`: 0失敗。個別のmeasure/browser構文チェックも成功。`git diff --check`: 成功。
+- 新規BW-5-light/paletteおよび既存W-1〜8/BW-2〜4は未実行。Chrome起動禁止に従い、measure.mjsの実GPU end-to-end、GLSLコンパイル、file://コンソール、白飛び率、画質、GPU p95は未検証・未測定。
+
+### spec.md 変更
+- なし。チケット対象のworld実装・worldテスト・logに限定し、共有README.md/spec.md、index.html、SSOT、ゴールデンは編集していない。
+
+### 備考
+- 実装: Codex gpt-6.1-sol high
+- 保持: アーキテクトのMandelbox反復上限5、environment 2のhit epsilon `max(.0015*scale,travel*.0035)`、法線epsilon `max(.03*scale,travel*.004)`を変更していない。第二DROPの既存twisted-fold（倍率-1.94/inner .38/回転.36）、scale/intensity/cameraSpeedの成長も保持。
+- 判断: 今回の明示的な画質指示に従ってDROP用の照明係数を選択。albedo .075/.09/.12→.018/.022/.030、fill .7→.23と.4→.13、Fresnel 3.5→.10。キーpowerは24/(1+距離二乗*.055)に円錐と遮蔽を掛ける。前景は3〜12world単位で光を抑え、遠景霧は18world単位以遠で増やす。定数表のない画質部分の実装選択として記録し、受入閾値を変更していない。
+- 判断: 光の筋は別FBOを追加せず既存half-res raymarch内で積分。光源までの4点遮蔽は近似であり、完全な光源方向raymarch/多重散乱ではない。キー/継ぎ目/shaftの色は第一DROPで暖色、第二DROPで寒色へ交換し、第二の弱いfillへ暖色を移す。ambientは冷色のまま。全曲の変奏判定は時刻75秒のハードコードではなく既存(kind,label)契約に従う。
+- 判断: キックのflareは指数減衰×既存0.4秒fadeで残し、0.4秒以降は厳密に0（既存BW-4-shellの失効検査を保持）。境界のflareは既存hit.wを使う。shock殻はworldShockFadeと固定中心を維持し、色だけキーの役割へ合わせた。
+- 計測細部: 深度層の集計境界12/40world単位は診断用で、層の見え方の合否を数値で代用しない。BW-5-paletteはroleごとの彩度/明度係数を保つため中立成分を除いたRGB色差の単位方向で交換を比較（誤差<1e-5）。wrapperは既存launchChromeのautoplay-policy引数を引き継ぎ、disable-gpuを除去してheaded実GPUを起動すること。
+- レビュアー確認: `WORLD_CHROME_WRAPPER=/absolute/path/to/wrapper node tests/world/measure.mjs`で全W/BWとreport.json/PNGを確認。45/90秒の暗い前景・中景hero・遠景霧、shaftの遮蔽、warm accentの面積、白飛び≤2%、kick/境界flare・薄いshock殻、小節頭cut、第二DROPの配色/fold/軌道/強度差を参照画像と比較すること。20/62秒のトンネル/大聖堂の品質保持も確認。特に追加遮蔽を含む1080p GPU p95≤16ms、3帯各≥10%、HDR比≥1000、実曲MFS同期≤1フレーム、全境界、全曲再生完了を実GPUで判定すること。
+- 未コミットの変更として納品。コミット・push・PR作成・Chrome起動は行っていない。
+
 # 開発ログ
+
+## 2026-10-04 — [WORLD-4] ワールドモード v4
+
+### 作業内容
+- `js/world/form.js`: DROPを専用の滑らかな材質分岐へ分離。fbm法線・刻印・ランダムな屈折/集光模様を撤去し、幾何法線、key/fill照明、march歩数/距離のAO、soft shadow、Fresnel rim、初期box-fold平面の細い発光線、距離霧を使用。DROPの霧は一定密度/中点サンプルとし、空のランダムな星も出さない。INTROは一点の光だけで床/遠い門/柱を照らし、進行に応じて輪郭と光源周囲の体積の霞を出す。BUILDの形状/経路、BREAKの大聖堂の形状/窓の光を保持。大聖堂は暗いalbedo、低周波で小幅なroughness変化、広く弱いspecular、控えめな法線/反射へ変更。
+- `js/world/particles.js`: 512×512=262,144のGPU状態と全粒子の更新/描画命令を保持。乱数確率による多数の点の描画を、整数置換で固定した少数の候補へ変更。最大pointSizeと2pxの境界余裕を含む外接正方形の面積和を画面8%以内へ制限。細い速度ストリークとHDR加算を維持し、候補一粒の発光を強める。キックの薄い殻の力/発光は0.4秒で消失。
+- `js/world/score.js`: 曲の調性/seedから寒色二色と補色の暖色一色を選ぶ。モチーフ、形態ID、kind/label変奏、パレット回転情報は保持。
+- `js/world/gl-util.js`: 回転/反転された色相uniformから寒色base/寒色fill/暖色accentの照明役割を判別する共通関数を追加。描画色の彩度を抑え、baseの明度を下げる。キック経過秒と0.4秒消失の共通関数を追加。80-float UBOと公開hookは不変。
+- `js/world/fluid.js`・`js/world/world-engine.js`: 共通の三色照明を媒質にも適用。DROP合成のノイズ密度を除去。第二DROPの既存scale/intensity・twisted-fold・螺旋経路、renderAt/advancePreview/__worldとMFS応答契約を保持。
+- `js/world/post.js`: 仕上げのフィルムグレインを撤去。HDR、4段bloom、ACES、露出と白飛びの肩を保持。
+- `tests/unit/world-score.test.mjs`: UW-01〜14を保持し、UW-14の予算確認だけ18%から8%へ厳格化。UW-15（間引きの一意性/解像度別面積上限）、UW-16（96曲の設計された三色の色相関係）、UW-17（暖色面積計測）を追加。
+- `tests/browser/world.test.js`・`tests/world/measure.mjs`: 既存W-1〜8/BW-2/BW-3とその閾値を保持。BW-4-sparks（各標本で粒子実被覆≤8%）、BW-4-accent（仕上げ後の暖色優勢面積≤15%）、BW-4-shell（固定視点/時刻で殻の0.4秒以降HDR差0）、BW-4-intro（点光源付近を除いた表面の進行による増光）を追加。従来の6参照時刻PNGと実再生GPU性能検査を維持。
+
+### 検証
+- `node tests/run.mjs --unit`: 最終147件 / 146成功 / 0失敗 / 1スキップ（想定のU15-00異常系）、124,450ms、終了コード0。初回も146件 / 145成功 / 0失敗 / 1スキップ、116,812msで成功。
+- `node --test tests/unit/world-score.test.mjs`: UW-01〜17の17件 / 17成功 / 0失敗 / 0スキップ、3,296.184ms、終了コード0。
+- 全`.js`/`.mjs`114ファイルの`node --check`: 114成功 / 0失敗。最後の変更対象の構文検査と`git diff --check`も成功。
+- UW-15: 整数置換の一意なrank=262,144。1080pの描画候補は第一DROP171個、第二DROP232個（遮蔽前）。16×16、640×360、1280×720、1920×1080、3840×2160で検査した外接正方形の面積和最大7.9873167438%。これは解析的上限の検査であり、実画素被覆/GPU描画の測定ではない。
+- UW-16: 96曲、各曲3色、baseと暖色の色相差180度、寒色二色の差25.2度。UW-12の正規化色相の最小RGB彩度0.985も維持。実描画はworldColorで寒色の色成分68%/暖色78%と明度を調整するため、正規化色相の彩度を仕上げの彩度とは扱わない。
+- UW-06/08/11/13: 粒子262,144、流体480×270、環境960×540、全境界6/6、MFS→uniform遅延0フレーム（mock）、反復/逆向きpreviewのuniform差0、120秒7,200固定ステップ、最大sim dt=0.016666668、非キック時の中心移動0。UW-17の合成暖色面積2/8=25%。
+- UW-09/14: 第二DROP worldScale=1.75、intensity=1.35、cameraSpeed=1.4。正規化横経路の第一DROP最大半径0.5299、第二DROP最小半径2.8763。BUILD前進距離は初期0.993/後期5.314世界単位。
+- ブラウザテストBW-4-sparks/accent/shell/introと既存W/BWを未実行。追加ルールのChrome禁止に従い、GLSL実コンパイル、file://のコンソール、実画素被覆/暖色面積、0.4秒の実GPU消失、INTRO輪郭の画質、GPU性能は未確認。
+
+### spec.md 変更
+- なし。WORLDの実装/テスト/logの範囲を守り、共有`doc/spec.md`・`README.md`、SSOT、既存`index.html`、ゴールデンは変更していない。ガイド§8.1の共有仕様書更新は今回の範囲制約により実施しない。
+
+### 備考
+- 実装: Codex gpt-6.1-sol high
+- 判断: WORLD-4の明示要求をv2の全面の粒子・ノイズ材質より優先。SSOTのW-1〜9、粒子数、既存変奏/形状/カメラ定数は変更せず、画質指示に数値表がない照明・材質は今回の実装選択として記録。既存テストの削除/skip/閾値緩和なし。UW-14の予算を8%へ厳格化。
+- 判断: 発光線はノイズを使わない最初の二回のbox-fold平面。AOは歩数と法線方向の距離、shadowは短いSDFレイの近似。キックの殻はworld座標の固定中心、速度18世界単位/秒、0.08〜0.4秒smoothstepの消失。物理ベースの光輸送ではない。
+- 判断: BUILD/BREAKの構図を保ち、三色制約は全環境へ適用。色相メタデータの従来の循環/反転はhookとモチーフ契約のため保持するが、実際の照明の役割は固定する。寒色baseの明度係数0.22、fill0.55、暖色1。暖色は発光線/光点/少数の火花へ限定し、DROPの殻と霧の照明は寒色へ変更。
+- 計測細部: 粒子予算は最大サイズの外接正方形に2px余裕を入れ、固定rank候補を割り当てる保守的な面積上限。ブルーム後の広がりはこの上限に含まない。暖色面積は仕上げ後RGB最大値>16/255、R>B×1.15かつR>G×1.05の画素率と定義し、黒の量子化を除外する。BW-4-shellはカメラ/粒子/演出時刻を固定して殻の経過秒だけを変え、HDR読出しで厳密な消失を測る。BW-4-introは同視点で進行0/1を比較し、光点付近を除いたヒット表面の増光を測る。これらは目視を代替しない。
+- レビュアー確認: M4 Maxのヘッド付き実GPU Chromeで`node tests/world/measure.mjs`を実行し、report.jsonと7/20/30.3/45/62/90秒のPNGを確認すること。特に滑らかで読み取れるDROP面、薄いsparkと粒子被覆≤8%、暖色面積≤15%、殻の0.4秒消失、INTROの徐々に現れる柱/門/霞、大聖堂の素材感、第二DROPの明確な拡大/別構図を画質審査すること。既存W-1〜8（各帯≥10%、白飛び≤2%、同期≤1フレーム、1080p描画p95≤16ms含む）も必須。file://、全画面、Space/Esc、曲末/再上演、実曲も確認。未測定の画質/性能を合格とは扱わない。
+- コミット・push・PR・Chrome起動なし。作業開始時からの未コミット/未追跡ファイルを保持し、このworktreeの対象11ファイルだけを変更。
+
+## 2026-10-04 — [WORLD-3] ワールドモード v3
+
+### 作業内容
+- `js/world/particles.js`: 512×512のGPU状態・全262,144粒子の更新/描画を保持。一様な箱内配置を12本の螺旋流線へ変更し、解析的渦・Stable Fluids・慣性で移流する。dropの16%をキック/境界で世界座標の衝撃環へ配置し、速度で広がる環と薄い衝撃殻の力を追加。粒子速度と前カメラから画面速度を計算し、POINTS内で回転した細い先細りストリークを描く。円形blobと遠景を大きくするぼけ加算を撤去。サイズ・輝度は深度で減衰し、外接正方形面積の期待値を画面18%以下に抑える独立hash間引きを追加。
+- `js/world/form.js`: dropのMandelboxを覆う全面発光/微細ノイズ面を局所的な刻印・稜線発光へ変更。地色は暗い黒鉛とし、強い補色の局所key light、冷色rim light、AO、ソフトシャドウ、アーチ窓から斜めに差す体積光を追加。fbmの法線・roughness変化・距離でアンチエイリアスする刻印・specularを使用。近い床/柱には一回/最大10歩の反射レイを使用。introは空の方向光（左上blobの原因）を除き、一点の光の周囲へ進行に応じて門/柱/床の暗い輪郭を出す。大聖堂の床・基壇を発光スリットにする判定を撤去し、縦の柱上部だけを発光させる。トンネルの光は壁の連続した螺旋へ限定。
+- `js/world/score.js`: 曲ごとの調性/seed・三色制限・モチーフ/変奏契約を保持し、黄緑を避けたcyan/blue、red/orangeの補色、violetの高彩度パレットを生成する。
+- `js/world/world-engine.js`: 半解像度環境を深度重み付き4点でアップサンプル。衝撃中心をキック/境界の世界座標へ固定し、カメラ移動で引きずらない。第二dropは第一dropの直進から螺旋軌道と接線を見るカメラへ変更。GPU uniformの未使用w成分に衝撃中心/開始時刻を格納し、metricsに粒子面積予算・fold regimeを追加。renderAt/advancePreview・__world・MFS即時反応契約は保持。
+- `js/world/gl-util.js`: 80-float std140 UBOのサイズと既存xyzを保持し、right/up/forward.wとaccent.wの意味をコメントに記載。
+- `js/world/post.js`: 深い黒・ACES・ハイライトの肩・4段bloom・控えめなgrainを維持。第二dropの強度を自動露出で相殺しないよう、drop再登場の目標中間輝度を0.08から0.10へ増やす。
+- `tests/unit/world-score.test.mjs`: UW-01〜11を保持。UW-12〜14に96種の三色パレットの飽和度/olive排除、キック中心の同フレーム更新/固定と経過秒、第二dropの螺旋経路・拡大・強度・half-res/metricsを追加。
+- `tests/browser/world.test.js`・`tests/world/measure.mjs`: W-1〜W-8/BW-2の閾値を保持。BW-3-coverage（合成前後HDR差>0の被覆、標本平均≤25%かつdrop各標本≤25%）、BW-3-hero（dropの環境優勢画素≥75%・環境のHDR積分寄与≥60%）、BW-3-kick（実GPUで同フレームの画素変化・経過秒・中心固定）を追加。section中央と7/20/30.3/45/62/90秒のPNG、実再生同期・1080p timer query計測は既存手順を保持。
+
+### 検証
+- `node tests/run.mjs --unit`: 144件 / 143成功 / 0失敗 / 1スキップ（想定のU15-00異常系）、96,738ms、終了コード0。
+- `node --test tests/unit/world-score.test.mjs`: UW-01〜14の14件成功、0失敗、最終2,206.105ms（末尾の小画面サイズガード/metrics限定後にも再実行）。
+- GPU命令mock: 粒子262,144、圧力射影20反復、流体480×270、環境960×540、全境界6/6、MFS→uniform遅延0フレーム、texture feedbackなし。これは実GPU描画/性能検証ではない。
+- UW-12: 96パレット・各曲3色、線形RGBの最小飽和度0.985。UW-13: キック→uniform遅延0フレーム、非キック時の衝撃中心の移動0、キック経過0.10000000149秒。
+- UW-14: 正規化した横方向経路の標本半径は第一drop最大0.5299、第二drop最小2.8763。第二dropのworldScale=1.75、intensity=1.35、cameraSpeed=1.4。既存UW-09のbuild前進距離は初期0.993/後期5.314世界単位。
+- UW-08/11: 反復/逆向きpreviewのuniform差0、120秒で7,200固定ステップ、最大sim dt=0.016666668、MFSなし、境界6/6。UW-05合成画像の帯域は低64.1307%/中16.6111%/高19.2582%（描画フレームのW-2実測ではない）。
+- 全`.js`/`.mjs`114ファイルの`node --check`: 0失敗。`git diff --check`: 成功。GLSLコンパイル・実画素被覆率・輝度・白飛び・実GPU時間は未測定。
+- ブラウザテスト: BW-3-coverage/hero/kickおよび既存W-1〜8/BW-2を未実行。CODEX_ADDENDUMのChrome起動禁止に従い、file://コンソール・再生/操作/再上演も今回未確認。
+
+### spec.md 変更
+- なし。指定範囲のworld実装・worldテスト・logだけを編集する指示を優先し、共有README.md/spec.md・既存index.html・SSOT・ゴールデンは保持。
+
+### 備考
+- 実装: Codex gpt-6.1-sol high
+- 判断: 今回の6項目は画質を改善する明示指示として実装。SSOTの受入値/粒子数/既存変奏定数は変更していない。数値表がない材質・照明・カメラ/流線は実装選択として記録する。
+- 判断: 画面の25%という要求に対し、保守的な外接正方形面積の期待値を18%へ抑える。各点の可視確率p≤0.18*幅*高さ/(262144*pointSize²)なので、重なり/遮蔽/ストリークdiscard前の面積和の期待値が18%以下。これは実際の画素被覆率の測定値や毎フレームの厳密上限ではない。ブルーム後の広がりは目視審査に残る。粒子総数は減らさない。
+- 判断: 第二dropのMandelboxは倍率-1.72→-1.94、sphere-fold内半径二乗0.25→0.38、fold内回転0→0.36rad、反復セル18→24、空洞半径4.8→7へ変える。既存worldScale1.75/intensity1.35と合わせて別の構造と飛行経路にする。第三以降はtwisted-foldを維持し、既存scale/intensity/反復数で成長する。
+- 判断: half-res raymarchと既存64〜112段の自動制御/preview96段を維持。反射は近い通常建築の材質だけに一回/10歩で制限し、フラクタルに再帰反射を追加しない。屈折・集光と霧の遮蔽は近似であり、物理ベースの光輸送や完全3D流体/粒子衝突ではない。
+- 計測細部: BW-3-heroは粒子寄与≤max(1e-4,環境輝度*0.35)の画素率とHDR輝度積分比を使用する新規補助検査。閾値は今回の構造可視性要求の操作的解釈で、SSOTのW基準を置き換えない。BW-3-kickの合成MFSは実曲同期W-4と別に評価する。
+- 自己評価（§1.2）: 光/スケール/奥行き/物理的動き/同期/全曲変化に対応する実装は追加したが、1の実在感・2の3帯エネルギー・3の奥行き・4の60fpsと説得力・5の実GPU同期/輝度比・6の飽きない映像は最終画と実再生で未判定。CPU/mockの成功を完成画の合格としない。
+- 自己評価（§2.5）: 全画面環境・kind別世界・三色・暗い材質・再登場の成長を維持し、一様な雪、床の白い破線、introの左上光源を生む処理を修正した。粒子が流線/衝撃環へ見えるか、フラクタルがheroか、濁った色/水平線が消えたか、第二dropの違いは実画面の審査待ち。最終合格は未判定。
+- レビュアー確認: M4 Maxのヘッド付き実GPU Chromeで`node tests/world/measure.mjs`を実行し、report.jsonのW-1〜8/BW-2/BW-3と参照6時刻のPNGを確認すること。特にGLSLコンパイル、粒子被覆≤25%、drop環境の可視性、白飛び≤2%、全sectionの3帯≥10%、1080p描画p95≤16ms、世界座標のキック環とストリーク方向、アーチの光/床と柱の反射/刻印、intro輪郭、二度目dropの構造とカメラ差を確認。実曲で曲頭から終端まで鑑賞し、file:///Space/Esc/全画面/再上演も確認すること。画質・性能の不合格が出たら計画書の節・選択肢・推奨を報告し、受入値を緩めない。
+- コミット・push・PR・Chrome起動なし。作業開始時の未コミット/未追跡ファイルを保持。
+
+## 2026-10-04 — [WORLD-2] ワールドモード v2
+
+### 作業内容
+- `js/world/score.js`: アーキテクト採用の選択肢Aを実装。kindから環境を選び、変奏は `(kind, label)` ごとに1から数える。label単位のformId・paletteRotation、境界・終端・2小節前の予兆・直前1拍の静寂・決定性・入力不変の契約は維持。パレットは曲全体で3色とし、ラベルはその割り当てを変える。
+- `js/world/gl-util.js`: 共有std140 UBOを40から80 floatへ拡張。最初の40要素の意味は保持し、現／前カメラの位置と基底、アクセント色、環境パラメーターを追加。再初期化用clearTargetを追加。
+- `js/world/form.js`: 中央の単体blobを撤去。半解像度の全画面レイマーチで、虚空／螺旋の光と反復リブのトンネル／box・sphere foldを持つMandelbox反復構造／柱列・基壇・アーチと採光の大聖堂／無限ノイズ高さ場を描画。深度、前カメラへの再投影、体積光、距離霧、微細ノイズの法線摂動、AO・ソフトシャドウ、局所発光・透過と集光を実装。粗い等高線模様は撤去。
+- `js/world/particles.js`: 粒子位置xyzと速度xyzをそれぞれRGBA32FのGPUピンポン状態とし、MRTで更新。カメラ基底から投影・深度遮蔽し、塵・雨・稀な大きな火花をHDR加算する。境界で環境の3D領域へ再配置し、カットでは視点だけを変える。可視密度のhashとhero判定を独立させ、heroが密度フィルターで消えないようにした。
+- `js/world/fluid.js`: Stable Fluidsの既存射影20反復等は保持し、決定的previewのため全状態textureを消去するresetを追加。
+- `js/world/post.js`: GPU内の4×4縮約で平均対数輝度・最大輝度を取得し、自動露出を実装。ACES後のコントラスト・彩度、色相を保つハイライトの肩、控えめな4段bloom・深度ボケ・速度ブラー・色収差・grainを使用。v1の全画面flashによる白飛びを撤去。
+- `js/world/world-engine.js`: kind別の前進・加速・側壁への移動・霧の中の低速飛行・地形上空飛行、小節頭でのカットとmotion履歴切替を実装。2回目dropは空間1.75倍、速度1.4倍、三色の役割の循環、密度増、Mandelbox反復6→7、側壁に近い高いカメラ視点へ変奏。媒質は環境深度に結びつけ、旧平面の雷・放射リングを撤去。非同期GPU時間に応じたmarch段数調整と白飛び率readbackを追加。
+- `js/world/world-app.js`: `window.__world.renderAt(tSec)`を公開。音声を止め、毎回GPU状態を0から再初期化して固定dt=1/60で積分し、最後に描画する。逆向きの時刻も同じ手順。非整数フレーム時刻では状態を追加積分せずカメラ・演出だけ指定時刻で評価する。preview中のload/start/preview競合を拒否。start(false)はresumeとplayを同時発行し、10秒で明示的に拒否する上限を設け、resume待ちでplayが未発行になる停止を防止。
+- `tests/unit/world-score.test.mjs`: 既存UW-01〜06を保持し、UW-03の変奏期待値をアーキテクトの `(kind,label)` 契約へ更新。UW-07〜11で三色制限・kindをまたぐlabel・カメラ基底/加速/cut・固定preview・startの同時発行とtimeout・120秒全曲の固定ステップを追加。
+- `tests/browser/world.test.js`・`tests/world/measure.mjs`: W-1/W-2/W-5をrenderAtによる音声不要の固定previewへ移し、W-4/W-6/W-8は実再生で測定。セクション中央に加えて7/20/30.3/45/62/90秒のPNGを保存。白飛び2%以下、3D粒子の合成前後の可視HDR寄与、時間を戻したpreviewの画素差0、環境4種以上を追加検証。GL/consoleエラー・実GPU/timer・旧W閾値の検証は維持。
+
+### 検証
+- `node tests/run.mjs --unit`: 最終実行141件 / 140成功 / 0失敗 / 1スキップ（想定のU15-00異常系）、109,580ms、終了コード0。先行の全体実行も140件 / 139成功 / 0失敗 / 1スキップ、183,026ms（UW-11追加前）。
+- `node --test tests/unit/world-score.test.mjs`: 最終個別実行UW-01〜11の11件すべて成功、1,108.81ms。最終のoutro距離場と再登場時の三色役割循環の変更後に再実行。6セクション・11イベント、環境5種、変奏列1,1,1,1,2,1。三色だけで配色し、同ラベル/別kindは変奏1へ戻ることを確認。
+- GPU命令mock: 粒子262,144、流体480×270、圧力20反復、全境界6/6、MFS→uniform遅延0フレーム、同一textureの読み書きfeedbackなし。出力1920×1080、環境960×540、露出縮約6段で最終1×1。
+- 固定previewの時刻/イベント検証: 120秒で7,200ステップ・最大sim dt=0.016666668（Float32量子化）、境界6/6、MFS参照0。0.1秒の反復/逆向き再描画で全80uniformの差0、非整数0.105秒では6固定ステップのみ。実画素の差0はブラウザ検証に残す。
+- カメラ基底の長さ/直交誤差<1e-6。buildの1秒区間の前進距離は前半0.993・後半5.314世界単位。2回目dropのworldScale=1.75、cameraSpeed=1.4。start(false)のresume/play同時発行、未完了の10,000ms timeoutとready復帰をmockで検証。実ブラウザの開始確認ではない。
+- W-2計測関数の合成画像: 低64.1306677% / 中16.6111166% / 高19.2582157%、Gaussian定数保存誤差<1e-14、帯域合計誤差<1e-12。これは描画画像のW-2合格を示す値ではない。
+- 全`.js`/`.mjs`114ファイルの`node --check`: 0失敗。後続のform.js・score.js・world-score.test.mjs変更も個別構文チェック成功。`git diff --check`: 成功。ブラウザテスト・実GPU計測はCODEX_ADDENDUMに従い未実行。
+
+### spec.md 変更
+- なし。「チケットで列挙したファイルのみ」の明示指示を優先し、共有README.md/spec.md・既存アプリ・SSOTを編集しない。独立試作の製品定義は指定SSOT §1・§2.5を参照。
+
+### 備考
+- 実装: Codex gpt-6.1-sol high
+- 前回停止した§2.5原則2の矛盾はアーキテクトの更新で解消。今回はSSOTの意図に合う合理的判断を実装して継続するという最新指示に従った。定数表の変更、既存テストの削除/スキップ、W基準の閾値緩和、ゴールデン再生成なし。
+- 判断: intro=void、build=tunnel、drop=fractal、break=cathedral、main=terrain、outro=terrainの崩壊。6形態のIDはlabelモチーフとして維持し、単体形態を中央に置く構成へは戻さない。labelのpaletteRotationは3色の役割の割り当てへ適用し、同kind/labelの再登場ではその役割を循環させて色調も変える。連続した色相回転で曲の色数を増やさない。
+- 判断: 環境とカメラの座標を同じ世界単位で共有し、粒子もその座標に置く。流体は§3の2D Stable Fluidsを維持し、深度と3Dノイズで媒質として合成。完全な3D流体への置換はしない。
+- 判断: 自動露出の中間輝度目標0.08、ゲイン0.035〜6、grain振幅0.006（一様分布のσ最大約0.001733、指定0.015以下）。露出は毎フレームのGPU統計から直接決定し、previewを過去の露出履歴に依存させない。ライブmarch段数は32標本のGPU平均時間>14msで8段減、<10msで8段増、64〜112段。previewは常に96段。これはSSOTに数値がない実装上の選択で、実GPU合格を示す数値ではない。
+- 計測細部: 旧W-2のsRGB Y・4×4平均・Gaussian半径ceil(3σ)・対称折返し・DC除去は維持。W-5はrenderAtで窓先頭まで積分後、同じ状態をadvancePreviewで固定60Hz前進させ窓内平均を取る。白飛びはRGB全チャネルが250/255以上の画素の割合。境界・同期・性能はpreviewではなく実再生で検証し、previewの時間をW-8へ混入させない。
+- レビュアー確認: `node tests/world/measure.mjs`を実GPUのヘッド付きmacOS Chromeで実行し、report.json・section-*.png・t-*.pngを確認すること。GLSLの実コンパイル、W-1〜W-8、特に各セクション3帯10%以上・白飛び2%以下・M4 Max 1080p p95≤16msは未検証。参照6時刻と実曲で環境のスケール/奥行き/細部、hero粒子、二度目dropの明確な変奏、前景/中景/霧の遠景、色と露出、滑らかな動きとカットを画質審査すること。file://、ドロップ解析、start(false)、クリック全画面、Space/Esc、終端/再上演も確認すること。
+- コミット・push・PR・Chrome起動なし。既存の未コミット/未追跡ファイルを保持し、このworktree内の対象ファイルだけを変更。
+
+## 2026-10-04 — [WORLD-2] ワールドモード v2
+
+### 作業内容
+- `log.md`: 指定ルール・構想 §2.5・既存 world 実装とテストを確認し、仕様矛盾による実装停止を記録。WORLD-2 のコード・テスト・仕様書は変更していない。
+- 停止箇所: `doc/20261004-concept-world-mode.md` §2.5 原則2。「世界は kind ごとに別物にする」と「同じラベルで戻るときは同じ世界にする」を、同じ label が異なる kind に現れる場合に同時に満たせない。
+- 根拠: `tests/fixtures/songmap-128.json` の6セクション・3ラベル中、label A は intro（0秒〜）、break（60.005秒〜）、outro（105.003秒〜）の3 kind に登場する。`js/songmap-analysis.js` も label を類似度で付けた後に kind を独立に判定するため、fixture 特有の不正データではない。
+- 選択肢A（推奨）: 環境は kind で選び、環境の再登場を `(kind, label)` で識別する。既存の label 単位の formId・paletteRotation・variation 契約は保持する。同じ label でも kind が違えば異なる環境となる旨をアーキテクトが §2.5 に明記する。
+- 選択肢B: 環境を label 単位で固定し、kind は環境内の状態変化だけに使う。「kind ごとに別世界」および intro／break 等の指定を修正する必要がある。
+
+### 検証
+- `node tests/run.mjs --unit --filter 'UW-'`: UW-01〜06 の既存6テストは全成功。runner 表示は31件 / 31成功 / 0失敗 / 0スキップ / 2,194ms、終了コード0（うち25件はフィルターで一致テストのないファイルの成功表示）。WORLD-2 の受け入れ検証ではなく、既存契約の確認。
+- コード変更なしのため全単体テスト・全 JS 構文チェックは今回未実施。Chrome は CODEX_ADDENDUM に従い未起動。ブラウザテストの追加・変更なし。画質、GLSLコンパイル、HDR、白飛び率、1080p性能、renderAt、start(false) は未検証・未実装。
+
+### spec.md 変更
+- なし。仕様矛盾の解消待ち。
+
+### 備考
+- 実装: Codex gpt-6.1-sol high
+- 指示どおり、曖昧・矛盾した計画を推測して実装せず停止。定数調整、閾値緩和、既存テスト削除、ゴールデン再生成なし。
+- レビュアー確認: §2.5 原則2で異なる kind にまたがる同一 label の扱いを確定すること。推奨は選択肢A。回答・設計更新後にWORLD-2本体の実装を再開する。
+- コミット・push・PR作成なし。今回の変更はこのworktreeのlog.mdだけ。作業開始時から存在するWORLD-1等の未コミット変更は保持。
+
+## 2026-10-04 — [WORLD-1] ワールドモード試作
+
+### 作業内容
+- `world.html`: 独立したclassic-script入口。音声ドロップ→SongMap解析→クリックで全画面再生、Space一時停止、カーソル消去、終端・再上演、debug表示、WebGL2/HDR非対応表示を追加。既存`index.html`と既存JSは変更なし。
+- `js/world/gl-util.js`: WebGL2コンパイル・RGBA16F FBO・ピンポン・共有std140 UBO・全画面三角形・資源解放。
+- `js/world/fluid.js`: 画面1/4のStable Fluids。半ラグランジュ移流、粘性拡散4反復、渦度閉じ込め、発散計算、Poisson/Jacobi圧力20反復と勾配射影、染料移流・減衰。
+- `js/world/particles.js`: 512×512=262,144粒子。RGBA32F位置/速度状態のGPUピンポン更新、流体移流・カールノイズ・慣性・境界衝突、SDF深度遮蔽・視差・発光点のHDR加算。
+- `js/world/form.js`: 半解像度SDF。切削結晶・結び目・折り畳みフラクタル・メタ球・ジャイロイド・天体環の6族、細部彫刻、ソフトシャドウ・AO、内部追跡とRGB別屈折率による分散、内部光・集光表現、霧の積分と光の筋、カメラ再投影の速度MRT。
+- `js/world/post.js`: 4段ブルーム、深度差によるボケ、速度バッファによるブラー、色収差、露出・周辺減光、ACES、sRGB出力・粒子状グレイン。
+- `js/world/score.js`: 純関数`compileWorldScore(songMap, seed)`。全境界・終端・2小節前の予兆・1拍前の静寂、ラベルハッシュによるモチーフ/パレットと1から増える変奏、和音分布からの曲固有パレット。
+- `js/world/world-engine.js`: HDR層合成、セクション状態・カメラ、キック衝撃波・ドロップ相転移、先読み減速と完全黒、全境界通過の発火、事前確保ログとMFS即時uniform、CPU/GPU時間・HDR/出力readback。
+- `js/world/world-app.js`: 既存AudioEngine/getFeatures/MfsFrameView/MFS_LAYOUTを使用。SongMapService派生クラスで既存解析行のクロマ分布を集計。`window.__world`にscore/engine/events/metrics()と評価用音声・appを公開。debug整形はrAFから分離。
+- `tests/unit/world-score.test.mjs`: UW-01〜06。決定性、入力不変、全境界・予兆、モチーフと変奏、6族・和音パレット、W-2の計測数学、WebGL命令mockでtexture feedback禁止・流体射影反復・全粒子・uniform即時更新を検証。
+- `tests/browser/world.test.js`・`tests/world/measure.mjs`: 独立したworld.html?debug=1で既存synthSongとencodeWav16を使って120秒の合成曲を解析・実再生。W-1〜W-8、GL/consoleエラーとGPU情報をJSON化し、各セクション中央の最終画像をPNG保存する。既存runnerのapp/harnessテストとしては登録しない。
+
+### 検証
+- `node tests/run.mjs --unit`: 136件 / 135成功 / 0失敗 / 1スキップ（想定のU15-00異常系）、86,470ms、終了コード0。UW-01〜06を含め成功。最終のsRGB伝達関数整理後はUW-01〜06と全構文チェックを再実行。
+- UW-01〜06の個別実行: 最終再実行6成功 / 0失敗、619.84ms。6セクション・11事前イベント・3モチーフ、変奏列1,1,1,2,2,3。100 seedsで6形態族が選択されることを検証。
+- GPU命令mock: 粒子262,144、流体480×270、圧力20反復、境界6/6、uniform反応0フレーム。これは命令・CPU演出の検証値で、実GPU描画の実測値ではない。
+- W-2計測関数の合成画像: 低64.1306677% / 中16.6111166% / 高19.2582157%。Gaussian定数保存誤差<1e-14、帯域比率合計誤差<1e-12。描画画像のW-2実測ではない。
+- 全`.js`/`.mjs`114ファイルの`node --check`: 成功。world.htmlの20 script参照先はすべて存在。`git diff --check`: 成功。
+- ChromeはCODEX_ADDENDUMにより未起動。GLSLの実コンパイル、実GPUのW-1〜W-8、操作・file://動作・W-9、所有者による画質評価は未実行。W-8の16ms達成を含め合格の主張はしない。
+
+### spec.md 変更
+- なし。今回は「チケットで列挙したファイルのみ」の指示を優先し、README.md/spec.md・既存アプリ・SSOTを編集しない。独立試作の仕様は指定SSOTを参照。
+
+### 備考
+- 実装: Codex gpt-6.1-sol high
+- アーキテクトがSSOT §1.3を更新し計測の細部を委任したため、前回のW-2停止を解除。基準値変更・既存テスト削除/緩和・ゴールデン再生成なし。
+- 判断: 出力1920×1080固定（CSSで16:9を保持）、流体1/4・SDF1/2、粒子状態32F／描画16F。ライブdtは33ms以下にクランプしbreakは0.3倍。固定dtによる書き出し一致はSSOT §6の第2段階。
+- 判断: 既存SongMap v1には平均クロマがないため、world専用のSongMapService派生クラスが解析行を集計し、worldChromaを追加した解析結果をscoreへ渡す。既存JSへの追加helperは不要。
+- 計測細部: W-1はセクション中央のHDR画素min/max（ゼロ除算のみ1e-6保護、生値も報告）。W-2はsRGBを線形化せず指定Y、4×4平均、Gaussian半径ceil(3σ)・正規化分離畳込み・端画素を重複する対称折返し。中央を最初に通過した再生フレームを採用。
+- 計測細部: W-4はgetFeatures時のフラグと実UBOを照合。W-5は各窓内の全描画フレームを算術平均、完全黒→非ゼロはInfinity、標本0は失敗。W-6は曲頭を含め全セクション開始を対象にし、曲末を別endイベントとして記録。
+- 計測細部: W-8は2秒のウォームアップ後、全描画パスのGPU timerとCPU送信の大きい方のp95。GPU完了を非同期に取得し、120標本以上を要求。readback・Gaussian・debug整形は描画区間外。timer非対応や実GPU未確認は合格にしない。既存chrome.mjsの固定--disable-gpuのみを一時起動adapterで除き、同じlaunchChrome APIでheaded起動する。adapterは終了時に削除する。
+- 逸脱: 最初の2つのテストstdoutを誤って/private/tmpへ出力した。1つは削除し、実行中の最終ログはworktree内へ移動した。最終ログも記録後に削除済み。ソースの変更は指定worktree内のみ。
+- レビュアー確認: `node tests/world/measure.mjs`をヘッド付きmacOS Chromeで実行し、tests/world/output/report.jsonとsection-*.pngを確認。W-1〜W-8の閾値・GL/consoleエラー0、特に各セクションのW-2・16msのW-8と実GPU/timer対応。実曲を使い、六つの描写条件（光・細部・空間・物理・同期・飽きなさ）の見た目、予兆とドロップ・6形態・繰り返し変奏、Space/Esc/終端/再上演、file://と非対応表示を確認すること。
+- コミット・push・PR・Chrome起動なし。変更は未コミットで納品。
 
 ## 2026-10-03 — [T18-11] アナライザータイプの整理（6タイプ削除）
 
