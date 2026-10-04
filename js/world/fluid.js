@@ -1,5 +1,8 @@
 // 目的 — 移流・粘性拡散・渦度閉じ込め・圧力投影による Stable Fluids — doc/20261004-concept-world-mode.md §2.7・§3
 const WORLD_FLUID_FRAGMENT = `#version 300 es
+precision highp float;
+precision highp int;
+precision highp sampler2D;
 ${WORLD_GLSL}
 uniform sampler2D field, velocity, auxiliary;
 uniform int mode;
@@ -61,6 +64,9 @@ void main(){
 }`;
 // 帯域ごとのガウス形のひと吹きを32個のquadで供給 — 詳細設計 §4。
 const WORLD_SPECTRUM_VERTEX = `#version 300 es
+precision highp float;
+precision highp int;
+precision highp sampler2D;
 ${WORLD_GLSL.replace('in vec2 vUv;', '')}
 uniform int screenSpace;
 uniform float analyzerDetail;
@@ -80,6 +86,8 @@ void main(){
 }`;
 const WORLD_SPECTRUM_FRAGMENT = `#version 300 es
 precision highp float;
+precision highp int;
+precision highp sampler2D;
 ${WORLD_GPU_DESIGN_GLSL}
 in vec2 local;in float level;in vec3 tint;
 uniform float amount;

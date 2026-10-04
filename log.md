@@ -1,3 +1,26 @@
+## 2026-10-03 — [WORLD-12] GLSL precision 宣言順序の修正
+
+### 作業内容
+- `js/world/gl-util.js`、`js/world/analyzer-types.js`: 共有GLSL断片内のprecision宣言を取り除き、断片より前に各シェーダー側で宣言する。旧WORLD_GLSLはWORLD_GPU_DESIGN_GLSLのfloat定数・関数より後にprecisionがあり、フラグメントの初期化に失敗していた。
+- `js/world/gl-util.js`、`js/world/fluid.js`、`js/world/particles.js`、`js/world/post.js`、`js/world/g-fluid.js`、`js/world/g-rings.js`、`js/world/g-galaxy.js`、`js/world/world-engine.js`: 全19ソースの先頭を、#version 300 es → precision highp float → precision highp int → precision highp sampler2D の順に統一。
+- `tests/unit/world-shaders.test.mjs`（追加）: UW-47。world.htmlのscript順でloadClassicを使い、全js/world/*.jsの文字列定数からmainを持つ組立済みソースを取得。全ファイルの読込、19本（vertex 5／fragment 14）の網羅、version単一、他の宣言より前の完全なprecisionヘッダーを検査。version欠落も検出対象。
+
+### 検証
+- `node tests/run.mjs --unit --filter UW-47`: 修正前はUW-47失敗（終了コード1）、修正後はUW-47成功（終了コード0、241ms）。filter時の28件表示には他27ファイルの空実行を含む。
+- `node tests/run.mjs --unit`: 177件／176成功／0失敗／想定U15-00スキップ1、27,078ms、終了コード0。実行ログはignoredの`tests/output/world12-glsl-unit-suite.txt`。
+- 全JS/MJSの`node --check`: 125件／125成功／0失敗。`git diff --check`: 成功。
+- precision宣言行を除いたHEADとの差分比較: 変更した本体9ファイルすべて完全一致。設計の数式・定数の変更0。
+- Chromeは禁止のため起動していない。新規ブラウザテストはなし。既存BW-12-design／BW-12-sparks-ramp、BW-11、file://の初期化・コンソール、ANGLE/Metalでの実GLSLコンパイルは未実行／未測定。
+
+### spec.md 変更
+- なし。既定の描画を復旧するprecision修正であり、見た目の設計・製品仕様の変更はない。チケット範囲に従いREADME.mdも変更していない。
+
+### 備考
+- 実装: Codex gpt-6.1-sol high
+- 判断: 共有断片の内部で宣言する方式から、各完全ソースのversion直後へ移動した。テスト用exportは追加せず、既存loadClassic.getで実際の組立済み定数を読む。日付は依頼の2026-10-03を使用。
+- レビュアー確認: 実Chrome（ANGLE/Metal）でworld.htmlをfile://で開き、window.__world.errorがなくengineが初期化され、コンソールエラー0であること。既存BW-12-design／BW-12-sparks-ramp／BW-11と3タイプの描画・切替・書き出しを確認すること。単体検査は実GPUコンパイルの合格を意味しない。
+- 全変更はこのworktree内。commit／push／PRは行っていない。
+
 ## 2026-10-04 — [WORLD-12] GPU アナライザー詳細設計 v1 の実装
 
 ### 作業内容
@@ -34,6 +57,9 @@
 - 明示されたv1の円弧移流に合わせ、旧UW-33/38の位置ループ一致／不等間隔の要求を新仕様へ置換。固定ステップの再演一致、パレットのループ一致、帯域分離、移流上限、hashの決定性は検証。円弧の積分移流そのものに曲末=曲頭の位置一致は課していない。
 - レビュアー確認: 実GPUラッパーでshoot-liveの3タイプ×4時刻を実行し、実音G-1中央値≥.6、実AudioWorklet特徴取得、seekedと最初のrAFの撮影を確認。BW-12-*／BW-11-*、既存W/BWとG-2〜4（1080p p95≤16ms、既存BW-7-performance≤14ms）を実行し、GLSL、白飛び≤2%、旧post pulseを止めた拍反応、流体の帯域応答・明るさ・鋭さ、円弧の方位／移流、同方向8粒の火花、62度円盤の見切れを確認すること。失敗した場合は定数を調整せず、該当節・選択肢・推奨案を報告すること。
 - 初回の単体テスト出力を誤って/tmpへ保存したため、完了後にworktreeのignored tests/output/world12-score.txtへ移動して元の一時ファイルを除去した。以後の出力と全コード／文書の変更はこのworktree内。開始時から未追跡のSSOT doc/20261004-design-gpu-analyzers-v1.mdは変更していない。commit／push／PRは行っていない。未コミット差分として納品。
+
+### GLSL初期化の修正追記
+- precision宣言順序の修正とUW-47の検証は、本ログ先頭の「2026-10-03 — [WORLD-12] GLSL precision 宣言順序の修正」を参照。
 
 ## 2026-10-04 — [WORLD-11] GPU アナライザー群 第1弾
 

@@ -9,6 +9,9 @@ const WORLD_RAY_BASE_LENGTH = .06;
 const WORLD_RAY_LEVEL_LENGTH = .40;
 const WORLD_RAY_BASS_LENGTH = .05;
 const WORLD_RINGS_FRAGMENT = `#version 300 es
+precision highp float;
+precision highp int;
+precision highp sampler2D;
 ${WORLD_ANALYZER_GLSL}
 in vec2 vUv;
 out vec4 frag;

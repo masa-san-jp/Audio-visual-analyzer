@@ -4,6 +4,8 @@ const OVERSCAN = 1.5;
 const WORLD_DOMAIN_MARGIN = .035; // 3%以上、既存の安全用フェード幅も避ける
 const WORLD_VERTEX = `#version 300 es
 precision highp float;
+precision highp int;
+precision highp sampler2D;
 out vec2 vUv;
 void main(){ vec2 p=vec2((gl_VertexID<<1)&2,gl_VertexID&2); vUv=p; gl_Position=vec4(p*2.-1.,0.,1.); }`;
 // 全GPUタイプの式と名前つき定数 — doc/20261004-design-gpu-analyzers-v1.md §1〜4。
@@ -69,8 +71,6 @@ vec3 analyzerBeatRings(float r,float R0,vec4 beats,float speed,vec3 accent){
 `;
 const WORLD_GLSL = `
 ${WORLD_GPU_DESIGN_GLSL}
-precision highp float;
-precision highp sampler2D;
 in vec2 vUv;
 // std140: 全パス共通。JS は事前確保した Float32Array を再利用する。
 layout(std140) uniform World {

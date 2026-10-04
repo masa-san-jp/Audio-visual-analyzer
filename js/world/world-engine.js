@@ -2,6 +2,8 @@
 // 切替時の現在HDR像を保持し、0.5秒で選択タイプへ連続的に溶かす。
 const WORLD_TYPE_FADE_FRAGMENT = `#version 300 es
 precision highp float;
+precision highp int;
+precision highp sampler2D;
 in vec2 vUv;
 uniform sampler2D previous, current;
 uniform float blend;

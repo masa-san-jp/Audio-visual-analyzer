@@ -18,7 +18,6 @@ const WORLD_ORBIT_BASE_SPEED = .25;
 const WORLD_ORBIT_SPEED_SPAN = 1.2;
 const WORLD_ORBIT_LEVEL_SPEED = 1.5;
 const WORLD_ANALYZER_GLSL = `
-precision highp float;
 ${WORLD_GPU_DESIGN_GLSL}
 uniform vec4 bands[32]; // L、G、積分軌道位相、帯域群onset
 uniform vec4 song; // BPM速度、細部、粒子量、ラウドネス

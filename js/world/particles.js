@@ -1,6 +1,9 @@
 // 目的 — 流体とカール場で26万粒子を運び、速度方向のHDRストリークを描く — doc/20261004-concept-world-mode.md §2.7
 const WORLD_PARTICLE_SIDE = 512;
 const WORLD_PARTICLE_UPDATE = `#version 300 es
+precision highp float;
+precision highp int;
+precision highp sampler2D;
 ${WORLD_GLSL}
 uniform sampler2D particles, particleVelocity, velocity;
 uniform float analyzerSpeed;
@@ -83,6 +86,9 @@ void main(){
  positionOut=vec4(p,state.w);velocityOut=vec4(v,0,1);
 }`;
 const WORLD_PARTICLE_VERTEX = `#version 300 es
+precision highp float;
+precision highp int;
+precision highp sampler2D;
 ${WORLD_GLSL.replace('in vec2 vUv;', '')}
 uniform sampler2D particles, particleVelocity;
 uniform float analyzerAmount;
@@ -126,6 +132,8 @@ void main(){
 }`;
 const WORLD_PARTICLE_FRAGMENT = `#version 300 es
 precision highp float;
+precision highp int;
+precision highp sampler2D;
 in vec3 color;
 in float alpha;
 in vec2 streakAxis;
@@ -142,6 +150,9 @@ void main(){
 // WORLD-10: 遠景4096粒と近景12粒。周期深度と透視投影で、流体をぼかさず前進する。
 const WORLD_DEPTH_PARTICLE_COUNT = 4108;
 const WORLD_DEPTH_VERTEX = `#version 300 es
+precision highp float;
+precision highp int;
+precision highp sampler2D;
 ${WORLD_GLSL.replace('in vec2 vUv;', '')}
 out vec2 local;
 out vec3 color;
@@ -168,6 +179,8 @@ void main(){
 }`;
 const WORLD_DEPTH_FRAGMENT = `#version 300 es
 precision highp float;
+precision highp int;
+precision highp sampler2D;
 in vec2 local;in vec3 color;in float alpha;
 out vec4 frag;
 void main(){float r=dot(local,local);if(r>1.)discard;frag=vec4(color*alpha*exp(-r*5.)*(1.-smoothstep(.6,1.,r)),0);}

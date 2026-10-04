@@ -2,6 +2,9 @@
 const WORLD_GALAXY_ORBITS = 32;
 const WORLD_GALAXY_PARTICLES_PER_ORBIT = 1024;
 const WORLD_GALAXY_BACKGROUND = `#version 300 es
+precision highp float;
+precision highp int;
+precision highp sampler2D;
 ${WORLD_ANALYZER_GLSL}
 in vec2 vUv;
 out vec4 frag;
@@ -18,6 +21,9 @@ void main(){
  frag=vec4(col,1.);
 }`;
 const WORLD_GALAXY_VERTEX = `#version 300 es
+precision highp float;
+precision highp int;
+precision highp sampler2D;
 ${WORLD_ANALYZER_GLSL}
 uniform int particlesPerOrbit;
 out vec2 local;
@@ -44,6 +50,8 @@ void main(){
 }`;
 const WORLD_GALAXY_FRAGMENT = `#version 300 es
 precision highp float;
+precision highp int;
+precision highp sampler2D;
 in vec2 local;in vec3 tint;in float intensity;
 out vec4 frag;
 void main(){float radius=dot(local,local);if(radius>1.)discard;

@@ -1,5 +1,8 @@
 // 目的 — 既存流体・粒子を独立したGPUタイプへ接続する — doc/20261004-design-gpu-analyzers-v1.md §4
 const WORLD_COMPOSITE_FRAGMENT = `#version 300 es
+precision highp float;
+precision highp int;
+precision highp sampler2D;
 ${WORLD_GLSL}
 uniform sampler2D dye, velocity;
 uniform vec4 pulse;

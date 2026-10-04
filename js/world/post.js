@@ -1,5 +1,8 @@
 // 目的 — 変形フィードバック・多段HDRブルーム・ACESの光学仕上げ — doc/20261004-concept-world-mode.md §2.7・§5
 const WORLD_BLOOM_FRAGMENT = `#version 300 es
+precision highp float;
+precision highp int;
+precision highp sampler2D;
 ${WORLD_GLSL}
 uniform sampler2D source;
 uniform vec2 axis;
@@ -12,6 +15,9 @@ void main(){vec2 d=axis/vec2(textureSize(source,0));
  frag=vec4(max(vec3(0),c-vec3(threshold)),1);}`;
 // 輝度はGPU内で4×4ずつ縮約し、1×1の平均対数輝度と最大輝度を得る。
 const WORLD_EXPOSURE_FRAGMENT = `#version 300 es
+precision highp float;
+precision highp int;
+precision highp sampler2D;
 ${WORLD_GLSL}
 uniform sampler2D source;
 uniform int firstPass;
@@ -27,6 +33,9 @@ void main(){ivec2 size=textureSize(source,0),base=ivec2(gl_FragCoord.xy)*4;
  frag=vec4(sum,count,peak,1.);
 }`;
 const WORLD_FEEDBACK_FRAGMENT = `#version 300 es
+precision highp float;
+precision highp int;
+precision highp sampler2D;
 ${WORLD_GLSL}
 uniform sampler2D source, history, flow;
 out vec4 frag;
@@ -54,6 +63,9 @@ void main(){
  frag=vec4(min(vec3(64),mix(current,accumulated,worldKind(1.))),1);
 }`;
 const WORLD_POST_FRAGMENT = `#version 300 es
+precision highp float;
+precision highp int;
+precision highp sampler2D;
 ${WORLD_GLSL}
 uniform sampler2D scene, history, bloom0, bloom1, bloom2, bloom3, exposure;
 uniform float analyzerPulse;
