@@ -1,3 +1,96 @@
+## 2026-10-07 — [WORLD-17] g-gargantua v1.4（映画参照で作り直し）
+
+### 作業内容
+- `js/world/g-gargantua.js`: `git show 7a19a4f:js/world/g-gargantua.js` の内容を書き戻し（復元一致を検査）、既存の§10実装を適用して最新SSOT §10.1〜10.6・§10.8へ更新。単一y=0平面／最大3交差の前方合成、暖色と15%パレット、ドップラーなし、4オクターブ／倍率2.03の周期縞と累積travelの半径方向LOD、指定opacityを実装。2層／EMA／黒体／BEAM／体積スラブ／吸収／flowBlur／flowQuality／setQuality／光暈／光条／星の輝度下限は使用しない。CPUクラス・光子リングSSAA・重力ease・キック・hotspotは復元元を維持。
+- `js/world/g-gargantua.js`: §10.8を優先してDISK_OUTER=24／OUTER_FADE=15／INTENSITY_POWER=.8／DISK_HDR=6に設定。帯域はBAND_OUTER=14へ分離し、半径の比を0..1へclamp。星は§10.5のSTAR_CELLS=180／確率.03／power18／HDR6／半径.6（1080p）とv1.0のGaussian点関数へ戻し、BACKGROUND_MAX=.04は天の川にだけ適用。カメラdistは§10.6の表を維持。
+- `js/world/post.js`: 開始時の変更が§10.4を満たしていたため保持。gargantuaのbloom重み.25/.25/.30/.45、threshold=.55、strength=.90、ACES前のb3*VEIL_GAIN（.12）を検査。他分岐はHEADと一致。
+- `tests/unit/world-gargantua.test.mjs`: 廃止定数・旧星値・明るさ指数を§10.5/10.8へ更新。単一平面、LOD、星Gaussian、星だけ上限なし、帯域clamp、フレア順序と合成画像の受け入れ境界を検査。既存のカメラ／イベントhash／キック／再演／32環／重力ease／継ぎ目検査は保持。
+- `tests/world/shoot-live.mjs`: 開始時のseek完了待ち／実音撮影／PBO転送／pause後readback／後始末とv1.3専用判定の除去を保持。§10.8の上弧厚み比>=.4を追加し、readPixelsの上側（y増加方向）を正しく判定。実GLSL検査は半径3.5〜24へ拡張し、外縁fade・指数.8・非一様な32帯域のclampと境界補間を384標本で照合する。1280×720 renderAt(45)の正確な時刻の画像と数値条件を保存する。
+
+### 検証
+- `node tests/run.mjs --unit`: 184件／183成功／0失敗／想定U15-00スキップ1、26,785ms、終了コード0。出力: `tests/output/world17-v14-unit.txt`。
+- `node --test tests/unit/world-gargantua.test.mjs`: UW-48〜54の7件／7成功／0失敗、322.046625ms。§10の30定数、カメラ6kind／ease中点dist16／第二drop dist13、重力中点[1.8,1.09,3.2]／ピーク[2.1,1.18,3.4]、hash60例の誤差0、hotspot容量12／寿命6秒を確認。合成星150画素は合格、149は不合格、円盤を除外後148。弧ピーク217/255=.8509803921568627は合格、216/255=.8470588235294118は不合格。
+- `node tests/world/shoot-live.mjs --unit`: UW-55〜61の7件／7成功／0失敗、15.438584ms。合成影半径10.045109950630787px、上弧厚み5px／比.4977546313155112は合格、4px／比.39820370505240893は不合格。下弧1pxでも合格し、上側だけに40%を要求。輝度127/255の画素は厚みから除外。合成G-1は21標本／.5秒／相関中央値1、キック増加.36／100ms時刻1.1秒。撮影mockは時刻7秒／遅れ0／25標本／.40000000000000036秒、34転送すべてpause後readback。これらは実画像・実音・実GPUの測定値ではない。
+- 全JS/MJS `node --check`: 129件／129成功／0失敗、6,927ms、終了コード0。ブラウザ注入ソース19,231bytesの`vm.Script`構文検査も成功。
+- 読み取り専用git比較: CPUクラスは7a19a4fと完全一致。post.jsはgargantua分岐とVEIL_GAIN宣言以外がHEADと完全一致。対象ソース4ファイルの`git diff --check`成功。
+- Chrome禁止のため未実行: 384標本の実GLSL照合、1280×720 renderAt(45)の星150画素／上下ピーク>.85／上弧厚み>=影半径40%、6時刻の実音撮影、G-1／実キック／GPU診断、file://・console・見た目確認。
+
+### spec.md 変更
+- なし。指定範囲に従いdoc/spec.md／README.md／tests/browserは編集していない。設計文書と開始時のtests/world/output/live/画像／JSONも編集していない。既存画像は今回のv1.4の検証証拠には使えない。
+
+### 備考
+- 実装: Codex gpt-6.1-sol high
+- 判断: 依頼末尾の「Do NOT stop for ambiguity」に従う。§10.8は§10.3の外縁／fade／明るさ指数と§10.7の弧の細さに優先する。カメラの矢印はセクション内の開始→終了として読み、dist以外の値とCPUクラスは復元元を保持。
+- 判断: LODは§10.3から参照された§9.6のλ=rd/f_k（f_0=60）・正規化なしを採用。逆順smoothstepをGLSLで定義される正順の補数に置換。travelは曲がった線分の長さを累積し、交差区間は交点まで加算。fbm初期振幅.5／固定座標オフセットは復元元を維持。opacityの無名数値はOPACITY_BASE／OPACITY_STREAK／OPACITY_MAXとして定義。
+- 判断: 星の点関数はv1.0のGaussianをそのまま使い、§10.5が明示する1080p基準はSTAR_REFERENCE_HEIGHT=1080で維持。v1.0の光条は§10.5の禁止に従い除去。瞬き・天の川は復元元のまま。
+- 判断: §10.8の帯域式のclampと復元元のBAND_BLENDを両方維持したため、14以上は14の境界での補間値に固定される。測定用の32環は引き続き3〜14を使用。単一平面の直接像メタデータでは2交差以上を除外する。
+- 判断: 弧の測定は既存の中央±影半径/2の列・上下3半径以内で輝度>.5の最長連続長の中央値を使い、§10.8の40%は上側だけへ要求。影半径は中心地平面像の等面積半径。外縁の柔らかな減衰／画面全体の滲み／映画参照は目視項目に残す。半解像度のマスク・ROI・中央値の妥当性は実画像でレビューが必要。
+- 手順逸脱: 単体テストの出力を一時的に`/tmp/world17-v14-unit.txt`へ保存したため、終了後にworktree内の`tests/output/world17-v14-unit.txt`へ移動した。ソース変更はこのworktreeの指定4ファイルとlog.mdのみ。commit／push／PR／Chrome起動は行っていない。
+- レビュアー確認: `WORLD_CHROME_WRAPPER=/path/to/gpu-wrapper node tests/world/shoot-live.mjs`を実GPUで実行し、renderAt(45)の星>=150画素／上下ピーク>.85／upperRatio>=.4、柔らかな外縁／全画面の滲み／映画スチルとの同系統の見た目、mainの影直径約23%と円盤が左右へはみ出す構図、GPU性能・シーク／書き出し一致を確認。範囲外の旧BW-13-formulas／BW-14-periodic／BW-14-screenは黒体・filamentInput／fbm・両層・旧星値を参照するため§10への追従が必要。前の同名ログにある旧星値・指数1.6・厚み診断だけという説明は本エントリで更新する。
+
+## 2026-10-07 — [WORLD-17] g-gargantua v1.4（映画参照で作り直し）
+
+### 作業内容
+- `js/world/g-gargantua.js`: `git show 7a19a4f:js/world/g-gargantua.js` の内容を書き戻してから SSOT §10.1〜10.6 を適用。y=0 の単一平面、最大3交差と前方合成、指定の暖色／15%パレット混合、ドップラーなし、4オクターブの周期縞と半径方向LOD、指定の発光・不透明度を実装。光子リングSSAA、重力ease、帯域・滑らかなキック・hotspot・CPU経路は復元元を維持。2層・EMA・黒体・スラブ・吸収・flowBlur／flowQuality／setQuality・光暈・光条を除去。
+- `js/world/g-gargantua.js`: 星は半径1px（1080p換算）／確率.05／HDR .35+5*pow(h,6)へ変更し、上限.04を天の川だけへ適用。distをintro 34→22、build 24→16、drop 15（第二以降13）、break 22、outro 20→60、main 17へ変更。inc・周回速度・円盤係数・瞬きは復元元のまま。
+- `js/world/post.js`: gargantua分岐の4段bloomの重みを.25/.25/.30/.45へ変更。threshold=.55、strength=.90は共有定数から取得し、b3*VEIL_GAIN（.12）をACES前に加算。他タイプの分岐は変更なし。
+- `tests/unit/world-gargantua.test.mjs`: UW-48のcamera／palette／bloomとUW-52の廃止定数参照を更新。UW-53／54の旧層・halo・spike・白飛び8%・星400個の検査を§10の定数・廃止機能の不在・合成画像の星画素／弧輝度境界・フレアの順序へ置換。オンセット寿命・hash・再演・32環・重力ease・継ぎ目の検査は保持。
+- `tests/world/shoot-live.mjs`: 既存のseek完了待ち、曲頭からの状態復元、t以降の最初の描画、20標本以上／.4秒以上のG-1、実オンセットのキック診断、PBO/fenceとpause後readback、資源の後始末を保持。v1.3の品質fallback／体積／白芯／厚み比35%／白飛び18%／星径1.5pxの判定を除去し、§10のGLSL 320標本照合と星150画素・上下弧輝度>.85の判定へ置換。1280×720・renderAt(45)の正確な時刻の画像も別途保存する。GPU測定・実キックは診断として記録し、§10.7の数値条件と画像の目視確認項目を分けて記録する。
+
+### 検証
+- `node tests/run.mjs --unit`: 184件／183成功／0失敗／想定U15-00スキップ1、45,761ms、終了コード0。`tests/output/world17-unit.txt` に出力を保存。
+- `node --test tests/unit/world-gargantua.test.mjs`: UW-48〜54の7件／7成功／0失敗／0スキップ、最終121.840458ms。camera 6kind、4秒ease中点dist=16、第二drop dist=13、gravity中点=[1.8,1.09,3.2]／ピーク=[2.1,1.18,3.4]、hash 60例の誤差0、hotspot容量12／寿命6秒、26個の新定数を検査。合成星150画素は合格、149は不合格（円盤画素除外後148）。合成弧ピーク217/255=.8509803921568627は合格、216/255=.8470588235294118は不合格。
+- `node tests/world/shoot-live.mjs --unit`: UW-55〜61の7件／7成功／0失敗／0スキップ、最終18.675416ms。合成G-1は21標本／.5秒／相関中央値1。合成キック画面増加.36／100ms標本1.1秒。合成影半径10.045109950630787px、上下弧厚み1px（厚みは判定しない）。撮影mockはcapturedSec=7／lag=0／25標本／.40000000000000036秒、34転送すべてpause後readback。これらは実画像・実音・実GPUの測定値ではない。
+- 全JS/MJS `node --check`: 129件／129成功／0失敗、16,839ms、終了コード0。最終の撮影テスト変更後にも同ファイルの構文検査を実行して成功。ブラウザ注入ソース（18,010bytes）のvm.Script構文検査も成功。
+- 読み取り専用gitによる比較: `WorldGargantuaAnalyzer` のCPU経路は7a19a4fと完全一致。post.jsはgargantua分岐と必要なVEIL_GAIN宣言以外でHEADと完全一致。対象ソース4ファイルの `git diff --check` は成功。
+- Chrome禁止のため、追加／更新したブラウザ検査は未実行: 実GLSLの周期性・暖色／パレット・縞／opacity・LOD・滑らかなキック・3交差前方合成（320標本）、1280×720 renderAt(45)の星画素と上下弧ピーク、6時刻の実音撮影、G-1／実キック／GPU診断。実画像の星数・弧輝度・影直径・GPU p95、file://／console確認、見た目の受け入れは未測定／未確認。
+
+### spec.md 変更
+- なし。チケットの指定ファイル範囲に従い、doc/spec.md／README.md／既存tests/browserファイルは編集していない。レビュアーによる旧v1.1/v1.3記述とブラウザ検査の追従が必要。
+
+### 備考
+- 実装: Codex gpt-6.1-sol high
+- 判断: 依頼末尾の「Do NOT stop for ambiguity」に従い、§10へ最も忠実な読みを採用。§10.6の矢印は旧値置換ではなくセクション内の開始→終了として実装し、dist以外のcamera値を7a19a4fから維持した。
+- 判断: LODは§10.3が明示的に参照する§9.6の半径方向波長rd/f_kを使用。逆順smoothstepはGLSLで未定義なので正順の補数1-smoothstep(.6,2,fp/λ)で同じ下降曲線を実装し、正規化しない。travelは実際の曲がった線分長を累積し、交差区間は交点までの比率だけ加算。fbmの初期振幅.5・オクターブ間の固定座標オフセットは復元元を維持。
+- 判断: §10.1のopacity式の無名数値をOPACITY_BASE=.45／OPACITY_STREAK=.5／OPACITY_MAX=.90として定義。beam=1は乗算自体を除去して実現。hotspotは復元元と同様にdiskへ加算後camera.wを掛ける。
+- 判断: G-1用alphaの直接像メタデータは1枚の平面に合わせて最初の近側・内向き交差を保持し、2回以上の円盤交差を測定から除外。実光の合成・地平面／逃走条件は復元元を維持。
+- 判断: §10.7の星は逃走背景マスクの表示輝度>.5の「画素数」で数え、星の連結成分数や径には置換しない。上下弧は中心の地平面像の等面積半径から中央±半径/2の列・上下3半径以内を探索し、直接像／背景／地平面内を除いた円盤像で各ピーク>.85を要求。厚み（輝度>.5の連続長中央値）と影半径の比は診断だけで、設計にない薄さの数値閾値は追加しない。薄さ・画面全体の滲み・映画参照との一致はmanualChecksへ残した。
+- 判断: WORLDのcanvasは通常1920×1080固定でviewport変更では描画解像度が変わらないため、撮影ハーネス内で既存engine.resize(1280,720)を明示的に呼ぶ。GPU診断は先に従来の1920×1080で実施し、品質／定数を自動調整しない。§10.7の数値条件を終了コードへ接続し、GPU／キック／旧版の画面基準を新しい見た目の受け入れ条件として追加しない。
+- レビュアー確認: `WORLD_CHROME_WRAPPER=/path/to/gpu-wrapper node tests/world/shoot-live.mjs` を実GPUで実行し、`g-gargantua-renderAt-45-v14.png` とreport.jsonの数値条件・manualChecksを確認。特に星が150画素以上見えること、上下弧が>.85かつ細いこと、全画面の滲み、映画スチルとの同系統の見た目、mainの影直径約23%と円盤外縁が左右へはみ出す構図、負角camera／32帯域／hotspot／シーク・書き出し一致を確認すること。半解像度の背景／弧マスクの境界とROIも実画像で確認すること。
+- レビュアー確認: 範囲外の旧BW-13-formulas／BW-14-periodic／BW-14-screenは黒体・filamentInput／fbm・両層・星400個／白飛び8%等を参照するため、§10へ追従が必要。変更前から存在するtests/world/output/live/の画像／JSON／reportはv1.4の証拠ではない。
+- 開始時から変更済みの `doc/20261004-design-gargantua-v1.md` と tests/world/output/live/ の画像／JSON／report.jsonは編集していない。ソースの編集は上記4ファイルとlog.mdのみ。このworktree以外へ編集せず、commit／push／PR／Chrome起動は行っていない。
+
+## 2026-10-07 — [WORLD-16] g-gargantua v1.3
+
+### 作業内容
+- `js/world/g-gargantua.js`: SSOT §9.1〜9.6を実装。2枚の薄い円盤を厚みH(rd)の体積へ置換し、各区間で密度×発光×dtの前方合成とκ=1.6の指数吸収を積分。周期φの異方性ノイズ、6点の流れ方向ブラー、4オクターブ／周波数倍率2.03／半径方向実波長に基づく振幅LOD（正規化なし）、指定の明るいI_flow、連続した白い芯を適用。32帯域と内側rd<6.5の一様なキック係数を体積発光へ掛ける。層・旧露出係数は削除し、EMA／履歴は使わない。星を§4の3%／半径.6／power18／HDR6／上位.5%の6画素光条／背景上限.04へ戻し、高域位相による瞬きと対角の天の川を維持。
+- `js/world/g-gargantua.js`: 品質0（6点／H×.35）、品質1（4点／H×.35）、品質2（4点／H×.5）の明示的なsetQualityを追加。毎フレームのCPU経路は事前確保したFloat32Arrayを再利用。品質はresetでも保持し、再生時刻による自動変更はしない。
+- `tests/world/shoot-live.mjs`: world12Shoot／world13Shootを本ファイルのブラウザ注入ソースで置換。seekedとseeking=false、開始時刻への到達、その後のrAFを待ち、曲頭からcamera／hotspot／azimを復元して実AudioWorkletへ渡す。tより前のlead-inではreadbackせず、t以降の最初の描画をPNGとして保存し、G-1はt以降の異なる描画を20枚以上かつ.4秒以上収集。PBO＋fenceで転送を予約し、同期readbackと輝度集計はpause後へ移す。capturedSec／lag／sampleEndSec／標本数／窓幅を保存。
+- `tests/world/shoot-live.mjs`: 各撮影窓で実際に消費された低域オンセットをG-kickに使用（固定帯域や人工キックは使わない）。直前／直後.1秒窓の画面輝度と最初の100ms以降の実標本を保存し、両方35%以上を要求。実キック・前後標本・ROI・100ms標本がない窓は不合格として理由を保存。6時刻の星径中央値≤1.5、白飛び≤18%、t=45の上下明弧厚み／影半径≥.35、G-1≥.6、実GPU p95≤16msをreportと終了コードへ接続。
+- `tests/world/shoot-live.mjs`: GPU測定を先に実行し、p95超過の場合だけ§9.4の順序で品質を落として再測定。全試行と採用品質を記録し、その品質で撮影する。実GLSLの周期性／白芯／密度／LOD／キック／前方積分を320標本で照合するブラウザ検査と、Chrome不要のUW-55〜61（--unit）を同じ指定ファイル内に追加。
+
+### 検証
+- `node tests/run.mjs --unit`: 184件／182成功／1失敗／想定U15-00スキップ1、48,715ms。失敗は既存UW-52が廃止されたDISK_LAYER_A_SPEED=3等のv1.1定数を要求するため。定数や閾値を旧設計へ戻していない。全件成功ではない。
+- `node --test tests/unit/world-gargantua.test.mjs`: 7件／6成功／1失敗／0スキップ、133.323ms。UW-52の最初の失敗は同ファイル96行のundefined !== 3（DISK_LAYER_A_SPEED）。既存重力／camera／resetの検査はその行まで通過。
+- `node tests/world/shoot-live.mjs --unit`: UW-55〜61の7件／7成功／0失敗／0スキップ、24.849ms。H(3)=.10、H(14)=.595、κ=1.6、指定3段階の品質を検査。合成G-1は21枚／.5秒／中央値1、2枚・定数入力・空ROIを拒否。白飛び.18を合格／.19を不合格。単一画素の星径1.1283791671を合格／隣接2画素の1.5957691216を不合格。合成画面キック増加.36／100ms=1.1秒、オンセットなし等を拒否。合成影半径10.0451099506、弧4pxの比.3982037051を合格／3pxの比.2986527788を不合格。
+- 撮影mock: seek listener→currentTime代入→seeked→rAFの順序、capturedSec=7.0／lag=0、G-1は25枚／.40000000000000036秒、転送予約34枚のreadbackが全てpause後、timeline／callback／資源の後始末を検査。これらは実GPU／実音の測定結果ではない。
+- 全JS/MJS `node --check`: 最終129件／129成功／0失敗、7,716ms。指定3ファイルの `git diff --check` は成功。開始時から変更済みのSSOTの末尾空行は編集対象外。
+- Chrome禁止のためブラウザを起動していない。新しいshoot-liveの6時刻、seek／最初の描画／20枚以上の実撮影、実キック35%、上下弧厚み、星径、白飛び、320標本の実GLSL検査、3段階のGPU測定、既存ブラウザ全件、file://／console確認は未実行。実GPU／実画像の受け入れ合格は未確認。
+
+### spec.md 変更
+- 指定3ファイルの範囲を優先し、doc/spec.md／README.mdは編集していない。既存の「2層」「大きい星」「露出抑制」等のv1.1記述は、レビュアーが§9への更新を行う必要がある。
+
+### 備考
+- 実装: Codex gpt-6.1-sol high
+- 設計で未指定の具体化: 発光／吸収を区間中点でサンプルし、travelは曲がった光線の線分長を累積。スラブへ入る直前の区間にもH×刻み制限を掛け、薄い内縁の飛び越しを避ける。LODの逆順smoothstepはGLSL未定義なので数学的に同じ正順補数を使用。白芯はパレット混合の前へ適用。hotspotは既存の半径・寿命・HDRを保って体積密度で積分する。
+- G-1の直接像: 最初の近側・内向きのスラブ通過の密度重み付き半径をalphaへ保持し、再入射する高次像を除く。旧平面交点の半径からの変更を実画素で確認すること。星の細い光条の幅は旧v1.0相当の.5pxを採用。時間の遅い瞬きは既存のt×.25を保ち、TWINKLE_SPEEDとして明示した。
+- 計測定義の具体化: 星径は画面輝度.08以上の逃走背景の8近傍成分を1080p等面積直径へ換算し、小さい星を除外せず中央値を採る。影半径は画面中心の暗い（輝度<.1）地平面像の4近傍成分の等面積半径。上下弧は中心左右±影半径×.5の列で各方向の連続した輝度>.5の最長区間の中央値を採り、上下それぞれが35%以上を要求。実画像で領域の妥当性を確認すること。
+- G-kickの具体化: 各撮影窓の前標本がある最初の実オンセットを使用し、前後各2標本以上と100〜150msの実標本を要求。別のオンセットが100ms標本までに再発した場合も不合格。G-1の.4秒は最小窓であり、遅いGPUでは20枚に達するまで長くなる。時間幅をJSONへ残す。
+- §9.6が既定fbmを4オクターブと定義しているため、最初の性能fallbackでブラーを4点へ変更し、fbmは最初から最後まで4オクターブ。GPUの実測なしにMAX_STEPSや設計定数を調整していない。
+- レビュアー確認: 実M4 MaxのGPUラッパーで `WORLD_CHROME_WRAPPER=/path/to/gpu-wrapper node tests/world/shoot-live.mjs` を実行し、上記全基準とcapturedSecの遅延、品質段階、PBOのメモリ／転送負荷を確認すること。UW-52を§9定数へ追従させ、BW-13-formulasの旧radial kick式、BW-14-periodicの廃止filamentInput／fbm、BW-14-screenの旧星400個／白飛び8%等を新設計へ更新すること。既存テストファイルは指定範囲外なので編集していない。継ぎ目／上下の量感／流れの勢い／白い芯／小さい星／32帯域／高域hotspot／負角camera／逆シーク／書き出し一致も目視確認すること。
+- 開始時から変更済みの `doc/20261004-design-gargantua-v1.md` と tests/world/output/live/ の既存JSON／PNG／report.jsonは変更していない。commit／push／PR／Chrome起動／ゴールデン再生成は行っていない。
+- 作業手順の逸脱: 最初の全単体テスト出力を誤って/tmp/world16-unit.txtへリダイレクトした。出力をworktree内のignored tests/output/world16-unit.txtへ移し、作成した外部一時ファイルを削除して修正。ソース編集は指定3ファイルのみ。
+
 ## 2026-10-07 — [WORLD-16] g-gargantua v1.3
 
 ### 作業内容

@@ -72,12 +72,17 @@ uniform float analyzerPulse;
 uniform float analyzerMode;
 uniform float gargantuaMode, exposureMultiplier;
 const float GARGANTUA_BLOOM_STRENGTH = ${WORLD_GARGANTUA.BLOOM_STRENGTH.toFixed(8)};
+const float VEIL_GAIN = ${WORLD_GARGANTUA.VEIL_GAIN.toFixed(8)};
 out vec4 frag;
 vec3 aces(vec3 x){return clamp((x*(2.51*x+.03))/(x*(2.43*x+.59)+.14),0.,1.);}
 void main(){
  if(gargantuaMode>.5){
-  vec3 bloom=texture(bloom0,vUv).rgb*.3+texture(bloom1,vUv).rgb*.22+texture(bloom2,vUv).rgb*.14+texture(bloom3,vUv).rgb*.08;
-  vec3 c=aces((texture(scene,vUv).rgb+bloom*GARGANTUA_BLOOM_STRENGTH)*.75*exposureMultiplier);
+  vec3 b0=texture(bloom0,vUv).rgb,b1=texture(bloom1,vUv).rgb,b2=texture(bloom2,vUv).rgb,b3=texture(bloom3,vUv).rgb;
+  vec3 bloom=b0*.25+b1*.25+b2*.30+b3*.45;
+  vec3 c=texture(scene,vUv).rgb+bloom*GARGANTUA_BLOOM_STRENGTH;
+  // §10.4: 最低解像度のベーリングフレアをACESの前へ足す。
+  c+=b3*VEIL_GAIN;
+  c=aces(c*.75*exposureMultiplier);
   c=mix(c*12.92,1.055*pow(c,vec3(1./2.4))-.055,step(vec3(.0031308),c));
   frag=vec4(c,1.);return;
  }

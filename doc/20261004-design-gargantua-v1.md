@@ -290,3 +290,111 @@ sampleOpacity = clamp(env * (.55 + fil * .35), 0., .95)
 - 円盤の上下の光の弧の太さ：t=45 で、光の弧の明るい部分（輝度 > 0.5）の太さが、影の半径の 35% 以上。
 - 星の大きさ：v1.0 と同等（直径の中央値が 1.5 画素以下）。
 - 白飛び率 ≤ 18%。G-kick（画面）≥ 35%。GPU p95 ≤ 16ms。
+
+### 9.6 補足（2026-10-07 実装者からの質問への回答）
+- **半径方向のオクターブ減衰の厳密な定義**
+  - fbm は 4 オクターブ（k = 0..3）、オクターブごとの周波数倍率は 2.03 とする。
+  - オクターブ k の半径方向の周波数は `f_k = 18 * 2.03^k`（log(rd) の単位あたり）。円盤上の半径方向の波長は `λ_k = rd / f_k`（Rs 単位。d(log rd) = d rd / rd から導く）。
+  - 1 画素の大きさは `fp = travel * (radians(FOV) / 540.)`（Rs 単位。travel は光線がそこまで進んだ距離）。
+  - オクターブ k の**振幅**に `w_k = smoothstep(2.0, 0.6, fp / λ_k)` を掛ける（オクターブ全体の振幅を減らす）。正規化はしない。
+- **白い芯への移行**
+  - `color = mix(blackbodyRamp(T), vec3(1.0, .96, .90), smoothstep(.80, .95, T))` とし、連続的に補間する。
+
+
+## 10. v1.4 — 映画の実物を参照した作り直し（2026-10-07、§9 v1.3 を破棄）
+
+### 10.0 v1.3 の失敗と参照資料
+- オーナーの評価（v1.3）：
+  - 背景の星が消えた。
+  - 空間の歪みが感じられない。
+  - 光のリングの縁が分厚くて不自然。
+  - 光っている感じがしない。
+- 原因：
+  - 星の明るさを、背景の上限 0.04 で抑えていた（v1.0 の上限を戻したための誤り）。
+  - 星が消えたので、レンズの歪みが見えなくなった。
+  - 厚い体積のスラブにしたため、穴の上下に回り込む細い弧が太い塊に潰れた。
+  - 吸収（κ）によって、自分の光を自分で隠す、くすんだ管になった。
+- 参照資料：James, von Tunzelmann, Franklin, Thorne, "Gravitational lensing by spinning black holes in astrophysics, and in the movie Interstellar"（CQG 32, 065001, 2015）の §4.1〜4.3 と付録 A.6、および映画のスチル画像。映画の円盤の要点は次のとおり。
+  1. **物理的に薄く**、光学的には「ぎりぎり不透明」な円盤である。体積は近接ショットだけで使われた。
+  2. **温度はどこでも 4500K の一定**で、色はほぼ一様な暖かい白〜金色である。
+  3. **ドップラーによる色や明るさの非対称は意図的に外されている**（観客を混乱させないため）。
+  4. **「光っている感じ」の正体は、IMAX レンズのベーリングフレア（画面全体を包む柔らかい光の滲み）**で、点像分布関数との畳み込みで作られている。
+  5. 円盤には、半径方向にとても細く、回転方向に長い縞がある。高コントラストの筋が流れる様子が「光の濁流」に見える。
+  6. 穴の影が画面の大部分を占めるほど大きく、背景には細かい星がまばらにある。
+
+### 10.1 幾何（v1.2 のコードから出発する）
+- 実装は v1.2 のコード（コミット 7a19a4f の `js/world/g-gargantua.js`）から始める。§9 の v1.3 の変更（スラブ、κ、flowBlur、flowQuality、setQuality）はすべて取り除く。
+- 円盤は **y=0 の 1 枚の平面**にする。2 層構造（DISK_LAYER_*）と §8 の時間方向の EMA は削除する。
+- 平面との交差は最大 3 回（MAX_CROSSINGS 3）。手前から奥への合成方法、地平面、逃走の扱いは v1.2 のまま。
+- 不透明度：`alpha = env * clamp(.45 + .5*streak, 0., .90)`。
+- 光子リングの SSAA（§7）と、重力の高まり（§7 の DROP_GRAVITY と ease）は残す。
+
+### 10.2 色（4500K で一定）
+- 黒体ランプ（WORLD_GARGANTUA_BLACKBODY）と白い芯（§9.6）は使わない。
+- `warm = mix(DISK_OUTER_COLOR, DISK_INNER_COLOR, pow(DISK_INNER/rd, COLOR_POWER))`
+  - DISK_INNER_COLOR = (1.00, .90, .76)
+  - DISK_OUTER_COLOR = (1.00, .60, .28)
+  - COLOR_POWER = 1.0
+- 曲ごとの違いを残すため、パレット色を混ぜる：`tint = mix(warm, warm*primary*PALETTE_GAIN, PALETTE_TINT)`、PALETTE_TINT = .15。
+- **ドップラー効果は外す**（beam = 1）。BEAM_* と VELOCITY_SCALE は削除する。
+
+### 10.3 縞模様（濁流の質感）
+- `rot = phi - omega*music.w`（omega は v1.2 と同じケプラー回転）。
+- `p = vec3(log(rd)*STREAK_RADIAL, cos(rot)*STREAK_ANGULAR, sin(rot)*STREAK_ANGULAR + music.w*STREAK_TIME)`
+  - STREAK_RADIAL = 60（log(rd) の単位あたり）
+  - STREAK_ANGULAR = 3.0
+  - STREAK_TIME = .03
+- `n = streakFbm(p)`：4 オクターブ、オクターブごとの周波数倍率 2.03、振幅倍率 .5。各オクターブには §9.6 の半径方向 LOD 減衰を掛け、そのときの基本周波数は f_0 = STREAK_RADIAL とする。
+  - fp は、光線がカメラから交差点まで進んだ累積距離 travel を使って `fp = travel*radians(FOV)/540` とする。
+- `streak = STREAK_FLOOR + (1.-STREAK_FLOOR)*smoothstep(STREAK_LO, STREAK_HI, n)`
+  - STREAK_FLOOR = .30
+  - STREAK_LO = .30
+  - STREAK_HI = .70
+- 明るさ：`I = DISK_HDR * env * streak * pow(DISK_INNER/rd, INTENSITY_POWER)`
+  - DISK_HDR = 6.0
+  - INTENSITY_POWER = 1.6
+- `col = tint * I * musicGain(rd) * camera.w`
+  - ホットスポットは v1.2 のまま加算する。
+  - musicGain の帯域割り当てとキック（内側 1/3 に `1+KICK_GAIN*kick` を、v1.2 の滑らかな減衰付きで掛ける）は v1.2 のまま。
+
+### 10.4 ベーリングフレア（光っている感じの本体）
+- 変更するのは post.js の gargantua 分岐だけ。
+- `bloom = b0*.25 + b1*.25 + b2*.30 + b3*.45`
+- BLOOM_THRESHOLD = .55、BLOOM_STRENGTH = .90
+- さらに画面全体へ、低い解像度の光の滲みを足す：`c += b3 * VEIL_GAIN`（VEIL_GAIN = .12）。これは ACES の前に scene に加算する。
+
+### 10.5 星（**v1.0 の値そのもの**。オーナーが繰り返し指定）
+- v1.0（コミット 1247b5a）の星の定数と点関数をそのまま使う。
+  - STAR_CELLS = 180
+  - STAR_PROBABILITY = .03
+  - STAR_POWER = 18
+  - STAR_HDR = 6
+  - STAR_RADIUS_PX = .6（1080p 基準）
+  - 点の形は `point = exp(-dot(p,p)/(2.*STAR_RADIUS_PX*STAR_RADIUS_PX))`
+- 光暈、光条、星の最小の明るさは**付けない**。
+- 違いは 1 点だけ：**星には上限を掛けない。** BACKGROUND_MAX（.04）は天の川だけに適用する：`return stars + min(vec3(BACKGROUND_MAX), milk)`。
+- 瞬きは v1.2 のまま。
+
+### 10.6 構図（ブラックホールを大きく見せる）
+- カメラ表の dist だけを変更する（inc、周回速度、円盤係数は v1.2 のまま）。
+  - intro：34 → 22
+  - build：24 → 16
+  - drop：15（2 回目以降は 13）
+  - break：22
+  - outro：20 → 60
+  - main：17
+- 影の直径は、main で画面の高さの約 23%。外縁の円盤は画面の左右の端からはみ出す。
+
+### 10.7 受け入れ条件（Opus が renderAt で 1280×720 を撮影して判定する）
+- t = 45 で、影の外側にある背景画素のうち、輝度 > .5 の星の画素が 150 個以上ある。
+- 穴の上下に回り込む弧は、細くて明るい（最も明るい部分の輝度 > .85）。厚い塊になっていないこと。
+- 画面全体に柔らかい光の滲みがある。
+- 映画のスチル画像と並べて、同じ系統の見た目であること。
+
+### 10.8 光の量（「リングが薄っぺらい」への対応、§10.3 の明るさの式を上書き）
+- 原因：v1.2 と §10.3 は明るさが pow(3/rd, 1.6〜2.2) で急に落ちる。外側が暗いので、穴の上下へ回り込む弧として見えるのは内縁の細い線だけになる。映画では、円盤が遠くまで明るく広がっていて、その奥側全体が歪んで穴の上に回り込むので、弧が太くて柔らかい。
+- 外縁を広げる：DISK_OUTER = 24、OUTER_FADE = 15。外縁は 15 から 24 にかけて smoothstep で柔らかく消し、硬い縁を作らない。
+- 明るさの減り方を緩める：INTENSITY_POWER = .8、DISK_HDR = 6.0（rd 15 で約 1.7 HDR）。
+- 帯域の割り当て（musicGain）は、引き続き 3〜14 の範囲で行う。14 より外側は、14 の帯域の値を使う。そのため、`(rd-DISK_INNER)/(BAND_OUTER-DISK_INNER)` と BAND_OUTER = 14 を使い、0..1 に clamp する。
+- 受け入れ条件の追加：t = 45 で、穴の上側の弧の太さ（輝度 > .5 の部分）が、影の半径の 40% 以上ある。弧の外側は柔らかく減衰していること。
+
