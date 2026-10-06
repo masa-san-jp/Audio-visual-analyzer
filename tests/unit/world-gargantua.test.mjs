@@ -1,4 +1,4 @@
-// 目的 — WORLD-17のカメラ表・平面円盤・色/縞/星/フレアと再演を検査する — doc/20261004-design-gargantua-v1.md §10
+// 目的 — WORLD-18のカメラ表・平面円盤・色/縞/星/フレアと再演を検査する — doc/20261004-design-gargantua-v1.md §10・§10.9
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { loadClassic } from '../lib/load-classic.mjs';
@@ -10,25 +10,25 @@ function setup(kinds=['main'],duration=10) {
   const input={engine,song:score.song,features:f,dt:0,tSec:0},analyzer=new Analyzer();
   return {score,f,engine,input,analyzer};
 }
-test('UW-48 WORLD-17 カメラ全6kind表・4秒ease・同labelの第二drop・パレット15%の定数',()=>{
-  const expected={intro:[34,22,2,2,.010,.010,.6,.6],build:[24,16,2,18,.020,.05,.8,1.1],drop:[15,15,4,4,.07,.07,1.35,1.35],break:[22,22,28,28,.012,.012,.7,.7],outro:[20,60,8,8,.008,.008,.9,0],main:[17,17,6,6,.03,.03,1,1]};
+test('UW-48 WORLD-18 カメラ全6kind表・4秒ease・同labelの第二drop・パレット15%の定数',()=>{
+  const expected={intro:[50,38,2,2,.010,.010,.6,.6],build:[40,32,2,8,.020,.05,.8,1.1],drop:[30,30,3,3,.07,.07,1.35,1.35],break:[36,36,20,20,.012,.012,.7,.7],outro:[34,70,6,6,.008,.008,.9,0],main:[34,34,3,3,.03,.03,1,1]};
   const table=runtime.get('WORLD_GARGANTUA_CAMERA');assert.equal(JSON.stringify(table),JSON.stringify(expected));
   for(const kind of Object.keys(expected)){
     const {input,analyzer}=setup([kind]);input.tSec=5;analyzer.step(input);const row=expected[kind];
     assert.ok(Math.abs(analyzer.camera[0]-(row[0]+row[1])*.5)<1e-6);
-    assert.ok(Math.abs(analyzer.camera[1]-((row[2]+row[3])*.5+3*Math.sin(5*.07))*Math.PI/180)<1e-7);
+    assert.ok(Math.abs(analyzer.camera[1]-((row[2]+row[3])*.5+1.5*Math.sin(5*.07))*Math.PI/180)<1e-7);
     assert.ok(Math.abs(analyzer.orbitSpeed-(row[4]+row[5])*.5)<1e-12);
     assert.ok(Math.abs(analyzer.camera[3]-(row[6]+row[7])*.5)<1e-6);
   }
   const {input,engine,analyzer}=setup(['main','drop','break','drop']);analyzer.step(input);
-  engine.sectionIndex=1;input.tSec=10;analyzer.step(input);assert.equal(analyzer.camera[0],17);
-  input.tSec=12;analyzer.step(input);assert.equal(analyzer.camera[0],16);
-  input.tSec=14;analyzer.step(input);assert.equal(analyzer.camera[0],15);
+  engine.sectionIndex=1;input.tSec=10;analyzer.step(input);assert.equal(analyzer.camera[0],34);
+  input.tSec=12;analyzer.step(input);assert.equal(analyzer.camera[0],32);
+  input.tSec=14;analyzer.step(input);assert.equal(analyzer.camera[0],30);
   engine.sectionIndex=2;input.tSec=24;analyzer.step(input);
-  engine.sectionIndex=3;input.tSec=34;analyzer.step(input);assert.equal(analyzer.camera[0],13);assert.equal(analyzer.orbitSpeed,.09);
+  engine.sectionIndex=3;input.tSec=34;analyzer.step(input);assert.equal(analyzer.camera[0],27);assert.equal(analyzer.orbitSpeed,.09);
   assert.ok(Math.abs(analyzer.camera[3]-1.35*1.5)<1e-6);assert.equal(C.CAMERA_EASE_SECONDS,4);assert.equal(C.PALETTE_TINT,.15);
   assert.equal(C.MAX_STEPS,180);assert.equal(C.BLOOM_THRESHOLD,.55);assert.equal(C.BLOOM_STRENGTH,.90);
-  console.log('UW-48 cameraKinds=6 easeMidpointDist=16 secondDropDist=13 speed=.09 brightness=2.025 maxSteps=180');
+  console.log('UW-48 cameraKinds=6 easeMidpointDist=32 secondDropDist=27 speed=.09 brightness=2.025 maxSteps=180');
 });
 test('UW-49 WORLD-13 キックexp(-age/.11)・高域pool12/寿命6秒・連続イベント・無拍反応・再演',()=>{
   const {input,f,analyzer}=setup();f.raw[layout.LEVEL]=.5;analyzer.step(input);
@@ -84,29 +84,30 @@ test('UW-52 WORLD-14 重力の1.2秒/2秒ease・地平面/ISCO・第二drop負�
   assert.ok(Math.abs(analyzer.gravity[0]-2.1)<1e-6);assert.ok(Math.abs(analyzer.gravity[1]-1.18)<1e-6);assert.ok(Math.abs(analyzer.gravity[2]-3.4)<1e-6);
   input.tSec=19.99;analyzer.step(input);const inclination=analyzer.baseInclination;
   engine.sectionIndex=2;input.tSec=20;analyzer.step(input);assert.equal(analyzer.baseInclination,inclination);
-  assert.ok(Math.abs(analyzer.camera[1]-(inclination+3*Math.PI/180*Math.sin(20*.07)))<1e-7);
+  assert.ok(Math.abs(analyzer.camera[1]-(inclination+1.5*Math.PI/180*Math.sin(20*.07)))<1e-7);
   assert.equal(analyzer.gravityAmount,1);input.tSec=21;analyzer.step(input);assert.equal(analyzer.gravityAmount,.5);
   input.tSec=22;analyzer.step(input);assert.equal(analyzer.gravityAmount,0);
-  input.tSec=24;analyzer.step(input);assert.ok(Math.abs(analyzer.baseInclination-28*Math.PI/180)<1e-12);
+  input.tSec=24;analyzer.step(input);assert.ok(Math.abs(analyzer.baseInclination-20*Math.PI/180)<1e-12);
   engine.sectionIndex=3;input.tSec=34;analyzer.step(input);
-  assert.ok(Math.abs(analyzer.baseInclination+10*Math.PI/180)<1e-12);
+  assert.ok(Math.abs(analyzer.baseInclination+6*Math.PI/180)<1e-12);
   const gravity=analyzer.gravity.slice(),camera=analyzer.camera.slice();
   analyzer.reset();engine.sectionIndex=3;input.tSec=34;analyzer.step(input);
   assert.deepEqual(analyzer.gravity,gravity);assert.deepEqual(analyzer.camera,camera);
   assert.equal(C.KEPLER_SPEED,1.35);assert.equal(C.MAX_CROSSINGS,3);assert.equal(C.KICK_GAIN,2.6);
   assert.equal(C.RING_SAMPLE_MIN,1.3);assert.equal(C.RING_SAMPLE_MAX,3.2);
   assert.equal(C.MILKY_WAY_MAX,.035);assert.equal(C.MILKY_WAY_OCTAVES,5);
-  console.log('UW-52 surgeMidpoint=[1.8,1.09,3.2] surgePeak=[2.1,1.18,3.4] easeIn=1.2 easeOut=2 secondDropInc=-10 replayError=0');
+  console.log('UW-52 surgeMidpoint=[1.8,1.09,3.2] surgePeak=[2.1,1.18,3.4] easeIn=1.2 easeOut=2 secondDropInc=-6 replayError=0');
 });
-test('UW-53 WORLD-17 §10定数・廃止した層/EMA/BEAM/黒体/スラブ/光暈/光条なし',()=>{
-  const expected={COLOR_POWER:1,PALETTE_TINT:.15,STREAK_RADIAL:60,STREAK_ANGULAR:3,STREAK_TIME:.03,
+test('UW-53 WORLD-18 §10.9定数・廃止した層/EMA/BEAM/黒体/スラブ/光暈/光条なし',()=>{
+  const expected={FOV:22,ESCAPE_RADIUS:100,SWAY_DEGREES:1.5,SECOND_DROP_DIST:27,SECOND_DROP_INC:-6,
+    COLOR_POWER:1.3,PALETTE_TINT:.15,STREAK_RADIAL:60,STREAK_ANGULAR:3,STREAK_TIME:.03,
     FBM_OCTAVES:4,FBM_FREQUENCY:2.03,LOD_HEIGHT:540,LOD_START:.6,LOD_END:2,
-    STREAK_FLOOR:.30,STREAK_LO:.30,STREAK_HI:.70,DISK_HDR:6,INTENSITY_POWER:.8,
-    DISK_OUTER:24,OUTER_FADE:15,BAND_OUTER:14,STAR_CELLS:180,STAR_REFERENCE_HEIGHT:1080,
+    STREAK_FLOOR:.15,STREAK_LO:.30,STREAK_HI:.70,DISK_HDR:3,INTENSITY_POWER:.8,
+    DISK_OUTER:20,OUTER_FADE:12,BAND_OUTER:14,STAR_CELLS:180,STAR_REFERENCE_HEIGHT:1080,
     OPACITY_BASE:.45,OPACITY_STREAK:.5,OPACITY_MAX:.90,STAR_RADIUS_PX:.6,STAR_PROBABILITY:.03,
-    STAR_HDR:6,STAR_POWER:18,BLOOM_THRESHOLD:.55,BLOOM_STRENGTH:.90,VEIL_GAIN:.12};
+    STAR_HDR:6,STAR_POWER:18,BLOOM_THRESHOLD:.55,BLOOM_STRENGTH:.90,VEIL_GAIN:.10};
   for(const [name,value] of Object.entries(expected))assert.equal(C[name],value,name);
-  assert.deepEqual(Array.from(C.DISK_INNER_COLOR),[1,.90,.76]);assert.deepEqual(Array.from(C.DISK_OUTER_COLOR),[1,.60,.28]);
+  assert.deepEqual(Array.from(C.DISK_INNER_COLOR),[1,.90,.76]);assert.deepEqual(Array.from(C.DISK_OUTER_COLOR),[1,.52,.20]);
   const removed=/DISK_LAYER|FILAMENT|TEMPERATURE|BEAM_|VELOCITY_SCALE|SLAB_|KAPPA|FLOW_|CORE_|STAR_HALO|STAR_CORE|SPIKE_|STAR_RADIUS_(MIN|MAX)|STAR_FLOOR/;
   assert.ok(Object.keys(C).every(name=>!removed.test(name)));
   const shader=runtime.get('WORLD_GARGANTUA_FRAGMENT'),a=new Analyzer();
@@ -156,5 +157,5 @@ test('UW-54 WORLD-17 §10.7/10.8画面境界・継ぎ目4画素・postのフレ�
   assert.equal(world17Acceptance({width:1280,height:720,requestedSec:45,stars:{pass:true},arcs:{pass:true}}).pass,true);
   assert.equal(world17Acceptance(null).pass,false);
   assert.equal(world17Acceptance({width:1920,height:1080,requestedSec:45,stars:{pass:true},arcs:{pass:true}}).pass,false);
-  console.log('UW-54 starPixelsPass=150 fail=149 arcPeakPass='+217/255+' fail='+216/255+' upperThickness=5 lowerThickness=1 seamContinuous=1 bloomWeights=.25/.25/.30/.45 veil=.12 beforeACES=true');
+  console.log('UW-54 starPixelsPass=150 fail=149 arcPeakPass='+217/255+' fail='+216/255+' upperThickness=5 lowerThickness=1 seamContinuous=1 bloomWeights=.25/.25/.30/.45 veil='+C.VEIL_GAIN+' beforeACES=true');
 });

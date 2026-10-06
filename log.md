@@ -1,3 +1,29 @@
+## 2026-10-07 — [WORLD-18] g-gargantua v1.4 構図・露出調整
+
+### 作業内容
+- `js/world/g-gargantua.js`: SSOT `doc/20261004-design-gargantua-v1.md` §10.9の12定数とカメラ6行のdist始/終・inc始/終のみ変更。FOV=22、DISK_OUTER=20、OUTER_FADE=12、ESCAPE_RADIUS=100、SWAY_DEGREES=1.5、SECOND_DROP_DIST=27、SECOND_DROP_INC=-6、DISK_HDR=3.0、DISK_OUTER_COLOR=(1.00,.52,.20)、COLOR_POWER=1.3、STREAK_FLOOR=.15、VEIL_GAIN=.10を設定。周回速度・円盤係数・その他の定数・描画/CPU処理は保持。
+- `tests/unit/world-gargantua.test.mjs`: UW-48のカメラ表・揺れ・4秒ease・第二drop、UW-52のinclination、UW-53の定数・外側色、UW-54のveil測定出力を§10.9へ更新。定数検査は35項目、色は2組。既存のテスト・許容誤差・受け入れ閾値は維持。
+- `log.md`: 本エントリを先頭に追加。
+
+### 検証
+- `node tests/run.mjs --unit`: 184件／183成功／0失敗／既存の想定U15-00スキップ1、26,806ms、終了コード0。結果を`tests/output/report.json`でも確認。
+- `node --test tests/unit/world-gargantua.test.mjs`: UW-48〜54の7件／7成功／0失敗／0スキップ、114.004375ms。カメラ6kind、4秒easeのdist=34→32→30、第二drop dist=27／inc=-6°／speed=.09／円盤係数2.025、35定数を確認。hash60例の誤差0、再演誤差0。合成星150画素は合格／149は不合格、合成弧ピーク217/255=.8509803921568627は合格／216/255=.8470588235294118は不合格。これらは実画像の測定値ではない。
+- 全JS/MJS `node --check`: 129件／129成功／0失敗、6,926ms、終了コード0。
+- 読み取り専用git/Node比較: 変更定数が§10.9の12項目だけであること、カメラ6行の周回速度・円盤係数がHEADと完全一致することを確認。定数/カメラ以降のコードもHEADと完全一致。`git diff --check`成功。
+- 補助比較の初回はファイル全体を依存クラスなしでVM評価してReferenceErrorになったため、定数/カメラ宣言だけの評価へ修正して成功。製品ソースの修正や定数の調整はしていない。
+- ブラウザテストの追加/変更なし。CODEX_ADDENDUM.mdのChrome禁止に従い、ブラウザ・実GPU・file://・console・実画像の数値/目視受け入れは未実行。
+
+### spec.md 変更
+- なし。指定範囲に従いdoc/spec.md／README.md／post.js／撮影ハーネス／tests/browserは編集していない。開始時から変更済みの設計書も保持。
+
+### 備考
+- 実装: Codex gpt-6.1-sol high
+- 判断: チケット末尾の「Do not stop for ambiguity: decide」に従い、§10.9を以前の定数/カメラ表より優先。矢印は既存表の形式どおりセクション開始→終了に対応させる。設計外の定数調整なし。
+- 判断: VEIL_GAINの定義はg-gargantua.jsにあり、post.jsはそこからGLSLへ展開するため、定義側だけを更新。
+- レビュアー確認: 1280×720 renderAt(45)で§10.9の手前円盤高さ<=35%、内側の白／外側の金、筋の暗い隙間、mainの影直径約39%を確認。§10.7/10.8の背景星>=150画素、上下弧ピーク>.85、上弧厚み>=影半径40%、柔らかな外縁/全画面の滲み/映画参照との一致も実GPUで確認すること。画面比率・輝度・星数の実測値は未取得。
+- レビュアー確認: 範囲外の`tests/world/shoot-live.mjs`のworld17GpuFormulas（330〜331行付近）はSTREAK_FLOOR=.3／DISK_HDR=6／DISK_OUTER=24／OUTER_FADE=15／VEIL_GAIN=.12の旧assertを含む。ブラウザ撮影前に§10.9へ追従が必要。旧BW-13/BW-14の検査については既存WORLD-17ログの注意も参照。
+- 編集はこのworktree内の上記3ファイルのみ。commit／push／PR／Chrome起動は行っていない。
+
 ## 2026-10-07 — [WORLD-17] g-gargantua v1.4（映画参照で作り直し）
 
 ### 作業内容
