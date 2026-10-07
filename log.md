@@ -1,3 +1,33 @@
+## 2026-10-08 — [WORLD-27] ケプラー巻き込みの2位相化
+
+### 作業内容
+- `js/world/g-gargantua.js`: SSOT `doc/20261004-design-gargantua-v1.md` §10.17を実装。FLOW_PERIOD=8、FLOW_PHASE_OFFSET=17.3、SHEAR_FACTOR=1.5を既存のJS/GLSL共有定数へ追加。streakInputは位相別のtauと番号を受け取り、回転はomega*tau、zの時刻項はmusic.w*STREAK_TIMEを維持し、1/2位相のオフセットを加える。
+- `js/world/g-gargantua.js`: streakFlowで半周期ずらしたtau1/tau2のfbmを2回評価し、指定の三角重みw1/w2で混合して指定の平方和による分散復元を適用。diskSampleは混合結果を使う。streakFbmのLOD比に位相別の巻き込みを加え、各オクターブの半径/角度周波数をFBM_FREQUENCYで更新。§10.11の平均値補填と§10.16の画面微分/解析fallback/中心lf共有を保持。
+- `tests/unit/world-gargantua.test.mjs`: UW-53の旧FLOW_禁止から新しい2定数だけを除外し、他の旧定数禁止を維持。UW-63の製品ループ評価を新署名へ同期し、tau=0で従来の平均補填/未減衰値を検証。UW-72のLOD比を新式へ同期。UW-75〜77で共有定数/入力/混合の構造、製品の重み/混合式のCPU評価、tauリセットの連続性/ゼロ重み/和1/分散復元、オクターブ別のLOD比/上限/平均補填を追加。
+- `tests/world/shoot-live.mjs`: 変更したGLSL関数を呼ぶworld17ShaderChecksと、その署名を照合するUW-65だけ更新。継ぎ目は混合後のstreakFlowで比較し、diskSampleの色/不透明度の期待値には混合後の未減衰値を使う。単位相の全減衰ノイズ平均の検証を維持。
+- `log.md`: 本エントリを先頭に追加。
+
+### 検証
+- `node tests/run.mjs --unit`: 198件／197成功／0失敗／既存の想定U15-00スキップ1、29,081ms、終了コード0。既存ランナーのtests/output/report.json出力はgit管理対象の変更なし。
+- `node --test tests/unit/world-gargantua.test.mjs tests/unit/world-shaders.test.mjs`: 16件／16成功／0失敗／0スキップ、84.69575ms、終了コード0。UW-47の21シェーダー（vertex5/fragment16）ヘッダー失敗0。
+- `node tests/world/shoot-live.mjs --unit`: 9件／9成功／0失敗／0スキップ、27.04725ms、終了コード0。UW-65: JS定数27、GLSL定数12、欠落定数0、新streakInput呼び出し3、新streakFbm呼び出し1、streakFlow呼び出し3、diskSample呼び出し2の署名を照合。
+- 全JS/MJS `node --check`: 130件／130成功／0失敗、8,305.204666ms、Node v26.7.0、終了コード0。`git diff --check`: 成功。
+- UW-75: FLOW_PERIOD=8、FLOW_PHASE_OFFSET=17.3、位相オフセット17.3/34.6、SHEAR_FACTOR=1.5、fbm評価2回、各4オクターブを確認。
+- UW-76: t=0〜192を0.1秒刻みの1,921標本で評価し、重みは0..1、w1+w2の最大誤差0。4秒刻みの48リセット境界の前後±1e-7秒で、リセットする位相の重み0、重みの左右差最大1.7763568394002505e-15。不連続になる合成ノイズを指定混合式へ与えた出力の左右差最大3.500000034240003e-8。半々の重みの分散復元倍率1.4142135623730951。
+- UW-77: 5画素幅×4角速度×4tau×4オクターブの320比を比較し、最大誤差2.2737367544323206e-13。全減衰時の単位相平均.46875を維持。rd=3/music.z=1で基底オクターブの実効周波数はt=20で84.3/60、t=45で90.375/66.075、t=90で72.15/96.45、8秒上限108.6（STREAK_RADIALの1.81倍）。これらはCPUの式評価であり、実GPU/画像の測定値ではない。
+- ブラウザ用に更新した既存プローブ: world17ShaderChecksの継ぎ目、streakFbmのLOD/平均補填、混合後のdiskSampleの色/不透明度。Chrome禁止に従い未実行。独立した新規ブラウザテストファイルは追加していない。実GLSLコンパイル/リンク、実GPU画素決定性、GPU p95、見た目、0.1秒刻み撮影の輝度段差、file://コンソールは未検証。
+
+### spec.md 変更
+- なし。指定4ファイルだけ編集。開始時から存在した設計書の§10.17追加（22行）は保持し、本作業では変更しない。
+
+### 備考
+- 実装: Codex gpt-6.1-sol high
+- 判断: §10.17の定数/式を独自調整していない。位相番号は指定どおり1/2を使用。新しいstreakFlowへ混合処理をまとめ、製品と測定プローブで同じ値を使う。オクターブのA_kは既存FBM_FREQUENCY=2.03の逐次乗算で作る。JSの毎フレーム経路の変更/新規確保なし。
+- 判断: 平均値の基準も指定どおり.5を使用し、単位相fbmの平均.46875への独自補正や追加clampをしない。shoot-liveは変更した関数を呼ぶプローブと静的署名照合だけ同期し、撮影/合否の閾値を変更しない。既存の単位相の全減衰平均と、分散復元後の混合値を区別して検証する。
+- 制約: 指定のscratchpad/CODEX_ADDENDUM.mdは存在せず、scratchpad内の検索でも見つからなかった。依頼本文のno commit/push/PR/Chromeを適用し、IMPLEMENTER_RULES.md、実装者ガイド、関連仕様/レンダラー契約を確認。編集はこのworktree内だけ。commit/push/PR/ブラウザ起動なし。
+- レビュアー確認: 実WebGL2で製品シェーダーと更新したworld17ShaderChecksのコンパイル/リンク・GLエラー0を確認。t=20/45/90で縞の細かさとコントラストが同程度、どの時刻でもモアレがないことをOpusが撮影して判定。4秒おきの位相リセット付近を0.1秒間隔で連続撮影し、輝度段差<2%を確認。fbm評価2倍後の実GPU p95<=16ms、同じtの画素決定性、file://のconsoleエラー0も確認すること。
+- レビュアー確認: 前チケットで記録された許可範囲外の`tests/browser/world14.test.js:37`の旧4引数/vec4戻り値traceRay呼び出しは依然残っている。今回のtraceRay署名変更はなく、ここは編集していない。既存WORLD-14ブラウザテストを実行する前に担当者が新out署名へ同期する必要がある。
+
 ## 2026-10-07 — [WORLD-26] 画面微分LOD
 
 ### 作業内容

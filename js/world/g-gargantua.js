@@ -6,6 +6,7 @@ const WORLD_GARGANTUA = Object.freeze({
   DISK_INNER_COLOR: Object.freeze([1.00,.90,.76]), DISK_OUTER_COLOR: Object.freeze([1.00,.52,.20]),
   COLOR_POWER: 1.3, PALETTE_TINT: .15, PALETTE_GAIN: 1.6,
   STREAK_RADIAL: 60, STREAK_ANGULAR: 3.0, STREAK_TIME: .03,
+  FLOW_PERIOD: 8, FLOW_PHASE_OFFSET: 17.3, SHEAR_FACTOR: 1.5,
   FBM_OCTAVES: 4, FBM_FREQUENCY: 2.03, LOD_HEIGHT: 540, LOD_START: .6, LOD_END: 2,
   GRAZE_MIN: .05, TURN_START: 1.2, TURN_MAX_LOG: 6.3, NOISE_MEAN: .5, DERIV_SCALE: 1.0, LF_MAX: 1.0,
   STREAK_FLOOR: .15, STREAK_LO: .30, STREAK_HI: .70, DISK_HDR: 3.0, INTENSITY_POWER: .8,
@@ -65,12 +66,12 @@ float gargantuaNoise3(vec3 p){
  return mix(mix(mix(hash3(i),hash3(i+vec3(1,0,0)),f.x),mix(hash3(i+vec3(0,1,0)),hash3(i+vec3(1,1,0)),f.x),f.y),
  mix(mix(hash3(i+vec3(0,0,1)),hash3(i+vec3(1,0,1)),f.x),mix(hash3(i+vec3(0,1,1)),hash3(i+vec3(1,1,1)),f.x),f.y),f.z);
 }
-// §10.16: log半径の画素幅で減衰し、§10.11の平均値補填を保持する。
-float streakFbm(vec3 p,float lf){
- float n=0.,amp=.5,frequency=STREAK_RADIAL;
+// §10.17: 位相ごとの巻き込みをlog半径の画素幅へ加え、§10.11の平均値補填を保持する。
+float streakFbm(vec3 p,float lf,float omega,float tau){
+ float n=0.,amp=.5,frequency=STREAK_RADIAL,angularFrequency=STREAK_ANGULAR;
  for(int k=0;k<FBM_OCTAVES;k++){
-  float w=1.-smoothstep(LOD_START,LOD_END,lf*frequency);
-  n+=amp*(w*gargantuaNoise3(p)+(1.-w)*NOISE_MEAN);p=p*FBM_FREQUENCY+vec3(7.1,3.7,1.9);frequency*=FBM_FREQUENCY;amp*=.5;
+  float w=1.-smoothstep(LOD_START,LOD_END,lf*(frequency+angularFrequency*SHEAR_FACTOR*omega*tau));
+  n+=amp*(w*gargantuaNoise3(p)+(1.-w)*NOISE_MEAN);p=p*FBM_FREQUENCY+vec3(7.1,3.7,1.9);frequency*=FBM_FREQUENCY;angularFrequency*=FBM_FREQUENCY;amp*=.5;
  }return n;
 }
 float musicGain(float rd){
@@ -86,9 +87,18 @@ float musicGain(float rd){
  gain*=mix(1.,KICK_REST,inner)*(1.+KICK_GAIN*music.x*inner);
  return gain;
 }
-vec3 streakInput(float rd,float phi,float omega){
- float rot=phi-omega*music.w;
- return vec3(log(rd)*STREAK_RADIAL,cos(rot)*STREAK_ANGULAR,sin(rot)*STREAK_ANGULAR+music.w*STREAK_TIME);
+vec3 streakInput(float rd,float phi,float omega,float tau,float phase){
+ float rot=phi-omega*tau;
+ return vec3(log(rd)*STREAK_RADIAL,cos(rot)*STREAK_ANGULAR,sin(rot)*STREAK_ANGULAR+music.w*STREAK_TIME+phase*FLOW_PHASE_OFFSET);
+}
+// §10.17: 半周期ずらした2位相を混ぜ、重み0で作り直しを隠して分散を戻す。
+float streakFlow(float rd,float phi,float omega,float lf){
+ float tau1=mod(music.w,FLOW_PERIOD),tau2=mod(music.w+FLOW_PERIOD*.5,FLOW_PERIOD);
+ float w1=1.-abs(2.*tau1/FLOW_PERIOD-1.),w2=1.-w1;
+ float n1=streakFbm(streakInput(rd,phi,omega,tau1,1.),lf,omega,tau1);
+ float n2=streakFbm(streakInput(rd,phi,omega,tau2,2.),lf,omega,tau2);
+ float n=w1*n1+w2*n2;
+ return .5+(n-.5)/sqrt(w1*w1+w2*w2);
 }
 // §10.16: 交点の有効性が画素間で変わるときだけ、従来の解析値へ戻す。
 float analyticLf(float rd,float travel,vec3 ndir,float turn){
@@ -105,7 +115,7 @@ vec4 diskSample(vec3 hit,float travel,vec3 ndir,float turn,float lf){
  // 負のlfは中心に該当する交点がないサブサンプル／測定プローブの解析値指定。
  if(lf<0.)lf=analyticLf(rd,travel,ndir,turn);
  lf=clamp(lf,0.,LF_MAX);
- float n=streakFbm(streakInput(rd,phi,omega),lf);
+ float n=streakFlow(rd,phi,omega,lf);
  float streak=STREAK_FLOOR+(1.-STREAK_FLOOR)*smoothstep(STREAK_LO,STREAK_HI,n);
  float env=smoothstep(gravity.z,gravity.z+INNER_FADE-DISK_INNER,rd)*(1.-smoothstep(OUTER_FADE,DISK_OUTER,rd));
  float I=DISK_HDR*env*streak*pow(DISK_INNER/rd,INTENSITY_POWER);

@@ -553,3 +553,25 @@ sampleOpacity = clamp(env * (.55 + fil * .35), 0., .95)
   - 縞の細かさと明るさが、t=45 で v25 と同程度。
   - GPU の p95 ≤ 16ms。
   - 決定性テストに合格する。
+
+### 10.17 ケプラーの巻き込みを有界にする 2 位相の流れ（2026-10-08、Opus）
+- 実験で特定した原因：
+  - 縞を止める（streak を定数にする）と、t=90 のモアレは消える。帯域の補間を線形にしても変わらない。原因は縞模様である。
+  - 縞の入力 `rot = phi - omega*music.w` は、ケプラーの差動回転で時間とともに巻き込まれる。半径方向の実効周波数は `f_k + A_k*|d rot/d log rd| = f_k + A_k*1.5*omega*t` で、時間に比例して無限に細かくなる（t=90 の内縁では f_k の約 9 倍）。
+  - そのため、曲の後半ほどモアレになる。LOD で消すと、今度は後半ほど縞が消えて平坦になる。
+- 修正（2 位相の流れ。flow map の定番の手法）：
+  - FLOW_PERIOD = 8 秒とする。
+  - `tau1 = mod(music.w, FLOW_PERIOD)`、`tau2 = mod(music.w + FLOW_PERIOD*.5, FLOW_PERIOD)`。
+  - 位相 i（1, 2）ごとに `rot_i = phi - omega*tau_i` とし、streakInput の z 成分に、位相ごとの定数オフセット `i*FLOW_PHASE_OFFSET`（= 17.3）を加えて、別の模様にする。STREAK_TIME の項は music.w のまま。
+  - `n_i = streakFbm(p_i, ...)`。
+  - 重みは `w1 = 1. - abs(2.*tau1/FLOW_PERIOD - 1.)`、`w2 = 1. - w1`。tau1 が 0 または周期の端で w1 = 0 になるので、作り直しの瞬間は見えない。
+  - `n = w1*n1 + w2*n2`。混ぜると縞のコントラストが下がるので、`n = .5 + (n-.5)/sqrt(w1*w1+w2*w2)` で分散を戻す。
+- LOD の巻き込み補正（§10.16 の比に加える）：オクターブ k の比を `lf*(f_k + A_k*SHEAR_FACTOR*omega*tau_i)` とする。
+  - A_k = STREAK_ANGULAR*2.03^k
+  - SHEAR_FACTOR = 1.5（KEPLER_POWER の絶対値）
+- 予算：fbm の評価は 2 倍になる。GPU の p95 ≤ 16ms を確認する（現状 7.6ms）。
+- 受け入れ条件：
+  - t=20、45、90 で縞の細かさとコントラストが同程度。
+  - どの時刻でもモアレがない。
+  - 8 秒周期の作り直しが見えない（4 秒おきに 0.1 秒間隔で連続撮影し、明るさの段差が < 2%）。
+  - GPU の p95 ≤ 16ms。

@@ -237,11 +237,11 @@ async function world17ShaderChecks(engine){
   const g=engine.gpu,gl=g.gl,c=WORLD_GARGANTUA,source=WORLD_GARGANTUA_FRAGMENT.replace(/void main\(\)\{[\s\S]*$/,'');
   const body=`void main(){
     float x=floor(gl_FragCoord.x),rd=3.5+x/63.*20.5,omega=KEPLER_SPEED*pow(rd/3.,KEPLER_POWER),row=floor(gl_FragCoord.y);
-    vec3 p=streakInput(rd,0.,omega);
-    if(row==0.){vec3 a=streakInput(rd,-PI,omega),b=streakInput(rd,PI,omega);frag=vec4(abs(a-b),abs(streakFbm(a,.02/rd)-streakFbm(b,.02/rd)));}
+    float tau1=mod(music.w,FLOW_PERIOD);vec3 p=streakInput(rd,0.,omega,tau1,1.);
+    if(row==0.){vec3 a=streakInput(rd,-PI,omega,tau1,1.),b=streakInput(rd,PI,omega,tau1,1.);frag=vec4(abs(a-b),abs(streakFlow(rd,-PI,omega,.02/rd)-streakFlow(rd,PI,omega,.02/rd)));}
     else if(row==1.)frag=vec4(mix(DISK_OUTER_COLOR,DISK_INNER_COLOR,pow(DISK_INNER/rd,COLOR_POWER)),musicGain(rd));
     else if(row==2.)frag=diskSample(vec3(rd,0.,0.),0.,vec3(0.,-1.,0.),0.,-1.);
-    else if(row==3.){float fp=x/63.*3.;frag=vec4(1.-smoothstep(LOD_START,LOD_END,fp),streakFbm(p,2./STREAK_RADIAL),streakFbm(p,0.),1.);}
+    else if(row==3.){float fp=x/63.*3.;frag=vec4(1.-smoothstep(LOD_START,LOD_END,fp),streakFbm(p,2./STREAK_RADIAL,omega,tau1),streakFlow(rd,0.,omega,0.),1.);}
     else if(row==4.){vec4 value=diskSample(vec3(rd,0.,0.),0.,vec3(0.,-1.,0.),0.,-1.);float trans=1.;vec3 c=vec3(0.);for(int i=0;i<MAX_CROSSINGS;i++){c+=trans*value.rgb*value.a;trans*=1.-value.a;}frag=vec4(c.r,trans,value.a,1.);}
     else frag=vec4(musicGain(rd),0.,0.,1.);
   }`;
@@ -518,6 +518,12 @@ async function unitChecks(){
     for(const name of glslNames)assert.ok(declared.has(name),name);
     assert.equal((body.match(/diskSample\(vec3\(rd,0\.,0\.\),0\.,vec3\(0\.,-1\.,0\.\),0\.,-1\.\)/g)||[]).length,2);
     assert.match(shader,/vec4 diskSample\(vec3 hit,float travel,vec3 ndir,float turn,float lf\)/);
+    assert.match(shader,/vec3 streakInput\(float rd,float phi,float omega,float tau,float phase\)/);
+    assert.match(shader,/float streakFbm\(vec3 p,float lf,float omega,float tau\)/);
+    assert.match(shader,/float streakFlow\(float rd,float phi,float omega,float lf\)/);
+    assert.equal((body.match(/streakInput\(rd,(?:0\.|-PI|PI),omega,tau1,1\.\)/g)||[]).length,3);
+    assert.equal((body.match(/streakFbm\(p,2\.\/STREAK_RADIAL,omega,tau1\)/g)||[]).length,1);
+    assert.equal((body.match(/streakFlow\(rd,(?:0\.|-PI|PI),omega,(?:0\.|\.02\/rd)\)/g)||[]).length,3);
     assert.equal(constants.NOISE_MEAN*(1-2**(-constants.FBM_OCTAVES)),.46875);
     console.log('UW-65 JSConstants='+jsNames.size+' GLSLConstants='+glslNames.size+' diskSampleCalls=2 fullyFilteredNoise=.46875 missingConstants=0');
   });

@@ -1,9 +1,20 @@
-// 目的 — カメラ表・平面円盤・色/縞/星/フレア・曲がり角LOD/平均補填と再演を検査する — doc/20261004-design-gargantua-v1.md §10・§10.9〜10.11
+// 目的 — カメラ表・平面円盤・色/縞/星/フレア・LOD/平均補填/2位相の流れと再演を検査する — doc/20261004-design-gargantua-v1.md §10・§10.9〜10.17
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { loadClassic } from '../lib/load-classic.mjs';
 const runtime=loadClassic(['js/vis-utils.js','js/mfs-const.js','js/mfs-view.js','js/world/gl-util.js','js/world/score.js','js/world/analyzer-types.js','js/world/g-gargantua.js']);
 const C=runtime.get('WORLD_GARGANTUA'),Analyzer=runtime.get('WorldGargantuaAnalyzer'),Feature=runtime.get('MfsFrameView'),layout=runtime.get('MFS_LAYOUT');
+// 製品のオクターブループをスカラーJSで評価し、位相ごとのLODと平均補填を検査する。
+function evaluateStreakFbm(lf,omega,tau,samples,ratios=null) {
+  const body=runtime.get('WORLD_GARGANTUA_FRAGMENT').match(/float streakFbm\(vec3 p,float lf,float omega,float tau\)\{([\s\S]*?)\n\}/)?.[1];
+  assert.ok(body,'streakFbmの本体を取得できる');
+  const smoothstep=(lo,hi,x)=>{if(ratios)ratios.push(x);const t=Math.max(0,Math.min(1,(x-lo)/(hi-lo)));return t*t*(3-2*t);};
+  const fbm=new Function('lf','omega','tau','samples','C','smoothstep',
+    'const {STREAK_RADIAL,STREAK_ANGULAR,SHEAR_FACTOR,FBM_OCTAVES,FBM_FREQUENCY,LOD_START,LOD_END,NOISE_MEAN}=C;'+
+    body.replaceAll(/\bfloat\b|\bint\b/g,'let').replace('p=p*FBM_FREQUENCY+vec3(7.1,3.7,1.9);','')
+      .replace('gargantuaNoise3(p)','samples[k]'));
+  return fbm(lf,omega,tau,samples,C,smoothstep);
+}
 function setup(kinds=['main'],duration=10) {
   const score=runtime.get('compileWorldScore')({bpm:120,durationSec:kinds.length*duration,beats:[],downbeatIndices:[],sections:kinds.map((kind,i)=>({kind,label:'A',startSec:i*duration,endSec:(i+1)*duration}))},11);
   const f=new Feature(),engine={score,sectionIndex:0,seed:11,gpu:{uniforms:new Float32Array(244)},preview:false};
@@ -111,7 +122,7 @@ test('UW-53 WORLD-20 §10.9〜10.11定数・廃止した層/EMA/BEAM/黒体/ス�
   assert.equal(C.SUBSAMPLE_OFFSET,undefined);
   assert.equal(C.LENS_DEMAG,undefined);
   assert.deepEqual(Array.from(C.DISK_INNER_COLOR),[1,.90,.76]);assert.deepEqual(Array.from(C.DISK_OUTER_COLOR),[1,.52,.20]);
-  const removed=/DISK_LAYER|FILAMENT|TEMPERATURE|BEAM_|VELOCITY_SCALE|SLAB_|KAPPA|FLOW_|CORE_|STAR_HALO|STAR_CORE|SPIKE_|STAR_RADIUS_(MIN|MAX)|STAR_FLOOR/;
+  const removed=/DISK_LAYER|FILAMENT|TEMPERATURE|BEAM_|VELOCITY_SCALE|SLAB_|KAPPA|FLOW_(?!(?:PERIOD|PHASE_OFFSET)$)|CORE_|STAR_HALO|STAR_CORE|SPIKE_|STAR_RADIUS_(MIN|MAX)|STAR_FLOOR/;
   assert.ok(Object.keys(C).every(name=>!removed.test(name)));
   const shader=runtime.get('WORLD_GARGANTUA_FRAGMENT'),a=new Analyzer();
   assert.ok(!/blackbody|coreColor|volumeSample|slabHeight|flowQuality|history|\bEMA(?:\b|_)|BEAM_|VELOCITY_SCALE|DISK_LAYER|SPIKE_|STAR_HALO/.test(shader));
@@ -190,14 +201,7 @@ test('UW-63 WORLD-20 §10.11 毎ステップの累積曲がり角・4オクタ�
   const small=advance([2*Math.cos(.01),2*Math.sin(.01),0],[1,0,0],0,normalize,cross,v=>Math.hypot(...v));
   assert.ok(Math.abs(small.turn-Math.sin(.01))<1e-15,'arccos等に置き換えず指定の外積長を使う');
   // 製品の4オクターブループを評価し、全減衰時の暗化と平均値の変動を検出する。
-  const body=shader.match(/float streakFbm\(vec3 p,float lf\)\{([\s\S]*?)\n\}/)?.[1];
-  assert.ok(body,'streakFbmの本体を取得できる');
-  const smoothstep=(lo,hi,x)=>{const t=Math.max(0,Math.min(1,(x-lo)/(hi-lo)));return t*t*(3-2*t);};
-  const fbm=new Function('lf','samples','C','smoothstep',
-    'const {STREAK_RADIAL,FBM_OCTAVES,FBM_FREQUENCY,LOD_START,LOD_END,NOISE_MEAN}=C;'+
-    body.replaceAll(/\bfloat\b|\bint\b/g,'let').replace('p=p*FBM_FREQUENCY+vec3(7.1,3.7,1.9);','')
-      .replace('gargantuaNoise3(p)','samples[k]'));
-  const sample=(fp,values)=>fbm(fp/6,values,C,smoothstep);
+  const sample=(fp,values)=>evaluateStreakFbm(fp/6,1.35,0,values);
   const fps=[0,.001,.01,.03,.06,.1,.2],mean=.5*(.5+.25+.125+.0625);
   for(const fp of fps)assert.equal(sample(fp,[.5,.5,.5,.5]),mean,'平均ノイズの明るさはLODに依存しない');
   assert.equal(sample(0,[0,1,.25,.75]),.328125,'未減衰の縞の値を保持する');
@@ -270,7 +274,7 @@ test('UW-72 WORLD-26 §10.16 交点out配列・分岐外の微分・SSAAへ中�
   const disk=shader.slice(shader.indexOf('vec4 diskSample('),shader.indexOf('float milkyFbm('));
   assert.ok(disk.includes('if(lf<0.)lf=analyticLf(rd,travel,ndir,turn);'));
   assert.ok(disk.includes('lf=clamp(lf,0.,LF_MAX);'));
-  assert.ok(shader.includes('float w=1.-smoothstep(LOD_START,LOD_END,lf*frequency);'));
+  assert.ok(shader.includes('float w=1.-smoothstep(LOD_START,LOD_END,lf*(frequency+angularFrequency*SHEAR_FACTOR*omega*tau));'));
   console.log('UW-72 crossings=3 derivativeCalls=3 uniformLoop=3 ssaaSharedLf=8 DERIV_SCALE=1 LF_MAX=1');
 });
 
@@ -330,4 +334,97 @@ test('UW-74 WORLD-26 §10.16 遅延合成は従来の前方合成と一致・中
     for(let c=0;c<3;c++)maxError=Math.max(maxError,Math.abs(actual.rgb[c]-col[c]));cases++;
   }
   console.log('UW-74 compositingCases='+cases+' maxRGBError='+maxError+' hitOrder=frontToBack directRadius=6 missingCenterLf=-1');
+});
+
+test('UW-75 WORLD-27 §10.17 2位相の定数・位相別入力/LOD・時刻項・分散復元の構造',()=>{
+  const shader=runtime.get('WORLD_GARGANTUA_FRAGMENT');
+  for(const [name,value] of Object.entries({FLOW_PERIOD:8,FLOW_PHASE_OFFSET:17.3,SHEAR_FACTOR:1.5})){
+    assert.equal(C[name],value,name);assert.ok(shader.includes('const float '+name+' = '+value.toFixed(8)+';'));
+  }
+  assert.equal(C.SHEAR_FACTOR,Math.abs(C.KEPLER_POWER));
+  const input=shader.match(/vec3 streakInput\([^)]*\)\{([^}]+)\}/)[1];
+  assert.ok(input.includes('float rot=phi-omega*tau;'));
+  assert.ok(input.includes('sin(rot)*STREAK_ANGULAR+music.w*STREAK_TIME+phase*FLOW_PHASE_OFFSET'));
+  assert.ok(!/omega\*music\.w|tau\*STREAK_TIME/.test(input));
+  const flow=shader.match(/float streakFlow\([^)]*\)\{([^}]+)\}/)[1];
+  assert.ok(flow.includes('tau1=mod(music.w,FLOW_PERIOD),tau2=mod(music.w+FLOW_PERIOD*.5,FLOW_PERIOD)'));
+  assert.ok(flow.includes('w1=1.-abs(2.*tau1/FLOW_PERIOD-1.),w2=1.-w1'));
+  assert.ok(flow.includes('streakFbm(streakInput(rd,phi,omega,tau1,1.),lf,omega,tau1)'));
+  assert.ok(flow.includes('streakFbm(streakInput(rd,phi,omega,tau2,2.),lf,omega,tau2)'));
+  assert.equal((flow.match(/streakFbm\(/g)||[]).length,2);
+  assert.ok(flow.includes('float n=w1*n1+w2*n2;'));
+  assert.ok(flow.includes('return .5+(n-.5)/sqrt(w1*w1+w2*w2);'));
+  const fbm=shader.match(/float streakFbm\([^)]*\)\{([\s\S]*?)\n\}/)[1];
+  assert.ok(fbm.includes('frequency=STREAK_RADIAL,angularFrequency=STREAK_ANGULAR'));
+  assert.ok(fbm.includes('lf*(frequency+angularFrequency*SHEAR_FACTOR*omega*tau)'));
+  assert.ok(fbm.includes('frequency*=FBM_FREQUENCY;angularFrequency*=FBM_FREQUENCY;'));
+  assert.ok(!/music\.w/.test(fbm));
+  const disk=shader.slice(shader.indexOf('vec4 diskSample('),shader.indexOf('float milkyFbm('));
+  assert.ok(disk.includes('float n=streakFlow(rd,phi,omega,lf);'));
+  assert.ok(disk.includes('smoothstep(STREAK_LO,STREAK_HI,n)'));
+  console.log('UW-75 FLOW_PERIOD=8 FLOW_PHASE_OFFSET=17.3 phaseOffsets=17.3/34.6 SHEAR_FACTOR=1.5 fbmEvaluations=2 octavesPerPhase=4');
+});
+
+test('UW-76 WORLD-27 §10.17 実GLSL式: tauリセット前後の重みの連続性・和1・ゼロ重み・分散復元',()=>{
+  const body=runtime.get('WORLD_GARGANTUA_FRAGMENT').match(/float streakFlow\([^)]*\)\{([^}]+)\}/)[1];
+  const scalar=body.replaceAll(/\bfloat\b/g,'let').replaceAll('abs(','Math.abs(').replaceAll('sqrt(','Math.sqrt(');
+  const mod=(x,y)=>x-y*Math.floor(x/y);
+  const state=new Function('music','FLOW_PERIOD','mod',scalar.slice(0,scalar.indexOf('let n1='))+'return {tau1,tau2,w1,w2};');
+  const weights=t=>state({w:t},C.FLOW_PERIOD,mod);
+  const evaluate=new Function('rd','phi','omega','lf','music','FLOW_PERIOD','mod','streakInput','streakFbm',scalar);
+  // リセットで不連続になる模様を与え、重み0がその飛びを隠すことを製品の混合式で検査する。
+  const input=(rd,phi,omega,tau,phase)=>({tau,phase}),noise=p=>p.phase===1?.1+.8*p.tau/C.FLOW_PERIOD:.9-.6*p.tau/C.FLOW_PERIOD;
+  const blend=(t,fbm=noise)=>evaluate(6,.3,1.35,.01,{w:t},C.FLOW_PERIOD,mod,input,fbm);
+  let sumError=0,maxWeightJump=0,maxBlendJump=0;
+  for(let i=0;i<=1920;i++){
+    const {tau1,tau2,w1,w2}=weights(i/10);
+    assert.ok(tau1>=0&&tau1<C.FLOW_PERIOD&&tau2>=0&&tau2<C.FLOW_PERIOD);
+    assert.ok(w1>=0&&w1<=1&&w2>=0&&w2<=1);
+    sumError=Math.max(sumError,Math.abs(w1+w2-1));assert.equal(w1+w2,1);
+  }
+  const epsilon=1e-7;let resets=0;
+  for(let t=4;t<=192;t+=4){
+    const before=weights(t-epsilon),at=weights(t),after=weights(t+epsilon);
+    if(t%8===0){assert.equal(at.tau1,0);assert.equal(at.w1,0);assert.equal(at.w2,1);}
+    else {assert.equal(at.tau2,0);assert.equal(at.w2,0);assert.equal(at.w1,1);}
+    for(const name of ['w1','w2']){
+      const jump=Math.abs(before[name]-after[name]);maxWeightJump=Math.max(maxWeightJump,jump);
+      assert.ok(Math.abs(before[name]-at[name])<3e-8);assert.ok(Math.abs(after[name]-at[name])<3e-8);
+      assert.ok(jump<3e-8);
+    }
+    const jump=Math.abs(blend(t-epsilon)-blend(t+epsilon));maxBlendJump=Math.max(maxBlendJump,jump);
+    assert.ok(jump<1e-7);assert.ok(Math.abs(blend(t)-blend(t-epsilon))<1e-7);resets++;
+  }
+  assert.equal(weights(0).w1,0);assert.equal(blend(0,()=>.2),.2);assert.equal(blend(4,()=>.8),.8);
+  assert.equal(blend(2,()=>.5),.5);
+  const mixed=blend(2,p=>p.phase===1?.2:.6),expected=.5+(.4-.5)/Math.sqrt(.5);
+  assert.equal(mixed,expected);
+  assert.ok(Math.abs(1/Math.sqrt(weights(2).w1**2+weights(2).w2**2)-Math.SQRT2)<1e-15);
+  console.log('UW-76 weightSamples=1921 resetBoundaries='+resets+' epsilon='+epsilon+' maxWeightSumError='+sumError+
+    ' maxWeightJump='+maxWeightJump+' syntheticNoiseBlendJump='+maxBlendJump+' midpointVarianceGain='+Math.SQRT2);
+});
+
+test('UW-77 WORLD-27 §10.17 オクターブごとの巻き込み比・8秒の上限・平均補填',()=>{
+  const mean=C.NOISE_MEAN*(1-2**(-C.FBM_OCTAVES));let cases=0,maxRatioError=0;
+  for(const lf of [0,.001,.01,.03,1])for(const omega of [0,.5,1.35,2.7])for(const tau of [0,1,4,8-1e-7]){
+    const ratios=[];assert.equal(evaluateStreakFbm(lf,omega,tau,[.5,.5,.5,.5],ratios),mean);
+    assert.equal(ratios.length,C.FBM_OCTAVES);
+    for(let k=0;k<C.FBM_OCTAVES;k++){
+      const scale=C.FBM_FREQUENCY**k,expected=lf*(C.STREAK_RADIAL*scale+C.STREAK_ANGULAR*scale*C.SHEAR_FACTOR*omega*tau),
+        bound=lf*(C.STREAK_RADIAL*scale+C.STREAK_ANGULAR*scale*C.SHEAR_FACTOR*omega*C.FLOW_PERIOD);
+      maxRatioError=Math.max(maxRatioError,Math.abs(ratios[k]-expected));
+      assert.ok(Math.abs(ratios[k]-expected)<1e-12);assert.ok(ratios[k]<=bound);cases++;
+    }
+    assert.equal(evaluateStreakFbm(1,omega,tau,[0,0,0,0]),mean);
+    assert.equal(evaluateStreakFbm(1,omega,tau,[1,1,1,1]),mean);
+  }
+  const omega=C.KEPLER_SPEED,frequencies=[20,45,90].map(t=>{
+    const tau1=t%C.FLOW_PERIOD,tau2=(t+C.FLOW_PERIOD*.5)%C.FLOW_PERIOD;
+    return [tau1,tau2].map(tau=>C.STREAK_RADIAL+C.STREAK_ANGULAR*C.SHEAR_FACTOR*omega*tau);
+  });
+  const maxFrequency=C.STREAK_RADIAL+C.STREAK_ANGULAR*C.SHEAR_FACTOR*omega*C.FLOW_PERIOD;
+  assert.ok(Math.abs(maxFrequency-108.6)<1e-12);
+  for(const values of frequencies)for(const f of values)assert.ok(f<maxFrequency);
+  console.log('UW-77 octaveRatioCases='+cases+' maxRatioError='+maxRatioError+' fullyFilteredPerPhase='+mean+
+    ' innerFrequency20/45/90='+JSON.stringify(frequencies)+' innerFrequencyBound='+maxFrequency+' boundVsRadial='+maxFrequency/C.STREAK_RADIAL);
 });
