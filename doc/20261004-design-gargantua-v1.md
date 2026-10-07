@@ -525,3 +525,31 @@ sampleOpacity = clamp(env * (.55 + fil * .35), 0., .95)
 - 修正 1（定義）：`before = 直前 PRE_WINDOW = .10 秒の inner の最小値`（休みの明るさ）とする。最大値は従来どおり、オンセット後 .18 秒以内。ロールの判定は「直前 .10 秒以内に別のオンセットがあるか」で行う。
 - 修正 2：SECOND_DROP_GAIN = 1.25（1.5 では白の天井に当たり、脈動の余地がない）。
 - 受け入れ条件：§10.14 と同じ。
+
+### 10.16 画面の微分による LOD（2026-10-07、Opus）
+- 実測：
+  - t=90（2 回目の drop、inc -6°、円盤の下から見上げる）で、下側の弧にモアレが残る。
+  - TURN_START を .6 にしても変化がない。曲がった角度（turn）では、レンズによる像の圧縮を見積もれない。画面から円盤への写像のヤコビアンは、travel×画角では表せない。
+- 方針：円盤との交点の陰影計算をループの後へ遅らせ、`log(rd)` の画面上の微分（dFdx、dFdy）で、1 画素あたりの縞の本数を直接測る。
+- 実装の手順：
+  1. traceRay は、交差のたびに diskSample を呼ばない。最大 MAX_CROSSINGS 個の交点を out 配列に記録する。
+     - `vec4 hitA[3] = (hit.x, hit.z, travel, turn)`
+     - `vec4 hitB[3] = (ndir.x, ndir.y, ndir.z, 1.)`（w=1 は有効）
+     - 交点の数を `out int hitCount` で返す。
+     - 逃走したかどうかと、逃走時の dir も out で返す。
+  2. `vec4 shadeHits(...)` で、記録した順（手前から奥）に、`s = diskSample(...)`、`col += alpha*s.rgb*s.a`、`alpha *= 1.-s.a` と合成する。最後に、逃走していれば `col += alpha*starfield(escapeDir)` を足す。結果は、従来のインライン合成と同じになる。
+  3. main() は、中心の光線の traceRay の直後に、条件分岐の外（一様な制御フロー）で、各 c（0..2）について次を計算する。
+     - `L_c = log(max(rd_c, 1e-3))`
+     - `v_c = (c < hitCount) ? 1. : 0.`
+     - `dL_c = length(vec2(dFdx(L_c), dFdy(L_c)))`
+     - `ok_c = fwidth(v_c) == 0. && v_c > 0.`
+  4. diskSample/streakFbm の LOD は「log 単位の画素の大きさ」`lf` で行う。オクターブ k の比は `lf * f_k`（f_k = STREAK_RADIAL * 2.03^k）、`w = 1 - smoothstep(LOD_START, LOD_END, lf*f_k)` とし、平均値での補填（§10.11）はそのまま使う。
+     - `ok_c` が真のときは `lf = dL_c * DERIV_SCALE`（DERIV_SCALE = 1.0）。
+     - それ以外は従来の解析値 `lf = fp/rd`（GRAZE と turn の補正を含む）。
+     - どちらの場合も `lf = clamp(lf, 0., LF_MAX)`、LF_MAX = 1.0。
+  5. リングの SSAA の 8 点のサブサンプル（条件分岐の中では微分を使えない）では、同じ c に対して中心の lf を使う。中心に該当する交点がない c では解析値を使う。
+- 受け入れ条件：
+  - t=90 と t=45 でモアレがない。
+  - 縞の細かさと明るさが、t=45 で v25 と同程度。
+  - GPU の p95 ≤ 16ms。
+  - 決定性テストに合格する。

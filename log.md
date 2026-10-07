@@ -1,3 +1,34 @@
+## 2026-10-07 — [WORLD-26] 画面微分LOD
+
+### 作業内容
+- `js/world/g-gargantua.js`: SSOT `doc/20261004-design-gargantua-v1.md` §10.16を実装。DERIV_SCALE=1.0、LF_MAX=1.0を既存のJS/GLSL共有定数へ追加。traceRayを交点記録へ変更し、MAX_CROSSINGS=3のout配列hitA（x/z/累積距離/曲がり角）、hitB（正規化方向/有効値）、hitCount、逃走状態/方向を返す。shadeHitsで手前から奥へ従来式のalpha合成を行い、逃走時だけ星空を加える。
+- `js/world/g-gargantua.js`: mainの中心追跡直後、条件分岐外の固定3回ループだけでlog半径のdFdx/dFdyと有効性のfwidthを計算。微分が有効ならdL*DERIV_SCALE、それ以外は従来のfp/rd（GRAZEとturn補正）を使用し、どちらも0..LF_MAXへclamp。streakFbmをlog単位のlf*frequencyで減衰し、§10.11の平均値補填を保持。リング8点は同じ交差番号の中心lfを共有し、中心に交点がない番号だけ自身の解析値を使う。
+- `tests/world/shoot-live.mjs`: 変更したGLSL署名の呼び出し部分だけ更新。geometryプローブはtraceRayのdirectRadius出力を読む。streakFbmプローブはfp/rdへ引数を換算し、diskSampleプローブは解析値指定を追加。UW-65の呼び出し/署名照合も同期。
+- `tests/unit/world-gargantua.test.mjs`: UW-53/62/63の構造/署名/オクターブ式を更新し、既存の定数・8点格子・曲がり角・平均補填の検証を保持。UW-72〜74でout配列初期化/交点記録、微分の一様な制御フロー、中心lf共有、解析値への復帰、上下限、32ケースの従来合成との一致を追加。
+- `log.md`: 本エントリを先頭に追加。
+
+### 検証
+- `node tests/run.mjs --unit`: 195件／194成功／0失敗／既存の想定U15-00スキップ1、25,568ms、終了コード0。既存ランナーのtests/output/report.json出力はgit管理対象の変更なし。
+- `node --test tests/unit/world-gargantua.test.mjs tests/unit/world-shaders.test.mjs`: 13件／13成功／0失敗／0スキップ、81.459042ms、終了コード0。UW-47の21シェーダー（vertex5/fragment16）ヘッダー失敗0。
+- `node tests/world/shoot-live.mjs --unit`: 9件／9成功／0失敗／0スキップ、23.897292ms、終了コード0。UW-65: JS定数27、GLSL定数11、diskSampleプローブ2呼び出し、欠落定数0。
+- 全JS/MJS `node --check`: 130件／130成功／0失敗、6,091.797ms、Node v26.7.0、終了コード0。`git diff --check`: 成功。
+- UW-72: 最大交点3、微分呼び出し3種類各1箇所、main直下の固定3回ループ、リング8点すべてで中心lf共有、DERIV_SCALE=1/LF_MAX=1。
+- UW-73: dFdx=.003/dFdy=.004でlf=.005。解析値は半径3/6/12で.19328616553376388/.09664308276688194/.04832154138344097。近隣の有効性の不連続・交点なし・追加交点では解析値へ復帰し、両経路のclamp下限0/上限1を確認。
+- UW-74: 交点0〜3・逃走有無・中心交点数0〜3の32ケースで、遅延合成と従来の前方合成の最大RGB誤差0、交点の順序/距離/方向/turnの受け渡しと直接像半径6の保持を確認。
+- UW-62: fp基準=.02133180196881958、grazing上限=.4266360393763916、turn最大倍率=544.571910125929、両補正最大倍率=10891.438202518579、リング8点/追跡計9本/平均重み.125を維持。UW-63: 全減衰時のノイズ平均=.46875、未減衰=.328125、部分減衰=.1453180911078717。既存のUW-49/52/67などCPU再演/決定性テストも成功。
+- ブラウザ用に更新した既存プローブ: world17Geometryの交点/直接像測定、world17ShaderChecksのstreakFbm/diskSample。Chrome禁止に従い未実行。独立した新規ブラウザテストファイルは追加していない。実WebGL2コンパイル/リンク、実GPU画素決定性、GPU p95、t=45/90の見た目とfile://コンソールは未検証。上記の数値はCPUの式評価・合成標本によるもので、実GPU測定値ではない。
+
+### spec.md 変更
+- なし。指定ファイルだけ編集。開始時から存在した設計書の§10.16追加（28行）は保持し、本作業では変更しない。
+
+### 備考
+- 実装: Codex gpt-6.1-sol high
+- 判断: §10.16の定数/式/閾値を独自調整していない。配列長は既存のMAX_CROSSINGS=3を使用。未使用out配列をゼロ初期化し、一様な微分計算で未定義値を読まない。未使用交点のlog/解析値計算には設計の1e-3ガードを使用。中心に交点がないサブサンプルと既存プローブの解析値指定にはlf=-1を使用し、有効なlfは常に0以上にclampする。新たな製品JSの毎フレーム配列/オブジェクト確保なし。
+- 判断: closest/directPhi/background/directRadiusの既存測定出力と高次像除外を保持。中心の微分が不連続で解析値になった場合も、その中心lfを同じ交差番号の8点へ共有する。shadeHitsの合成順序/alpha式/逃走時の星空は変更しない。
+- 制約: 指定のscratchpad/CODEX_ADDENDUM.mdは存在せず、scratchpad内の検索でも見つからなかった。依頼本文のno commit/push/PR/Chromeを適用し、IMPLEMENTER_RULES.md、実装者ガイド、関連仕様/レンダラー契約を確認。編集はこのworktree内の指定4ファイルのみ。commit/push/PR/ブラウザ起動なし。
+- レビュアー確認: 実WebGL2（GLSL ES 3.00）で製品シェーダーと更新したshoot-liveプローブのコンパイル/リンク・GLエラー0を確認。t=45/90でモアレがなく、t=45の縞の細かさ/明るさがv25と同程度であることをOpusが撮影して判定。実GPU p95<=16ms、同じtの画素決定性、file://のconsoleエラー0を確認すること。
+- レビュアー確認: 編集許可外の`tests/browser/world14.test.js:37`（world14ReadGeometry）には旧4引数/vec4戻り値のtraceRay呼び出しが残っている。新署名との不一致を静的に確認したが、指定範囲に従い編集していない。shoot-liveのworld17Geometryは更新済み。既存WORLD-14ブラウザテストを実行する前に、担当者がworld14ReadGeometryプローブを新out署名へ同期する必要がある。
+
 ## 2026-10-07 — [WORLD-25] G-kick前値・SECOND_DROP_GAIN
 
 ### 作業内容

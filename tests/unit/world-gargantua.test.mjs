@@ -119,9 +119,9 @@ test('UW-53 WORLD-20 §10.9〜10.11定数・廃止した層/EMA/BEAM/黒体/ス�
   assert.ok(shader.includes('if(sign(prev.y)!=sign(pos.y))'));
   assert.ok(shader.includes('crossings<MAX_CROSSINGS'));
   assert.ok(shader.includes('travel+length(segment)*fraction'));
-  assert.ok(shader.includes('col+=alpha*sampleValue.rgb*sampleValue.a;alpha*=1.-sampleValue.a;crossings++'));
+  assert.ok(shader.includes('col+=alpha*sampleValue.rgb*sampleValue.a;alpha*=1.-sampleValue.a;'));
   assert.ok(shader.includes('if(crossings>1)directRadius=0.'));
-  assert.ok(shader.includes('if(escaped)col+=alpha*starfield(dir)'));
+  assert.ok(shader.includes('if(escaped)col+=alpha*starfield(escapeDir)'));
   assert.ok(shader.includes('sum.rgb*.125,center.a'));
   assert.ok(shader.includes('return stars+min(vec3(BACKGROUND_MAX),milk)'));
   assert.ok(shader.includes('brightness=STAR_HDR*pow(h,STAR_POWER)'));
@@ -135,10 +135,10 @@ test('UW-53 WORLD-20 §10.9〜10.11定数・廃止した層/EMA/BEAM/黒体/ス�
 });
 test('UW-62 WORLD-20 §10.11 grazing上限20倍・曲がり角の連続LOD/上限・8点回転格子',()=>{
   const shader=runtime.get('WORLD_GARGANTUA_FRAGMENT');
-  assert.ok(shader.includes('vec4 diskSample(vec3 hit,float travel,vec3 ndir,float turn)'));
-  assert.ok(shader.includes('diskSample(hit,travel+length(segment)*fraction,nd,turn)'));
+  assert.ok(shader.includes('vec4 diskSample(vec3 hit,float travel,vec3 ndir,float turn,float lf)'));
+  assert.ok(shader.includes('hitA[crossings]=vec4(hit.x,hit.z,travel+length(segment)*fraction,turn)'));
   assert.ok(!/LENS_DEMAG|float\(c\)|int c\)/.test(shader));
-  assert.ok(shader.indexOf('diskSample(hit,')<shader.indexOf('crossings++;'));
+  assert.ok(shader.indexOf('hitA[crossings]=')<shader.indexOf('crossings++;'));
   // 製品GLSLからスカラー式だけを取り出し、GPUなしでLODの数値契約を検査する。
   const source=shader.match(/float fp=travel[^;]+;\s*(?:\/\/[^\n]*\n\s*)?(?:fp\*=[^;]+;\s*){2}/)?.[0];
   assert.ok(source,'fpの基準式と2つの補正を取得できる');
@@ -161,7 +161,7 @@ test('UW-62 WORLD-20 §10.11 grazing上限20倍・曲がり角の連続LOD/上�
   assert.ok(shader.includes('vec2 delta=vec2(SUBSAMPLE_NEAR,SUBSAMPLE_FAR)/(outputResolution*HALF_RESOLUTION)'));
   const main=shader.slice(shader.indexOf('void main(){'));
   assert.ok(main.includes('if(closest>=RING_SAMPLE_MIN&&closest<=RING_SAMPLE_MAX)'));
-  const offsets=[...main.matchAll(/traceRay\(vUv\+vec2\((-?delta\.[xy]),(-?delta\.[xy])\),r,a,b\)/g)].map(match=>
+  const offsets=[...main.matchAll(/traceRay\(vUv\+vec2\((-?delta\.[xy]),(-?delta\.[xy])\),r,a,b,d,subA,subB,subCount,subEscaped,subDir\)/g)].map(match=>
     match.slice(1).map(value=>(value[0]==='-'?-1:1)*(value.endsWith('x')?C.SUBSAMPLE_NEAR:C.SUBSAMPLE_FAR)));
   assert.deepEqual(offsets,[[-.125,-.375],[.125,-.375],[-.125,.375],[.125,.375],
     [-.375,-.125],[.375,-.125],[-.375,.125],[.375,.125]]);
@@ -172,7 +172,7 @@ test('UW-62 WORLD-20 §10.11 grazing上限20倍・曲がり角の連続LOD/上�
 });
 test('UW-63 WORLD-20 §10.11 毎ステップの累積曲がり角・4オクターブの平均補填',()=>{
   const shader=runtime.get('WORLD_GARGANTUA_FRAGMENT');
-  const trace=shader.slice(shader.indexOf('vec4 traceRay('),shader.indexOf('void main(){'));
+  const trace=shader.slice(shader.indexOf('void traceRay('),shader.indexOf('void main(){'));
   assert.ok(trace.includes('angular=cross(pos,dir),ndPrev=dir;'));
   assert.ok(trace.includes('travel=0.,turn=0.;'));
   const step=trace.match(/vec3 nd=normalize\(dir\);turn\+=length\(cross\(ndPrev,nd\)\);ndPrev=nd;/)?.[0];
@@ -190,14 +190,14 @@ test('UW-63 WORLD-20 §10.11 毎ステップの累積曲がり角・4オクタ�
   const small=advance([2*Math.cos(.01),2*Math.sin(.01),0],[1,0,0],0,normalize,cross,v=>Math.hypot(...v));
   assert.ok(Math.abs(small.turn-Math.sin(.01))<1e-15,'arccos等に置き換えず指定の外積長を使う');
   // 製品の4オクターブループを評価し、全減衰時の暗化と平均値の変動を検出する。
-  const body=shader.match(/float streakFbm\(vec3 p,float rd,float fp\)\{([\s\S]*?)\n\}/)?.[1];
+  const body=shader.match(/float streakFbm\(vec3 p,float lf\)\{([\s\S]*?)\n\}/)?.[1];
   assert.ok(body,'streakFbmの本体を取得できる');
   const smoothstep=(lo,hi,x)=>{const t=Math.max(0,Math.min(1,(x-lo)/(hi-lo)));return t*t*(3-2*t);};
-  const fbm=new Function('rd','fp','samples','C','smoothstep',
+  const fbm=new Function('lf','samples','C','smoothstep',
     'const {STREAK_RADIAL,FBM_OCTAVES,FBM_FREQUENCY,LOD_START,LOD_END,NOISE_MEAN}=C;'+
     body.replaceAll(/\bfloat\b|\bint\b/g,'let').replace('p=p*FBM_FREQUENCY+vec3(7.1,3.7,1.9);','')
       .replace('gargantuaNoise3(p)','samples[k]'));
-  const sample=(fp,values)=>fbm(6,fp,values,C,smoothstep);
+  const sample=(fp,values)=>fbm(fp/6,values,C,smoothstep);
   const fps=[0,.001,.01,.03,.06,.1,.2],mean=.5*(.5+.25+.125+.0625);
   for(const fp of fps)assert.equal(sample(fp,[.5,.5,.5,.5]),mean,'平均ノイズの明るさはLODに依存しない');
   assert.equal(sample(0,[0,1,.25,.75]),.328125,'未減衰の縞の値を保持する');
@@ -236,4 +236,98 @@ test('UW-54 WORLD-17 §10.7/10.8画面境界・継ぎ目4画素・postのフレ�
   assert.equal(world17Acceptance(null).pass,false);
   assert.equal(world17Acceptance({width:1920,height:1080,requestedSec:45,stars:{pass:true},arcs:{pass:true}}).pass,false);
   console.log('UW-54 starPixelsPass=30 fail=29 arcPeakPass='+217/255+' fail='+216/255+' upperThickness=5 lowerThickness=1 seamContinuous=1 bloomWeights=.25/.25/.30/.45 veil='+C.VEIL_GAIN+' beforeACES=true');
+});
+
+test('UW-72 WORLD-26 §10.16 交点out配列・分岐外の微分・SSAAへ中心lfを共有',()=>{
+  const shader=runtime.get('WORLD_GARGANTUA_FRAGMENT');
+  assert.equal(C.DERIV_SCALE,1);assert.equal(C.LF_MAX,1);assert.equal(C.MAX_CROSSINGS,3);
+  const trace=shader.slice(shader.indexOf('void traceRay('),shader.indexOf('vec4 shadeHits('));
+  assert.match(trace,/out vec4 hitA\[MAX_CROSSINGS\],out vec4 hitB\[MAX_CROSSINGS\],out int hitCount,out bool escaped,out vec3 escapeDir/);
+  assert.ok(trace.includes('hitA[c]=vec4(0);hitB[c]=vec4(0);'));
+  assert.ok(trace.includes('hitA[crossings]=vec4(hit.x,hit.z,travel+length(segment)*fraction,turn);'));
+  assert.ok(trace.includes('hitB[crossings]=vec4(nd,1.);crossings++;'));
+  assert.ok(trace.includes('hitCount=crossings;escapeDir=dir;'));
+  assert.ok(!/diskSample\(|starfield\(/.test(trace),'追跡中は陰影計算しない');
+  const beforeMain=shader.slice(0,shader.indexOf('void main(){'));
+  assert.ok(!/dFdx\(|dFdy\(|fwidth\(/.test(beforeMain),'微分を補助関数へ隠さない');
+  const main=shader.slice(shader.indexOf('void main(){')).replace(/\/\/[^\n]*/g,'');
+  const loop=main.match(/for\(int c=0;c<MAX_CROSSINGS;c\+\+\)\{([^}]+)\}/)?.[1];
+  assert.ok(loop);assert.ok(!/\bif\s*\(|\bbreak\b|\bcontinue\b|\breturn\b/.test(loop));
+  assert.ok(loop.includes('L=log(max(rd,1e-3)),v=c<hitCount?1.:0.'));
+  assert.ok(loop.includes('float dL=length(vec2(dFdx(L),dFdy(L)));'));
+  assert.ok(loop.includes('bool ok=fwidth(v)==0.&&v>0.;'));
+  for(const name of ['dFdx','dFdy','fwidth']){
+    const at=main.indexOf(name+'('),prefix=main.slice(0,at);
+    assert.equal((main.match(new RegExp(name+'\\(', 'g'))||[]).length,1);
+    assert.equal((prefix.match(/\{/g)||[]).length-(prefix.match(/\}/g)||[]).length,2,'main直下の固定ループ');
+    assert.ok(at>main.indexOf('traceRay(vUv,'));assert.ok(at<main.indexOf('if(closest'));
+  }
+  const ring=main.slice(main.indexOf('if(closest'));
+  assert.ok(!/dFdx\(|dFdy\(|fwidth\(/.test(ring));
+  assert.equal((ring.match(/shadeHits\(subA,subB,subCount,subEscaped,subDir,d,lf,hitCount\)/g)||[]).length,8);
+  const shade=beforeMain.slice(beforeMain.indexOf('vec4 shadeHits('));
+  assert.ok(shade.includes('c<lfCount?lf[c]:-1.'));
+  const disk=shader.slice(shader.indexOf('vec4 diskSample('),shader.indexOf('float milkyFbm('));
+  assert.ok(disk.includes('if(lf<0.)lf=analyticLf(rd,travel,ndir,turn);'));
+  assert.ok(disk.includes('lf=clamp(lf,0.,LF_MAX);'));
+  assert.ok(shader.includes('float w=1.-smoothstep(LOD_START,LOD_END,lf*frequency);'));
+  console.log('UW-72 crossings=3 derivativeCalls=3 uniformLoop=3 ssaaSharedLf=8 DERIV_SCALE=1 LF_MAX=1');
+});
+
+test('UW-73 WORLD-26 §10.16 実GLSL式: 微分の優先・不連続/欠落の解析値・lf上下限',()=>{
+  const shader=runtime.get('WORLD_GARGANTUA_FRAGMENT'),clamp=(x,lo,hi)=>Math.max(lo,Math.min(hi,x));
+  // 製品の解析値関数とmainの微分ループをスカラーJSへ写し、選択と上限を数値検証する。
+  const analyticBody=shader.match(/float analyticLf\([^)]*\)\{([^}]+)\}/)[1];
+  const analytic=new Function('rd','travel','ndir','turn','C','clamp',
+    'const {FOV,LOD_HEIGHT,GRAZE_MIN,TURN_START,TURN_MAX_LOG}=C;'+analyticBody
+      .replace('float fp=','let fp=').replace('radians(FOV)','(FOV*Math.PI/180)')
+      .replaceAll('max(','Math.max(').replaceAll('abs(','Math.abs(').replaceAll('exp(','Math.exp('));
+  const analyticLf=(rd,travel,ndir,turn)=>analytic(rd,travel,ndir,turn,C,clamp);
+  const loop=shader.slice(shader.indexOf('void main(){')).match(/for\(int c=0;c<MAX_CROSSINGS;c\+\+\)\{([^}]+)\}/)[1];
+  const evaluate=new Function('hitA','hitB','hitCount','dFdx','dFdy','fwidth','analyticLf','clamp','C',
+    'const {MAX_CROSSINGS,DERIV_SCALE,LF_MAX}=C;const lf=[];for(let c=0;c<MAX_CROSSINGS;c++){'+loop
+      .replaceAll(/\bfloat\b|\bbool\b/g,'let').replace('length(hitA[c].xy)','Math.hypot(...hitA[c].xy)')
+      .replace('length(vec2(dFdx(L),dFdy(L)))','Math.hypot(dFdx(L),dFdy(L))')
+      .replaceAll('log(','Math.log(').replaceAll('max(','Math.max(')+'}return lf;');
+  const hitA=[3,6,12].map(rd=>({xy:[rd,0],z:30,w:2.2})),hitB=hitA.map(()=>({xyz:{y:.1}}));
+  const run=(count,dx,dy,width)=>evaluate(hitA,hitB,count,()=>dx,()=>dy,()=>width,analyticLf,clamp,C);
+  assert.deepEqual(run(3,.003,.004,0),[.005,.005,.005],'微分が有効なら解析値の半径/曲がり角に依存しない');
+  const fallback=run(3,.003,.004,1),expected=hitA.map(a=>clamp(analyticLf(Math.hypot(...a.xy),a.z,hitB[0].xyz,a.w),0,1));
+  assert.deepEqual(fallback,expected,'近隣画素の有効性が異なると解析値へ戻す');
+  assert.deepEqual(run(0,0,0,0),expected,'一様に交点なしでもokにはしない');
+  assert.deepEqual(run(1,.003,.004,0),[.005,expected[1],expected[2]]);
+  assert.deepEqual(run(3,3,4,0),[1,1,1]);assert.deepEqual(run(3,0,0,0),[0,0,0]);
+  hitA.forEach(a=>a.w=10);hitB.forEach(b=>b.xyz.y=0);
+  assert.deepEqual(run(3,0,0,1),[1,1,1],'解析値にもLF_MAXを適用する');
+  hitA.forEach(a=>a.z=-30);assert.deepEqual(run(3,0,0,1),[0,0,0],'下限も両経路で適用する');
+  assert.equal(analyticLf(6,0,{y:0},10),0);
+  console.log('UW-73 derivativeLf=.005 analyticLf='+expected.join('/')+' clampMin=0 clampMax=1 fallbackCases=validityEdge/absent/extraHit');
+});
+
+test('UW-74 WORLD-26 §10.16 遅延合成は従来の前方合成と一致・中心欠落時は交点ごとに解析指定',()=>{
+  const shader=runtime.get('WORLD_GARGANTUA_FRAGMENT');
+  const body=shader.match(/vec4 shadeHits\([\s\S]*?\)\{([\s\S]*?)\n\}\nvoid main/)[1];
+  // ベクトル演算だけをJSへ写し、製品の合成順序・alpha・星空・lfの受け渡しを実行する。
+  const shade=new Function('hitA','hitB','hitCount','escaped','escapeDir','directRadius','lf','lfCount','diskSample','starfield','add','scale','MAX_CROSSINGS',
+    body.replaceAll(/\bvec3\b(?= col)|\bvec4\b(?= a| sampleValue)|\bfloat\b|\bint\b/g,'let')
+      .replace('vec3(0)','[0,0,0]').replace('vec3(a.x,0.,a.y)','[a.x,0,a.y]')
+      .replace('col+=alpha*sampleValue.rgb*sampleValue.a','col=add(col,scale(sampleValue.rgb,alpha*sampleValue.a))')
+      .replace('col+=alpha*starfield(escapeDir)','col=add(col,scale(starfield(escapeDir),alpha))')
+      .replace('return vec4(col,directRadius)','return {rgb:col,a:directRadius}'));
+  const add=(a,b)=>a.map((x,i)=>x+b[i]),scale=(a,k)=>a.map(x=>x*k);
+  const hitA=[0,1,2].map(c=>({x:c+3,y:c+4,z:30+c,w:c/2})),hitB=[0,1,2].map(c=>({xyz:[0,c/10,1]}));
+  const samples=[{rgb:[1,2,3],a:.45},{rgb:[4,5,6],a:.7},{rgb:[7,8,9],a:.9}],stars=[.1,.2,.3],lf=[.005,.01,.02];
+  let cases=0,maxError=0;
+  for(let count=0;count<=3;count++)for(const escaped of [false,true])for(let lfCount=0;lfCount<=3;lfCount++){
+    const calls=[],disk=(hit,travel,dir,turn,width)=>{const c=calls.length;calls.push({hit,travel,dir,turn,width});return samples[c];};
+    let starCalls=0;const star=dir=>{assert.deepEqual(dir,[0,1,0]);starCalls++;return stars;};
+    const actual=shade(hitA,hitB,count,escaped,[0,1,0],6,lf,lfCount,disk,star,add,scale,3);
+    let col=[0,0,0],alpha=1;
+    for(let c=0;c<count;c++){col=add(col,scale(samples[c].rgb,alpha*samples[c].a));alpha*=1-samples[c].a;}
+    if(escaped)col=add(col,scale(stars,alpha));
+    assert.deepEqual(actual,{rgb:col,a:6});assert.equal(starCalls,Number(escaped));assert.equal(calls.length,count);
+    for(let c=0;c<count;c++)assert.deepEqual(calls[c],{hit:[c+3,0,c+4],travel:30+c,dir:hitB[c].xyz,turn:c/2,width:c<lfCount?lf[c]:-1});
+    for(let c=0;c<3;c++)maxError=Math.max(maxError,Math.abs(actual.rgb[c]-col[c]));cases++;
+  }
+  console.log('UW-74 compositingCases='+cases+' maxRGBError='+maxError+' hitOrder=frontToBack directRadius=6 missingCenterLf=-1');
 });

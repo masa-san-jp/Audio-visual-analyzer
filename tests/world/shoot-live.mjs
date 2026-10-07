@@ -158,7 +158,7 @@ function world17ReleasePixels(engine,queued){
 }
 function world17Geometry(engine,state){
   const e=engine,g=e.gpu,gl=g.gl,source=WORLD_GARGANTUA_FRAGMENT.replace(/void main\(\)\{[\s\S]*$/,'');
-  if(!e.world17Geometry)e.world17Geometry=g.program(source+'void main(){float r,phi,bg;vec4 c=traceRay(vUv,r,phi,bg);frag=vec4(c.a,phi,r,bg);}');
+  if(!e.world17Geometry)e.world17Geometry=g.program(source+'void main(){float r,phi,bg,d;vec4 hitA[MAX_CROSSINGS],hitB[MAX_CROSSINGS];int count;bool escaped;vec3 dir;traceRay(vUv,r,phi,bg,d,hitA,hitB,count,escaped,dir);frag=vec4(d,phi,r,bg);}');
   const target=g.target(e.type.half.width,e.type.half.height,true),program=e.world17Geometry;
   try {
     g.bind(program,target);gl.uniform4fv(g.texture(program,'bands[0]'),state.bands);
@@ -238,11 +238,11 @@ async function world17ShaderChecks(engine){
   const body=`void main(){
     float x=floor(gl_FragCoord.x),rd=3.5+x/63.*20.5,omega=KEPLER_SPEED*pow(rd/3.,KEPLER_POWER),row=floor(gl_FragCoord.y);
     vec3 p=streakInput(rd,0.,omega);
-    if(row==0.){vec3 a=streakInput(rd,-PI,omega),b=streakInput(rd,PI,omega);frag=vec4(abs(a-b),abs(streakFbm(a,rd,.02)-streakFbm(b,rd,.02)));}
+    if(row==0.){vec3 a=streakInput(rd,-PI,omega),b=streakInput(rd,PI,omega);frag=vec4(abs(a-b),abs(streakFbm(a,.02/rd)-streakFbm(b,.02/rd)));}
     else if(row==1.)frag=vec4(mix(DISK_OUTER_COLOR,DISK_INNER_COLOR,pow(DISK_INNER/rd,COLOR_POWER)),musicGain(rd));
-    else if(row==2.)frag=diskSample(vec3(rd,0.,0.),0.,vec3(0.,-1.,0.),0.);
-    else if(row==3.){float fp=x/63.*3.;frag=vec4(1.-smoothstep(LOD_START,LOD_END,fp),streakFbm(p,rd,2.*rd/STREAK_RADIAL),streakFbm(p,rd,0.),1.);}
-    else if(row==4.){vec4 value=diskSample(vec3(rd,0.,0.),0.,vec3(0.,-1.,0.),0.);float trans=1.;vec3 c=vec3(0.);for(int i=0;i<MAX_CROSSINGS;i++){c+=trans*value.rgb*value.a;trans*=1.-value.a;}frag=vec4(c.r,trans,value.a,1.);}
+    else if(row==2.)frag=diskSample(vec3(rd,0.,0.),0.,vec3(0.,-1.,0.),0.,-1.);
+    else if(row==3.){float fp=x/63.*3.;frag=vec4(1.-smoothstep(LOD_START,LOD_END,fp),streakFbm(p,2./STREAK_RADIAL),streakFbm(p,0.),1.);}
+    else if(row==4.){vec4 value=diskSample(vec3(rd,0.,0.),0.,vec3(0.,-1.,0.),0.,-1.);float trans=1.;vec3 c=vec3(0.);for(int i=0;i<MAX_CROSSINGS;i++){c+=trans*value.rgb*value.a;trans*=1.-value.a;}frag=vec4(c.r,trans,value.a,1.);}
     else frag=vec4(musicGain(rd),0.,0.,1.);
   }`;
   const target=g.target(64,6,true),program=g.program(source+body),bands=new Float32Array(128),hotspots=new Float32Array(48);
@@ -516,8 +516,8 @@ async function unitChecks(){
     const body=probeSource.match(/const body=`([\s\S]*?)`;/)[1],glslNames=new Set(body.match(/\b[A-Z][A-Z_0-9]*\b/g)),
       declared=new Set([...shader.matchAll(/\bconst\s+(?:float|int|vec3)\s+(\w+)/g)].map(match=>match[1]));
     for(const name of glslNames)assert.ok(declared.has(name),name);
-    assert.equal((body.match(/diskSample\(vec3\(rd,0\.,0\.\),0\.,vec3\(0\.,-1\.,0\.\),0\.\)/g)||[]).length,2);
-    assert.match(shader,/vec4 diskSample\(vec3 hit,float travel,vec3 ndir,float turn\)/);
+    assert.equal((body.match(/diskSample\(vec3\(rd,0\.,0\.\),0\.,vec3\(0\.,-1\.,0\.\),0\.,-1\.\)/g)||[]).length,2);
+    assert.match(shader,/vec4 diskSample\(vec3 hit,float travel,vec3 ndir,float turn,float lf\)/);
     assert.equal(constants.NOISE_MEAN*(1-2**(-constants.FBM_OCTAVES)),.46875);
     console.log('UW-65 JSConstants='+jsNames.size+' GLSLConstants='+glslNames.size+' diskSampleCalls=2 fullyFilteredNoise=.46875 missingConstants=0');
   });
