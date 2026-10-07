@@ -7,7 +7,7 @@ const WORLD_GARGANTUA = Object.freeze({
   COLOR_POWER: 1.3, PALETTE_TINT: .15, PALETTE_GAIN: 1.6,
   STREAK_RADIAL: 60, STREAK_ANGULAR: 3.0, STREAK_TIME: .03,
   FBM_OCTAVES: 4, FBM_FREQUENCY: 2.03, LOD_HEIGHT: 540, LOD_START: .6, LOD_END: 2,
-  GRAZE_MIN: .05, LENS_DEMAG: 23.0,
+  GRAZE_MIN: .05, TURN_START: 1.2, TURN_MAX_LOG: 6.3, NOISE_MEAN: .5,
   STREAK_FLOOR: .15, STREAK_LO: .30, STREAK_HI: .70, DISK_HDR: 3.0, INTENSITY_POWER: .8,
   INNER_FADE: 3.25, OUTER_FADE: 12, OPACITY_BASE: .45, OPACITY_STREAK: .5, OPACITY_MAX: .90,
   BAND_COUNT: 32, BAND_BLEND: .15, MUSIC_BASE: .45, MUSIC_GAIN: 2.2,
@@ -65,12 +65,12 @@ float gargantuaNoise3(vec3 p){
  return mix(mix(mix(hash3(i),hash3(i+vec3(1,0,0)),f.x),mix(hash3(i+vec3(0,1,0)),hash3(i+vec3(1,1,0)),f.x),f.y),
  mix(mix(hash3(i+vec3(0,0,1)),hash3(i+vec3(1,0,1)),f.x),mix(hash3(i+vec3(0,1,1)),hash3(i+vec3(1,1,1)),f.x),f.y),f.z);
 }
-// §10.3: 半径方向の実波長で振幅を減衰し、正規化しない。逆順smoothstepは正順補数で表す。
+// §10.11: 半径方向の実波長で減衰した分を平均値で補う。逆順smoothstepは正順補数で表す。
 float streakFbm(vec3 p,float rd,float fp){
  float n=0.,amp=.5,frequency=STREAK_RADIAL;
  for(int k=0;k<FBM_OCTAVES;k++){
   float wavelength=rd/frequency,w=1.-smoothstep(LOD_START,LOD_END,fp/wavelength);
-  n+=gargantuaNoise3(p)*amp*w;p=p*FBM_FREQUENCY+vec3(7.1,3.7,1.9);frequency*=FBM_FREQUENCY;amp*=.5;
+  n+=amp*(w*gargantuaNoise3(p)+(1.-w)*NOISE_MEAN);p=p*FBM_FREQUENCY+vec3(7.1,3.7,1.9);frequency*=FBM_FREQUENCY;amp*=.5;
  }return n;
 }
 float musicGain(float rd){
@@ -89,15 +89,15 @@ vec3 streakInput(float rd,float phi,float omega){
  float rot=phi-omega*music.w;
  return vec3(log(rd)*STREAK_RADIAL,cos(rot)*STREAK_ANGULAR,sin(rot)*STREAK_ANGULAR+music.w*STREAK_TIME);
 }
-vec4 diskSample(vec3 hit,float travel,vec3 ndir,int c){
+vec4 diskSample(vec3 hit,float travel,vec3 ndir,float turn){
  float rd=length(hit.xz),phi=atan(hit.z,hit.x);
  float omega=KEPLER_SPEED*pow(rd/DISK_INNER,KEPLER_POWER)*music.z;
  vec3 warm=mix(DISK_OUTER_COLOR,DISK_INNER_COLOR,pow(DISK_INNER/rd,COLOR_POWER));
  vec3 tint=mix(warm,warm*primary*PALETTE_GAIN,PALETTE_TINT);
  float fp=travel*radians(FOV)/LOD_HEIGHT;
- // §10.10: すれすれの視線は最大20倍、高次像は交差番号ごとに23倍の画素幅でLODを引く。
+ // §10.11: すれすれの視線は最大20倍、累積曲がり角で連続的に画素幅を広げてLODを引く。
  fp*=1./max(abs(ndir.y),GRAZE_MIN);
- fp*=pow(LENS_DEMAG,float(c));
+ fp*=exp(clamp(turn-TURN_START,0.,TURN_MAX_LOG));
  float n=streakFbm(streakInput(rd,phi,omega),rd,fp);
  float streak=STREAK_FLOOR+(1.-STREAK_FLOOR)*smoothstep(STREAK_LO,STREAK_HI,n);
  float env=smoothstep(gravity.z,gravity.z+INNER_FADE-DISK_INNER,rd)*(1.-smoothstep(OUTER_FADE,DISK_OUTER,rd));
@@ -145,14 +145,16 @@ vec4 traceRay(vec2 uv,out float closest,out float directPhi,out float background
  vec3 camPos=cameraPosition();
  vec3 forward=normalize(-camPos),right=normalize(cross(forward,vec3(0,1,0))),up=cross(right,forward);
  vec2 p=(uv*2.-1.)*vec2(outputResolution.x/outputResolution.y,1.)*tan(radians(FOV)*.5);
- vec3 pos=camPos,dir=normalize(forward+right*p.x+up*p.y),angular=cross(pos,dir);
- float h2=dot(angular,angular),alpha=1.,directRadius=0.,travel=0.;vec3 col=vec3(0);int crossings=0,planeCrossings=0;
+ vec3 pos=camPos,dir=normalize(forward+right*p.x+up*p.y),angular=cross(pos,dir),ndPrev=dir;
+ float h2=dot(angular,angular),alpha=1.,directRadius=0.,travel=0.,turn=0.;vec3 col=vec3(0);int crossings=0,planeCrossings=0;
  bool escaped=false;closest=length(pos);directPhi=0.;background=0.;
  for(int i=0;i<MAX_STEPS;i++){
   float r=length(pos);closest=min(closest,r);if(r<gravity.y)break;
   float dt=clamp(r*STEP_SCALE,STEP_MIN,STEP_MAX);
   vec3 acc=-gravity.x*h2*pos/pow(r,5.),prev=pos;
   dir+=acc*dt;pos+=dir*dt;
+  // §10.11: 円盤の交差有無に依存せず、ステップごとの曲がりを累積する。
+  vec3 nd=normalize(dir);turn+=length(cross(ndPrev,nd));ndPrev=nd;
   vec3 segment=pos-prev;
   closest=min(closest,length(prev+segment*clamp(-dot(prev,segment)/max(dot(segment,segment),1e-12),0.,1.)));
   // §10.1: y=0の平面だけを手前から奥へ合成。交点までの累積距離でLODを計算する。
@@ -164,7 +166,7 @@ vec4 traceRay(vec2 uv,out float closest,out float directPhi,out float background
     if(planeCrossings==1&&crossings==0&&dot(hit.xz,camPos.xz)>0.&&dot(hit,dir)<0.){
      directRadius=rd;directPhi=atan(hit.z,hit.x);
     }
-    vec4 sampleValue=diskSample(hit,travel+length(segment)*fraction,normalize(dir),crossings);
+    vec4 sampleValue=diskSample(hit,travel+length(segment)*fraction,nd,turn);
     col+=alpha*sampleValue.rgb*sampleValue.a;alpha*=1.-sampleValue.a;crossings++;
    }
   }

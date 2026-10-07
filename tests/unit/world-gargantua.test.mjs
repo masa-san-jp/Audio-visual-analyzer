@@ -1,4 +1,4 @@
-// 目的 — カメラ表・平面円盤・色/縞/星/フレア・モアレ補正と再演を検査する — doc/20261004-design-gargantua-v1.md §10・§10.9・§10.10
+// 目的 — カメラ表・平面円盤・色/縞/星/フレア・曲がり角LOD/平均補填と再演を検査する — doc/20261004-design-gargantua-v1.md §10・§10.9〜10.11
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { loadClassic } from '../lib/load-classic.mjs';
@@ -98,17 +98,18 @@ test('UW-52 WORLD-14 重力の1.2秒/2秒ease・地平面/ISCO・第二drop負�
   assert.equal(C.MILKY_WAY_MAX,.035);assert.equal(C.MILKY_WAY_OCTAVES,5);
   console.log('UW-52 surgeMidpoint=[1.8,1.09,3.2] surgePeak=[2.1,1.18,3.4] easeIn=1.2 easeOut=2 secondDropInc=-6 replayError=0');
 });
-test('UW-53 WORLD-19 §10.9/10.10定数・廃止した層/EMA/BEAM/黒体/スラブ/光暈/光条なし',()=>{
+test('UW-53 WORLD-20 §10.9〜10.11定数・廃止した層/EMA/BEAM/黒体/スラブ/光暈/光条なし',()=>{
   const expected={FOV:22,ESCAPE_RADIUS:100,SWAY_DEGREES:1.5,SECOND_DROP_DIST:27,SECOND_DROP_INC:-6,
     COLOR_POWER:1.3,PALETTE_TINT:.15,STREAK_RADIAL:60,STREAK_ANGULAR:3,STREAK_TIME:.03,
     FBM_OCTAVES:4,FBM_FREQUENCY:2.03,LOD_HEIGHT:540,LOD_START:.6,LOD_END:2,
-    GRAZE_MIN:.05,LENS_DEMAG:23,SUBSAMPLE_NEAR:.125,SUBSAMPLE_FAR:.375,
+    GRAZE_MIN:.05,TURN_START:1.2,TURN_MAX_LOG:6.3,NOISE_MEAN:.5,SUBSAMPLE_NEAR:.125,SUBSAMPLE_FAR:.375,
     STREAK_FLOOR:.15,STREAK_LO:.30,STREAK_HI:.70,DISK_HDR:3,INTENSITY_POWER:.8,
     DISK_OUTER:20,OUTER_FADE:12,BAND_OUTER:14,STAR_CELLS:180,STAR_REFERENCE_HEIGHT:1080,
     OPACITY_BASE:.45,OPACITY_STREAK:.5,OPACITY_MAX:.90,STAR_RADIUS_PX:.6,STAR_PROBABILITY:.03,
     STAR_HDR:6,STAR_POWER:18,BLOOM_THRESHOLD:.55,BLOOM_STRENGTH:.90,VEIL_GAIN:.10};
   for(const [name,value] of Object.entries(expected))assert.equal(C[name],value,name);
   assert.equal(C.SUBSAMPLE_OFFSET,undefined);
+  assert.equal(C.LENS_DEMAG,undefined);
   assert.deepEqual(Array.from(C.DISK_INNER_COLOR),[1,.90,.76]);assert.deepEqual(Array.from(C.DISK_OUTER_COLOR),[1,.52,.20]);
   const removed=/DISK_LAYER|FILAMENT|TEMPERATURE|BEAM_|VELOCITY_SCALE|SLAB_|KAPPA|FLOW_|CORE_|STAR_HALO|STAR_CORE|SPIKE_|STAR_RADIUS_(MIN|MAX)|STAR_FLOOR/;
   assert.ok(Object.keys(C).every(name=>!removed.test(name)));
@@ -132,26 +133,31 @@ test('UW-53 WORLD-19 §10.9/10.10定数・廃止した層/EMA/BEAM/黒体/スラ
   assert.ok(shader.includes('env*clamp(OPACITY_BASE+OPACITY_STREAK*streak,0.,OPACITY_MAX)'));
   console.log('UW-53 constants='+Object.keys(expected).length+' layers=1 crossings=3 octaves=4 starHDR=0..6 radius=.6 palette=.15');
 });
-test('UW-62 WORLD-19 §10.10 grazing上限20倍・交差0/1/2のLOD・8点回転格子',()=>{
+test('UW-62 WORLD-20 §10.11 grazing上限20倍・曲がり角の連続LOD/上限・8点回転格子',()=>{
   const shader=runtime.get('WORLD_GARGANTUA_FRAGMENT');
-  assert.ok(shader.includes('vec4 diskSample(vec3 hit,float travel,vec3 ndir,int c)'));
-  assert.ok(shader.includes('diskSample(hit,travel+length(segment)*fraction,normalize(dir),crossings)'));
+  assert.ok(shader.includes('vec4 diskSample(vec3 hit,float travel,vec3 ndir,float turn)'));
+  assert.ok(shader.includes('diskSample(hit,travel+length(segment)*fraction,nd,turn)'));
+  assert.ok(!/LENS_DEMAG|float\(c\)|int c\)/.test(shader));
   assert.ok(shader.indexOf('diskSample(hit,')<shader.indexOf('crossings++;'));
   // 製品GLSLからスカラー式だけを取り出し、GPUなしでLODの数値契約を検査する。
   const source=shader.match(/float fp=travel[^;]+;\s*(?:\/\/[^\n]*\n\s*)?(?:fp\*=[^;]+;\s*){2}/)?.[0];
   assert.ok(source,'fpの基準式と2つの補正を取得できる');
-  const footprint=new Function('travel','ndir','c','FOV','LOD_HEIGHT','GRAZE_MIN','LENS_DEMAG',
+  const footprint=new Function('travel','ndir','turn','FOV','LOD_HEIGHT','GRAZE_MIN','TURN_START','TURN_MAX_LOG','clamp',
     source.replace('float fp=','let fp=').replaceAll('radians(FOV)','(FOV*Math.PI/180)')
-      .replaceAll('max(','Math.max(').replaceAll('abs(','Math.abs(').replaceAll('pow(','Math.pow(')
-      .replaceAll('float(c)','Number(c)')+'return fp;');
-  const fp=(y,c)=>footprint(30,{y},c,C.FOV,C.LOD_HEIGHT,C.GRAZE_MIN,C.LENS_DEMAG);
+      .replaceAll('max(','Math.max(').replaceAll('abs(','Math.abs(').replaceAll('exp(','Math.exp(')
+      +'return fp;');
+  const clamp=(x,lo,hi)=>Math.max(lo,Math.min(hi,x));
+  const fp=(y,turn)=>footprint(30,{y},turn,C.FOV,C.LOD_HEIGHT,C.GRAZE_MIN,C.TURN_START,C.TURN_MAX_LOG,clamp);
   const base=30*(22*Math.PI/180)/540;
   assert.ok(Math.abs(fp(1,0)-base)<1e-15);
   assert.ok(Math.abs(fp(.1,0)/base-10)<1e-12);
   assert.equal(fp(-.1,0),fp(.1,0),'上下の視線で同じ画素幅');
   for(const y of [.05,.01,0,-.01])assert.ok(Math.abs(fp(y,0)/base-20)<1e-12);
-  const multipliers=[20,460,10580];
-  for(let c=0;c<3;c++)assert.ok(Math.abs(fp(0,c)/base-multipliers[c])<1e-9);
+  const turns=[0,1.2,2.2,7.5,10],multipliers=turns.map(turn=>fp(1,turn)/base);
+  for(let i=0;i<turns.length;i++)assert.ok(Math.abs(multipliers[i]-Math.exp(clamp(turns[i]-1.2,0,6.3)))<1e-12);
+  assert.equal(fp(1,10),fp(1,7.5),'最大倍率に達した後は一定');
+  for(const turn of [1.2,2.2,7.5])assert.ok(Math.abs(fp(1,turn+1e-8)/fp(1,turn-1e-8)-1)<2.1e-8,'LOD境界は連続');
+  assert.ok(Math.abs(fp(0,10)/base-20*Math.exp(6.3))<1e-9,'grazingと曲がり角の補正を両方保持');
   assert.ok(shader.includes('vec2 delta=vec2(SUBSAMPLE_NEAR,SUBSAMPLE_FAR)/(outputResolution*HALF_RESOLUTION)'));
   const main=shader.slice(shader.indexOf('void main(){'));
   assert.ok(main.includes('if(closest>=RING_SAMPLE_MIN&&closest<=RING_SAMPLE_MAX)'));
@@ -162,7 +168,45 @@ test('UW-62 WORLD-19 §10.10 grazing上限20倍・交差0/1/2のLOD・8点回転
   assert.equal((main.match(/traceRay\(/g)||[]).length,9,'中心判定1本と平均用8本');
   assert.ok(main.includes('frag=vec4(sum.rgb*.125,center.a)'));
   assert.ok(main.includes('}else frag=center;'));
-  console.log('UW-62 fpBase='+base+' grazeMax='+fp(0,0)+' crossingMultipliers='+multipliers.join('/')+' ssaaPoints='+offsets.length+' totalRingRays=9 meanWeight=.125');
+  console.log('UW-62 fpBase='+base+' grazeMax='+fp(0,0)+' turnMultipliers='+multipliers.join('/')+' combinedMax='+fp(0,10)/base+' ssaaPoints='+offsets.length+' totalRingRays=9 meanWeight=.125');
+});
+test('UW-63 WORLD-20 §10.11 毎ステップの累積曲がり角・4オクターブの平均補填',()=>{
+  const shader=runtime.get('WORLD_GARGANTUA_FRAGMENT');
+  const trace=shader.slice(shader.indexOf('vec4 traceRay('),shader.indexOf('void main(){'));
+  assert.ok(trace.includes('angular=cross(pos,dir),ndPrev=dir;'));
+  assert.ok(trace.includes('travel=0.,turn=0.;'));
+  const step=trace.match(/vec3 nd=normalize\(dir\);turn\+=length\(cross\(ndPrev,nd\)\);ndPrev=nd;/)?.[0];
+  assert.ok(step,'設計どおりのステップ式を取得できる');
+  assert.ok(trace.indexOf('dir+=acc*dt;')<trace.indexOf(step));
+  assert.ok(trace.indexOf(step)<trace.indexOf('if(sign(prev.y)!=sign(pos.y))'),'交差しないステップも曲がり角へ含める');
+  // 製品の累積式を評価し、非単位ベクトル・曲がりの逆転・直進を検査する。
+  const normalize=v=>{const d=Math.hypot(...v);return v.map(x=>x/d);};
+  const cross=(a,b)=>[a[1]*b[2]-a[2]*b[1],a[2]*b[0]-a[0]*b[2],a[0]*b[1]-a[1]*b[0]];
+  const advance=new Function('dir','ndPrev','turn','normalize','cross','length',
+    step.replace('vec3 nd=','const nd=')+'return {ndPrev,turn};');
+  let state={ndPrev:[1,0,0],turn:0};
+  for(const dir of [[2,0,0],[0,3,0],[4,0,0],[5,0,0]])state=advance(dir,state.ndPrev,state.turn,normalize,cross,v=>Math.hypot(...v));
+  assert.equal(state.turn,2,'直進は0、往復の曲がりは打ち消さず加算');
+  const small=advance([2*Math.cos(.01),2*Math.sin(.01),0],[1,0,0],0,normalize,cross,v=>Math.hypot(...v));
+  assert.ok(Math.abs(small.turn-Math.sin(.01))<1e-15,'arccos等に置き換えず指定の外積長を使う');
+  // 製品の4オクターブループを評価し、全減衰時の暗化と平均値の変動を検出する。
+  const body=shader.match(/float streakFbm\(vec3 p,float rd,float fp\)\{([\s\S]*?)\n\}/)?.[1];
+  assert.ok(body,'streakFbmの本体を取得できる');
+  const smoothstep=(lo,hi,x)=>{const t=Math.max(0,Math.min(1,(x-lo)/(hi-lo)));return t*t*(3-2*t);};
+  const fbm=new Function('rd','fp','samples','C','smoothstep',
+    'const {STREAK_RADIAL,FBM_OCTAVES,FBM_FREQUENCY,LOD_START,LOD_END,NOISE_MEAN}=C;'+
+    body.replaceAll(/\bfloat\b|\bint\b/g,'let').replace('p=p*FBM_FREQUENCY+vec3(7.1,3.7,1.9);','')
+      .replace('gargantuaNoise3(p)','samples[k]'));
+  const sample=(fp,values)=>fbm(6,fp,values,C,smoothstep);
+  const fps=[0,.001,.01,.03,.06,.1,.2],mean=.5*(.5+.25+.125+.0625);
+  for(const fp of fps)assert.equal(sample(fp,[.5,.5,.5,.5]),mean,'平均ノイズの明るさはLODに依存しない');
+  assert.equal(sample(0,[0,1,.25,.75]),.328125,'未減衰の縞の値を保持する');
+  assert.equal(sample(.2,[0,0,0,0]),mean);
+  assert.equal(sample(.2,[1,1,1,1]),mean,'全減衰ではノイズに依存せず平均値へ収束する');
+  let previous=-1;
+  for(const fp of fps){const n=sample(fp,[0,0,0,0]);assert.ok(n>=previous&&n<=mean);previous=n;}
+  const partial=sample(.06,[0,0,0,0]);assert.ok(partial>0&&partial<mean,'部分減衰にも平均値を補う');
+  console.log('UW-63 turnStraightReverse=2 turnSmall='+small.turn+' noiseMeanCases='+fps.length+' unfiltered=.328125 fullyFiltered='+mean+' partialFiltered='+partial);
 });
 test('UW-54 WORLD-17 §10.7/10.8画面境界・継ぎ目4画素・postのフレアはACESより前',async()=>{
   const {world17Stars,world17Arcs,world17Acceptance,WORLD17_CHECKS}=await import('../world/shoot-live.mjs');

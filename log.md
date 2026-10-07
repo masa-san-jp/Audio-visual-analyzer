@@ -1,3 +1,29 @@
+## 2026-10-07 — [WORLD-20] g-gargantua LOD（曲がり角・平均補填）
+
+### 作業内容
+- `js/world/g-gargantua.js`: SSOT `doc/20261004-design-gargantua-v1.md` §10.11を実装。LENS_DEMAGを削除し、TURN_START=1.2／TURN_MAX_LOG=6.3／NOISE_MEAN=.5を追加。traceRayは最初の正規化dirをndPrev、0をturnの初期値とし、各積分ステップでlength(cross(ndPrev,nd))を累積する。diskSampleの第4引数を交差番号cからfloat turnへ置換し、fpにexp(clamp(turn-TURN_START,0.,TURN_MAX_LOG))を掛ける。streakFbmは減衰した振幅をNOISE_MEANで補填する。GRAZE_MIN、8点SSAA、交差上限・合成、カメラ、その他の定数、CPU描画経路は保持。
+- `tests/unit/world-gargantua.test.mjs`: UW-53を41定数・LENS_DEMAG廃止へ更新。UW-62を新diskSample署名／呼び出し、曲がり角LODの連続性・上限・grazing併用へ更新し、8点SSAA検査を維持。UW-63を追加し、製品GLSLから抽出した累積式／4オクターブループをCPUで評価して、直進・逆転・非単位方向、平均ノイズのLOD不変性、未減衰・部分減衰・全減衰を検査。
+- `log.md`: 本エントリを先頭に追加。
+
+### 検証
+- `node tests/run.mjs --unit`: 186件／185成功／0失敗／既存の想定U15-00スキップ1、26,231ms、終了コード0。既存ランナーの`tests/output/report.json`へ結果を保存。
+- `node --test tests/unit/world-gargantua.test.mjs`: UW-48〜54・UW-62・UW-63の9件／9成功／0失敗／0スキップ、76.622708ms、終了コード0。UW-53は41定数を確認。UW-62はtravel=30の基準fp=.02133180196881958、grazing上限fp=.4266360393763916（20倍）、turn=0／1.2／2.2／7.5／10の補正倍率1／1／2.718281828459046／544.571910125929／544.571910125929、両補正の最大倍率10891.438202518579を確認。8点SSAA・中心判定込み9本・平均重み.125を維持。
+- UW-63: 直進と逆転を含む4ステップのturn=2、.01radの外積長=.009999833334166666。7種類のfpで平均ノイズ出力=.46875を保持。未減衰の合成ノイズ=.328125、全減衰=.46875、rd=6／fp=.06の部分減衰=.1453180911078717。これらはCPUによるGLSL数値契約検査であり、実GPU／画像の測定値ではない。
+- 全JS/MJS `node --check`: 129件／129成功／0失敗、6,438.545375ms、終了コード0。
+- 読み取り専用git/Node比較: HEADに対して定数追加はTURN_START／TURN_MAX_LOG／NOISE_MEANの3個、削除はLENS_DEMAGだけ。他の定数、カメラ表、main()のSSAA、upsample以降のCPUクラスはHEADと完全一致。`git diff --check`成功。
+- ブラウザテストの追加／変更なし。CODEX_ADDENDUM.mdのChrome禁止に従い、ブラウザ／実GLSLコンパイル／実画像／実GPU p95／file://／console確認は未実行。
+
+### spec.md 変更
+- なし。チケットの編集範囲に従いdoc/spec.md／README.md／撮影ハーネス／tests/browserは編集していない。開始時から変更済みの設計書も保持。
+
+### 備考
+- 実装: Codex gpt-6.1-sol high
+- 設計からの逸脱・定数調整なし。依頼末尾の「Do not stop for ambiguity: decide」を適用し、実装上の選択を記録して進めた。
+- 判断: turnはdirの加速度更新後、円盤交差の判定前に毎ステップ累積し、そのステップのndとturnをdiskSampleへ渡す。交点までのturnの分数補間は設計にないため追加していない。crossingsは合成上限／直接像の測定用に維持し、LODへは渡さない。外積長の累積を指定どおり使い、角度への逆三角関数変換や振幅の再正規化はしていない。
+- レビュアー確認: 1280×720のrenderAt(20)／renderAt(45)で下弧の水平な切れ目がないこと、上弧の明るさ・縞がv18（§10.9撮影）と同程度であること、モアレがなく光子リングが連続していることを確認すること。§10.10の実GPU p95<=16ms、実GLSLコンパイル、file://直開きのconsoleエラー0も未確認。
+- レビュアー確認: 範囲外の`tests/world/shoot-live.mjs`のworld17GpuFormulas（212／214行付近）はdiskSample(hit,travel)の旧2引数呼び出しがあり、新しい(hit,travel,ndir,turn)へ追従が必要。330行付近の§10.9以前の定数assertも旧値のまま。perf.mjsはこのworktreeに存在せず、オーナー側の測定スクリプトを確認すること。
+- 編集はこのworktree内の上記3ファイルのみ。commit／push／PR／Chrome起動は行っていない。
+
 ## 2026-10-07 — [WORLD-19] g-gargantua モアレ・光子リング
 
 ### 作業内容
