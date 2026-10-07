@@ -102,7 +102,7 @@ class WorldEngine {
     this._draw();
     if (this.queryActive) { this.gpu.gl.endQuery(this.timer.TIME_ELAPSED_EXT); this.queryActive = null; }
   }
-  _step(tSec, features, dt) {
+  _step(tSec, features, dt, drawMatter = true) {
     this.latestSec = tSec; this.frame++;
     let boundaryNow = false;
     const score = this.score, g = this.gpu, u = g.uniforms;
@@ -183,9 +183,11 @@ class WorldEngine {
     input.dt = Math.max(0, dt); input.tSec = tSec; input.boundaryNow = boundaryNow;
     this.fadeElapsed = Math.min(.5, this.fadeElapsed + input.dt);
     this.type.step(input);
-    this._renderMatter();
-    // 履歴は固定simulationステップで更新。captureや再描画では進めない。
-    if (this.type.id !== 'g-gargantua' && (dt > 0 || this.frame === 1 || boundaryNow)) this.post.stepFeedback(this.scene, this.fluid);
+    if (drawMatter) {
+      this._renderMatter();
+      // 履歴は描画した固定simulationステップで更新。captureや再描画では進めない。
+      if (this.type.id !== 'g-gargantua' && (dt > 0 || this.frame === 1 || boundaryNow)) this.post.stepFeedback(this.scene, this.fluid);
+    }
   }
   _blend(s, tSec) {
     const p = Math.max(0, Math.min(1, (tSec - s.startSec) / Math.min(4, (s.endSec - s.startSec) * .25)));
@@ -311,9 +313,11 @@ class WorldEngine {
   advanceTo(tSec) {
     // ライブ・export・renderAt共通の整数ステップ。rAFの間隔に依存しない。
     const steps = Math.floor(tSec * this.fps + 1e-9);
-    if (!this.frame) this._step(0, this.frameFeatures(0), 0);
+    if (!this.frame) this._step(0, this.frameFeatures(0), 0, !(steps > 0 && this.type.statelessRender && this.fadeElapsed >= .5));
     for (let i = this.previewStep + 1; i <= steps; i++) {
-      this._step(i / this.fps, this.frameFeatures(i), 1 / this.fps); this.previewStep = i;
+      // 履歴を持たないタイプだけ途中のGPU描画を省く。混合中と最終ステップは必ず描く（設計 §10.12）。
+      const drawMatter = !(i < steps && this.type.statelessRender && this.fadeElapsed >= .5);
+      this._step(i / this.fps, this.frameFeatures(i), 1 / this.fps, drawMatter); this.previewStep = i;
     }
   }
   // WORLD-8: 回転矩形の軸方向半径から必要ズームを解析的に求める。
@@ -399,7 +403,10 @@ class WorldEngine {
     this._validatePreview(tSec); this.previewBusy = true;
     try {
       // 毎回0から再生する契約。状態を再利用して途中から近似することはしない。
-      this.setScore(this.score); this.preview = !this.timeline; this._step(0, this.frameFeatures(0), 0);
+      this.setScore(this.score); this.preview = !this.timeline;
+      // 時刻0だけの要求は描く。後続ステップがあるstatelessタイプはCPU初期化だけを行う。
+      const steps = Math.floor(tSec * this.fps + 1e-9);
+      this._step(0, this.frameFeatures(0), 0, !(steps > 0 && this.type.statelessRender && this.fadeElapsed >= .5));
       return await this._advancePreview(tSec);
     } finally { this.previewBusy = false; }
   }
@@ -412,7 +419,9 @@ class WorldEngine {
   async _advancePreview(tSec) {
     const steps = Math.floor(tSec * this.fps + 1e-9);
     for (let i = this.previewStep + 1; i <= steps; i++) {
-      this._step(i / this.fps, this.frameFeatures(i), 1 / this.fps); this.previewStep = i;
+      // renderAtの非同期ループにもadvanceToと同じ描画条件を適用する。
+      const drawMatter = !(i < steps && this.type.statelessRender && this.fadeElapsed >= .5);
+      this._step(i / this.fps, this.frameFeatures(i), 1 / this.fps, drawMatter); this.previewStep = i;
       // GPUキューとUIを定期的に解放する（dt・シェーダー時刻には影響しない）。
       if (i % 120 === 0) await new Promise(resolve => setTimeout(resolve, 0));
     }

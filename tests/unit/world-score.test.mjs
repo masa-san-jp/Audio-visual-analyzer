@@ -189,6 +189,79 @@ test('UW-08 renderAt: 0から固定60Hz・音声不要・逆向きと反復でun
   assert.equal(engine.post.meter.at(-1).width, 1); assert.equal(engine.post.meter.at(-1).height, 1);
   console.log('UW-08 fixedSteps=6 dt=1/60 repeatUniformDifference=0 meterLevels=' + engine.post.meter.length);
 });
+test('UW-66 WORLD-22 途中描画省略: statelessは1回・statefulは全N回・フェード中は毎ステップ描画', async () => {
+  function mockEngine(statelessRender) {
+    const { engine } = worldTestEngine();
+    const type = { id: 'mock-world22', statelessRender, steps: 0, renders: 0, feedback: 0, times: [],
+      reset() { this.steps = 0; this.renders = 0; this.feedback = 0; this.times.length = 0; },
+      step() { this.steps++; },
+      render(input) { this.renders++; this.times.push(input.tSec); } };
+    engine.types.push(type); engine.selectType(type.id, true);
+    engine.post.stepFeedback = () => { type.feedback++; }; engine._draw = () => {};
+    return { engine, type };
+  }
+  const n = 7; // 時刻0の初期化と6固定ステップを合わせた全CPUステップ数。
+  for (const flag of [true, false, undefined]) {
+    const { engine, type } = mockEngine(flag);
+    await engine.renderAt(.1);
+    assert.equal(type.steps, n); assert.equal(type.renders, flag ? 1 : n);
+    assert.equal(type.feedback, flag ? 1 : n); assert.equal(type.times.at(-1), .1);
+    engine.setScore(engine.score); engine.advanceTo(.1);
+    assert.equal(type.steps, n); assert.equal(type.renders, flag ? 1 : n);
+    assert.equal(type.feedback, flag ? 1 : n);
+    await engine.renderAt(0); assert.equal(type.steps, 1); assert.equal(type.renders, 1);
+  }
+  const { engine, type } = mockEngine(true);
+  await engine.renderAt(.1);
+  // 実際のselectType経路で混合を開始し、renderAtの再初期化を通さず前進する。
+  engine.selectType('g-fluid', true); engine.selectType(type.id);
+  assert.equal(engine.fadeElapsed, 0); type.reset();
+  engine.advanceTo(.2);
+  assert.equal(type.steps, 6); assert.equal(type.renders, 6); assert.equal(type.feedback, 6);
+  assert.ok(engine.fadeElapsed < .5); type.reset();
+  await engine.advancePreview(.3);
+  assert.equal(type.steps, 6); assert.equal(type.renders, 6); assert.equal(type.feedback, 6);
+  // 判定はCPU更新前。混合が完了するステップ自身も描き、その後の途中だけ省く。
+  type.reset(); engine.fadeElapsed = .5 - 1 / 120; engine.advanceTo(.35);
+  assert.equal(type.steps, 3); assert.equal(type.renders, 2); assert.equal(type.feedback, 2);
+  assert.deepEqual(type.times, [19 / 60, .35]);
+  type.reset(); engine._step(.4, null, 1 / 60);
+  assert.equal(type.renders, 1); assert.equal(type.feedback, 1);
+  type.reset(); engine._step(.5, null, 1 / 60, false);
+  assert.equal(type.steps, 1); assert.equal(type.renders, 0); assert.equal(type.feedback, 0);
+  assert.equal(engine.latestSec, .5); assert.equal(engine.gpu.uniforms[2], .5);
+  // advanceToを使わないライブと、各出力につき1ステップのexportは毎回描く。
+  engine.setScore(engine.score);
+  for (let i = 0; i < n; i++) engine.render(i / 60, null, i ? 1 / 60 : 0);
+  assert.equal(type.steps, n); assert.equal(type.renders, n);
+  engine.setScore(engine.score);
+  for (let i = 0; i < n; i++) engine.advanceTo(i / 60);
+  assert.equal(type.steps, n); assert.equal(type.renders, n);
+  await engine.renderAt(.105);
+  assert.equal(type.steps, n + 1); assert.equal(type.renders, 2);
+  assert.deepEqual(type.times, [.1, .105]); // 最終固定ステップと既存の端数dt0描画を保持。
+  console.log('UW-66 CPUsteps=7 statelessRenders=1 statefulRenders=7 undefinedRenders=7 fadeRenders=6/6 fadeCompletionRenders=2/3 live/exportRenders=7/7 fractionalRenders=2');
+});
+test('UW-67 WORLD-22 gargantua: renderAt(45)の2701CPU更新・uniform/イベント/カメラ状態を全描画と一致', async () => {
+  const { engine } = worldTestEngine(); engine.selectType('g-gargantua', true);
+  const type = engine.type, render = type.render; let renders = 0;
+  assert.equal(type.statelessRender, true); assert.equal(engine.types[0].statelessRender, undefined);
+  type.render = function (input) { renders++; render.call(this, input); };
+  function state() {
+    return { uniforms: engine.gpu.uniforms.slice(), camera: type.camera.slice(), music: type.music.slice(),
+      bands: type.bandUniforms.slice(), hotspots: type.hotspots.slice(), gravity: type.gravity.slice(),
+      beats: type.beats.slice(), responses: engine.responses.slice(0, engine.responseCount * 7),
+      events: engine.events.map(e => ({ ...e })), frame: engine.frame, simTime: engine.simTime,
+      eventIndex: engine.eventIndex, beatIndex: engine.beatIndex, sectionIndex: engine.sectionIndex,
+      lastKick: engine.lastKick, kickCount: engine.kickCount, azim: type.azim, exposure: type.exposureMultiplier };
+  }
+  // フラグを無効化した参照経路は修正前と同じ全ステップ描画。
+  type.statelessRender = false; await engine.renderAt(45); const reference = state();
+  assert.equal(renders, 2701); renders = 0; type.statelessRender = true;
+  await engine.renderAt(45); assert.equal(renders, 1); assert.equal(engine.frame, 2701);
+  assert.equal(engine.previewStep, 2700); assert.deepEqual(state(), reference);
+  console.log('UW-67 renderAtSec=45 CPUsteps=2701 fullRenders=2701 optimizedRenders=1 CPUstateDifference=0 mockGL=true');
+});
 test('UW-09 WORLD-9 連続カメラ: 正規直交基底・ゆっくり前進・境界で履歴を保持', () => {
   const { engine } = worldTestEngine(), u = engine.gpu.uniforms;
   let maxDelta = 0;

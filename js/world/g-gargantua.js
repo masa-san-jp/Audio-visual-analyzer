@@ -207,6 +207,7 @@ void main(){frag=texture(source,vUv);}`;
 class WorldGargantuaAnalyzer extends WorldBandAnalyzer {
   constructor() {
     super();this.id='g-gargantua';this.label='ブラックホール';
+    this.statelessRender=true; // フレーム間のGPU履歴を持たない（設計 §10.12）。
     this.camera=new Float32Array(4);this.cameraFrom=new Float64Array(4);this.cameraTarget=new Float64Array(4);
     this.gravity=new Float32Array(3);this.music=new Float32Array(4);this.hotspots=new Float32Array(WORLD_GARGANTUA.HOTSPOT_COUNT*4);
     this.reset();

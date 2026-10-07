@@ -1,3 +1,31 @@
+## 2026-10-07 — [WORLD-22] renderAt 途中フレームのGPU描画省略
+
+### 作業内容
+- `js/world/world-engine.js`: SSOT `doc/20261004-design-gargantua-v1.md` §10.12に従い、`_step(tSec, features, dt, drawMatter = true)`を追加。falseでもCPUのイベント・セクション・カメラ・uniform更新とtype.stepは実行し、_renderMatterとpost.stepFeedbackだけを省く。advanceToとrenderAtの非同期ループで、最後以外・type.statelessRender・fadeElapsed>=.5の3条件が揃ったときだけ描画を省く。
+- `js/world/g-gargantua.js`: WorldGargantuaAnalyzerにstatelessRender=trueを追加。GPUのフレーム間履歴がないタイプとして宣言する。
+- `tests/unit/world-score.test.mjs`: UW-66を追加。描画を数えるmockタイプでstateless／false／未定義、時刻0、advanceTo、advancePreview、切替フェード、フェード完了ステップ、drawMatterの既定値／false、ライブとexportの1ステップ経路、端数時刻を検査する。UW-67を追加し、g-gargantuaのrenderAt(45)を全描画の参照経路と比較し、CPU状態の一致と描画回数を検査する。
+- `log.md`: 本エントリを先頭に追加。
+
+### 検証
+- `node tests/run.mjs --unit`: 188件／187成功／0失敗／既存の想定U15-00スキップ1、47,542ms、終了コード0。既存の決定性UW-08／UW-32／UW-43、feedback UW-21、タイプ契約UW-39、export UW-34〜36／UW-42も成功。既存ランナーがtests/output/report.jsonへ結果を保存。
+- `node --test --test-name-pattern='UW-66|UW-67' tests/unit/world-score.test.mjs`: 2件／2成功／0失敗／0スキップ、344.067208ms、終了コード0。
+- UW-66: 時刻0を含むCPU更新N=7に対してstateless描画=1回、false／未定義のstateful描画=N=7回。mock feedbackも同じ回数。advanceToとadvancePreviewのフェード中はそれぞれ6/6ステップを描画。フェード完了を跨ぐ3ステップでは完了ステップと最終ステップの2回を描画。ライブ／exportは各7/7回。drawMatter=falseはCPU更新1回・描画0回・feedback0回。renderAt(.105)は最終固定ステップ.1と端数dt0の.105を描画し、CPU更新8回・描画2回。
+- UW-67: renderAt(45)は2700固定ステップ＋時刻0のCPU初期化=2701更新を維持。全描画参照2701回→stateless描画1回。uniform・camera・music・bands・hotspots・gravity・beats・responses・events・フレーム／時刻／イベント通番・キック状態・周回角・露出が完全一致（CPU状態の差0）。GLはmockであり実画素／実GPU所要時間の測定ではない。
+- 全JS/MJS `node --check`: 129件／129成功／0失敗、20,244.048ms、終了コード0（Node v26.7.0）。
+- `git diff --check`: 成功。指定4ファイル以外の製品／テスト／文書を編集していない（設計書の15行追加は開始時から存在）。
+- 補助レポート確認の初回はreport.jsonをresultsプロパティ付きオブジェクトと誤認してTypeErrorとなった。ランナーの配列形式を確認して読み取り直し、188件／187成功／0失敗／U15-00スキップ1を照合した。製品コード・テスト・閾値の変更なし。
+- ブラウザテストの追加／変更なし。依頼のChrome禁止に従い、ブラウザ・file://・console・実画素・実GPU所要時間は未検証。
+
+### spec.md 変更
+- なし。チケット指定の4ファイルだけを編集し、doc/spec.md／README.mdは編集しない。開始時から変更済みの設計書も保持。
+
+### 備考
+- 実装: Codex gpt-6.1-sol high
+- 判断: 依頼末尾の「Do not stop for ambiguity: decide」を適用。§10.12はrenderAtがadvanceToを使う前提だが、現行コードでは独立した_advancePreviewループを使うため、両ループに同一の省略条件を適用し、非同期の120ステップごとのyieldを保持した。
+- 判断: 描画1回の単体受け入れを満たすため、後続の固定ステップがある場合は時刻0のCPU初期化にも同じ省略条件を適用する。renderAt(0)／exportの初回advanceTo(0)は必ず描く。判定はfadeElapsedを更新する前に行い、混合が完了するステップ自体も描く。固定ステップの最後は常に描き、既存の端数時刻のdt0描画も保持するため、端数時刻では描画2回となる。定数・閾値の調整なし。毎フレーム経路に配列／オブジェクト／クロージャの生成を追加していない。
+- 制約: 指定されたscratchpad/CODEX_ADDENDUM.mdは存在せず、scratchpadおよび/private/tmp/claude-501内のファイル検索でも見つからなかった。依頼本文に明記されたno commit／push／PR／Chromeを適用し、IMPLEMENTER_RULES.mdと実装者ガイドを読んで進めた。すべての編集はこのworktree内のみ。
+- レビュアー確認: 実GPUの1920×1080でrenderAt(45)直後の1画素gl.readPixels同期を含む所要時間<=1秒を測ること。同じtのg-gargantua画素が修正前と一致し、g-fluidの既存ゴールデンも一致すること、切替フェードが連続すること、file://直開きでconsoleエラー0を確認すること。CPUのmock一致はこれらの実GPU受け入れを代替しない。
+
 ## 2026-10-07 — [WORLD-21] shoot-live 撮影時刻ずれ（GPU drain）
 
 ### 作業内容

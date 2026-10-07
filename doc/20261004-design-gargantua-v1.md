@@ -461,3 +461,18 @@ sampleOpacity = clamp(env * (.55 + fil * .35), 0., .95)
   - 下側の弧に水平な切れ目がない。
   - 上側の弧の明るさと縞が、v18（§10.9 の撮影）と同程度。
   - モアレがなく、光子リングが連続していること（§10.10）。
+
+### 10.12 途中フレームの GPU 描画を省く（2026-10-07、Opus、実測にもとづく）
+- 実測：
+  - `renderAt(t)` は、`advanceTo` で 0 または前回の時刻から t まで 1/60 秒刻みで `_step` を呼ぶ。`_step` は毎回 `_renderMatter()`（光線追跡）を GPU に積む。
+  - JS は約 30ms で戻るが、GPU には t×60 フレーム分の描画（1920×1080 で 1 フレーム約 10ms 以上）が溜まる。そのため renderAt(20) で約 10 秒、renderAt(45) で約 22 秒、画面の更新が止まる。
+  - その間、`audio.play()` の Promise が解決せず、`app.start()` が 10 秒で「再生開始がタイムアウトしました」と失敗する。撮影ツールの時刻のずれも同じ原因。
+- 修正：
+  - 解析タイプに `statelessRender`（真偽値）を持たせる。`g-gargantua` は true にする（フレーム間で GPU の状態を引き継がない。§5 のとおり feedback もない）。`g-fluid` などは false または未定義。
+  - `_step(tSec, features, dt, drawMatter = true)` に引数を追加する。`drawMatter` が false のときは、`this.type.step(input)` と CPU 側の処理（イベント、セクション、カメラ、uniform の更新）だけを行い、`_renderMatter()` と `post.stepFeedback` を呼ばない。
+  - `advanceTo(tSec)` のループで、`i < steps`（最後以外のステップ）かつ `this.type.statelessRender` かつ `this.fadeElapsed >= .5`（タイプ切り替えの混合中でない）のときは `drawMatter = false` で呼ぶ。最後のステップは常に描く。
+  - ライブ再生（`advanceTo` を通らず、1 フレームに 1 回の `_step`）と export（1 出力フレームにつき 1 ステップ）の挙動は変えない。
+- 受け入れ条件：
+  - g-gargantua の 1920×1080 で、`renderAt(45)` の直後に `gl.readPixels` 1 画素で同期した所要時間が 1 秒以下。
+  - 決定性：同じ t への renderAt の画素が、修正前と一致する。g-gargantua の描画は uniform だけで決まるので、一致するはず。既存の決定性テストとゴールデンがあれば、それで確認する。
+  - g-fluid の renderAt の結果は変わらない（既存のゴールデンで確認する）。
