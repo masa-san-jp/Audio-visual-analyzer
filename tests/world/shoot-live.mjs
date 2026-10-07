@@ -5,9 +5,19 @@ import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { launchChrome } from '../lib/chrome.mjs';
 export const WORLD17_CHECKS=Object.freeze({G1_FRAMES:20,G1_SECONDS:.4,G1_CORRELATION:.6,LEAD_SECONDS:1.5,
+  LAG_MAX_SECONDS:1/30,
   PRE_KICK_SECONDS:.15,KICK_SECONDS:.1,KICK_FRAME_TOLERANCE:.05,KICK_INCREASE:.35,
   ARC_TIME:45,ARC_THRESHOLD:.85,ARC_MASK_THRESHOLD:.5,ARC_UPPER_RATIO:.4,STAR_THRESHOLD:.5,STAR_PIXELS:150,
   WIDTH:1280,HEIGHT:720});
+const WORLD21_DRAIN_BUFFER=new Uint8Array(4);
+// WORLD-21: 再生前に既発行のGPU描画を同期し、続く2回のrAFまで待つ。
+async function world21DrainGpu(e){
+  const gl=e.gpu.gl;
+  gl.bindBuffer(gl.PIXEL_PACK_BUFFER,null);gl.bindFramebuffer(gl.FRAMEBUFFER,null);
+  gl.readPixels(0,0,1,1,gl.RGBA,gl.UNSIGNED_BYTE,WORLD21_DRAIN_BUFFER);
+  await new Promise(resolve=>requestAnimationFrame(resolve));
+  await new Promise(resolve=>requestAnimationFrame(resolve));
+}
 export function world17Median(values){const a=values.slice().sort((x,y)=>x-y),n=a.length;return n?(a[(n-1)>>1]+a[n>>1])*.5:null;}
 export function world17Correlation(records){
   const correlations=[],bandSamples=[];
@@ -154,64 +164,73 @@ async function world12Shoot(typeId,tSec){
   const w=__world,app=w.app,e=w.engine,audio=w.audio,c=WORLD17_CHECKS,gargantua=typeId==='g-gargantua';
   if(!['g-gargantua','g-fluid'].includes(typeId))throw new RangeError('未実装のタイプ');
   if(tSec<c.LEAD_SECONDS||tSec+c.G1_SECONDS>=w.score.durationSec)throw new RangeError('撮影窓が曲長の範囲外');
-  audio.pause();cancelAnimationFrame(app.raf);app.state='paused';e.selectType(typeId,true);e.setScore(w.score);
-  const timeline=e.timeline,queued=[],records=[];let timeout,first=null,firstState=null,firstTime=null;
-  try {
-    const start=tSec-c.LEAD_SECONDS;await e.renderAt(start);e.timeline=null;
-    await world17Seek(audio,start);app.audioEngine.resetAnalysis();app.previousSec=audio.currentTime;
-    let resolveShot,rejectShot,previousTime=-1;
-    const completed=new Promise((resolve,reject)=>{resolveShot=resolve;rejectShot=reject;});
-    timeout=setTimeout(()=>rejectShot(new Error('playback/capture timeout')),60000);
-    e.onFrame=()=>{
-      try {
-        const time=e.latestSec;if(audio.seeking||time<tSec-c.PRE_KICK_SECONDS||time===previousTime)return;previousTime=time;
-        const a=e.type,row={tSec:time,levels:Array.from({length:32},(_,i)=>a.bandUniforms[i*4]),
-          onset:gargantua&&a.lastKick===time,kickSec:gargantua?a.lastKick:null,kick:gargantua?a.music[0]:null};
-        // 描画されたフレームの時刻とuniformを転送前に固定する。
-        queued.push({row,pixels:world17QueuePixels(e)});
-        if(time>=tSec&&firstTime===null){
-          firstTime=time;firstState=gargantua?{camera:a.camera.slice(),music:a.music.slice(),gravity:a.gravity.slice(),hotspots:a.hotspots.slice(),bands:a.bandUniforms.slice()}:null;
-        }
-        const post=queued.filter(q=>q.row.tSec>=tSec);
-        if(firstTime!==null&&post.length>=c.G1_FRAMES&&time-firstTime>=c.G1_SECONDS){audio.pause();app.state='paused';e.onFrame=null;resolveShot();}
-      }catch(error){e.onFrame=null;rejectShot(error);}
-    };
-    await app.start();await completed;clearTimeout(timeout);cancelAnimationFrame(app.raf);
-    for(const q of queued){
-      const data=await world17ReadPixels(e,q.pixels),display=data[0],capture={width:display.width,height:display.height,rgba:display.pixels};
-      const row=q.row;
-      if(gargantua)Object.assign(row,world13AnnulusSamples(data[1].pixels,data[1].width,data[1].height,capture));
-      if(row.tSec===firstTime){first=capture;}
-      records.push(row);
+  for(let attempt=0;attempt<2;attempt++){
+    audio.pause();cancelAnimationFrame(app.raf);app.state='paused';e.selectType(typeId,true);e.setScore(w.score);
+    const timeline=e.timeline,queued=[],records=[];let timeout,first=null,firstState=null,firstTime=null;
+    try {
+      const start=tSec-c.LEAD_SECONDS;await e.renderAt(start);await world21DrainGpu(e);e.timeline=null;
+      await world17Seek(audio,start);await world21DrainGpu(e);app.audioEngine.resetAnalysis();app.previousSec=audio.currentTime;
+      let resolveShot,rejectShot,previousTime=-1;
+      const completed=new Promise((resolve,reject)=>{resolveShot=resolve;rejectShot=reject;});
+      timeout=setTimeout(()=>rejectShot(new Error('playback/capture timeout')),60000);
+      e.onFrame=()=>{
+        try {
+          const time=e.latestSec;if(audio.seeking||time<tSec-c.PRE_KICK_SECONDS||time===previousTime)return;previousTime=time;
+          const a=e.type,row={tSec:time,levels:Array.from({length:32},(_,i)=>a.bandUniforms[i*4]),
+            onset:gargantua&&a.lastKick===time,kickSec:gargantua?a.lastKick:null,kick:gargantua?a.music[0]:null};
+          // 描画されたフレームの時刻とuniformを転送前に固定する。
+          queued.push({row,pixels:world17QueuePixels(e)});
+          if(time>=tSec&&firstTime===null){
+            firstTime=time;firstState=gargantua?{camera:a.camera.slice(),music:a.music.slice(),gravity:a.gravity.slice(),hotspots:a.hotspots.slice(),bands:a.bandUniforms.slice()}:null;
+            // 遅れた初回標本では再生を止め、finallyで破棄して撮影全体をやり直す。
+            if(firstTime-tSec>c.LAG_MAX_SECONDS){audio.pause();app.state='paused';e.onFrame=null;resolveShot();return;}
+          }
+          const post=queued.filter(q=>q.row.tSec>=tSec);
+          if(firstTime!==null&&post.length>=c.G1_FRAMES&&time-firstTime>=c.G1_SECONDS){audio.pause();app.state='paused';e.onFrame=null;resolveShot();}
+        }catch(error){e.onFrame=null;rejectShot(error);}
+      };
+      await app.start();await completed;clearTimeout(timeout);cancelAnimationFrame(app.raf);
+      const lag=firstTime-tSec;
+      if(lag>c.LAG_MAX_SECONDS){
+        if(attempt===0)continue;
+        throw new Error('capture lag '+lag.toFixed(3)+'s > '+c.LAG_MAX_SECONDS);
+      }
+      for(const q of queued){
+        const data=await world17ReadPixels(e,q.pixels),display=data[0],capture={width:display.width,height:display.height,rgba:display.pixels};
+        const row=q.row;
+        if(gargantua)Object.assign(row,world13AnnulusSamples(data[1].pixels,data[1].width,data[1].height,capture));
+        if(row.tSec===firstTime){first=capture;}
+        records.push(row);
+      }
+      const g1Records=records.filter(r=>r.tSec>=tSec),geometry=gargantua?world17Geometry(e,firstState):null;
+      const canvas=document.createElement('canvas');canvas.width=first.width;canvas.height=first.height;
+      const ctx=canvas.getContext('2d'),image=ctx.createImageData(canvas.width,canvas.height),stride=canvas.width*4;
+      for(let y=0;y<canvas.height;y++)image.data.set(first.rgba.subarray((canvas.height-1-y)*stride,(canvas.height-y)*stride),y*stride);
+      ctx.putImageData(image,0,0);
+      return {typeId,requestedSec:tSec,capturedSec:firstTime,captureLagSec:firstTime-tSec,records:g1Records,
+        sampleEndSec:g1Records.at(-1).tSec,png:canvas.toDataURL('image/png'),
+        g1:gargantua?world17Correlation(g1Records):{applicable:false},kick:gargantua?world17RealKick(records,tSec):null,
+        v14:gargantua?{stars:world17Stars(first,geometry),
+          arcs:tSec===c.ARC_TIME?world17Arcs(first,geometry,firstState.gravity[1]):null}:null,
+        mfsFrames:e.mfsFrames,metrics:e.metrics()};
+    }finally {
+      clearTimeout(timeout);audio.pause();cancelAnimationFrame(app.raf);app.state='paused';e.onFrame=null;e.timeline=timeline;
+      for(const q of queued)world17ReleasePixels(e,q.pixels);
     }
-    const g1Records=records.filter(r=>r.tSec>=tSec),geometry=gargantua?world17Geometry(e,firstState):null;
-    const canvas=document.createElement('canvas');canvas.width=first.width;canvas.height=first.height;
-    const ctx=canvas.getContext('2d'),image=ctx.createImageData(canvas.width,canvas.height),stride=canvas.width*4;
-    for(let y=0;y<canvas.height;y++)image.data.set(first.rgba.subarray((canvas.height-1-y)*stride,(canvas.height-y)*stride),y*stride);
-    ctx.putImageData(image,0,0);
-    return {typeId,requestedSec:tSec,capturedSec:firstTime,captureLagSec:firstTime-tSec,records:g1Records,
-      sampleEndSec:g1Records.at(-1).tSec,png:canvas.toDataURL('image/png'),
-      g1:gargantua?world17Correlation(g1Records):{applicable:false},kick:gargantua?world17RealKick(records,tSec):null,
-      v14:gargantua?{stars:world17Stars(first,geometry),
-        arcs:tSec===c.ARC_TIME?world17Arcs(first,geometry,firstState.gravity[1]):null}:null,
-      mfsFrames:e.mfsFrames,metrics:e.metrics()};
-  }finally {
-    clearTimeout(timeout);audio.pause();cancelAnimationFrame(app.raf);app.state='paused';e.onFrame=null;e.timeline=timeline;
-    for(const q of queued)world17ReleasePixels(e,q.pixels);
   }
 }
 async function world13Shoot(typeId,tSec){return world12Shoot(typeId,tSec);}
 // §10の周期性・暖色/パレット・縞/不透明度・LOD・滑らかなキック・前方合成を実GLSLで照合する。
 async function world17ShaderChecks(engine){
-  const g=engine.gpu,gl=g.gl,source=WORLD_GARGANTUA_FRAGMENT.replace(/void main\(\)\{[\s\S]*$/,'');
+  const g=engine.gpu,gl=g.gl,c=WORLD_GARGANTUA,source=WORLD_GARGANTUA_FRAGMENT.replace(/void main\(\)\{[\s\S]*$/,'');
   const body=`void main(){
     float x=floor(gl_FragCoord.x),rd=3.5+x/63.*20.5,omega=KEPLER_SPEED*pow(rd/3.,KEPLER_POWER),row=floor(gl_FragCoord.y);
     vec3 p=streakInput(rd,0.,omega);
     if(row==0.){vec3 a=streakInput(rd,-PI,omega),b=streakInput(rd,PI,omega);frag=vec4(abs(a-b),abs(streakFbm(a,rd,.02)-streakFbm(b,rd,.02)));}
     else if(row==1.)frag=vec4(mix(DISK_OUTER_COLOR,DISK_INNER_COLOR,pow(DISK_INNER/rd,COLOR_POWER)),musicGain(rd));
-    else if(row==2.)frag=diskSample(vec3(rd,0.,0.),0.);
+    else if(row==2.)frag=diskSample(vec3(rd,0.,0.),0.,vec3(0.,-1.,0.),0.);
     else if(row==3.){float fp=x/63.*3.;frag=vec4(1.-smoothstep(LOD_START,LOD_END,fp),streakFbm(p,rd,2.*rd/STREAK_RADIAL),streakFbm(p,rd,0.),1.);}
-    else if(row==4.){vec4 value=diskSample(vec3(rd,0.,0.),0.);float trans=1.;vec3 c=vec3(0.);for(int i=0;i<MAX_CROSSINGS;i++){c+=trans*value.rgb*value.a;trans*=1.-value.a;}frag=vec4(c.r,trans,value.a,1.);}
+    else if(row==4.){vec4 value=diskSample(vec3(rd,0.,0.),0.,vec3(0.,-1.,0.),0.);float trans=1.;vec3 c=vec3(0.);for(int i=0;i<MAX_CROSSINGS;i++){c+=trans*value.rgb*value.a;trans*=1.-value.a;}frag=vec4(c.r,trans,value.a,1.);}
     else frag=vec4(musicGain(rd),0.,0.,1.);
   }`;
   const target=g.target(64,6,true),program=g.program(source+body),bands=new Float32Array(128),hotspots=new Float32Array(48);
@@ -227,16 +246,19 @@ async function world17ShaderChecks(engine){
     for(const value of pixels)if(!Number.isFinite(value))nonfinite++;
     for(let x=0;x<64;x++){
       for(let c=0;c<4;c++)periodicError=Math.max(periodicError,pixels[x*4+c]);
-      const rd=3.5+x/63*20.5,warm=[1,.6+.3*3/rd,.28+.48*3/rd],primary=[.2,.5,.8];
+      const rd=3.5+x/63*20.5,colorMix=(c.DISK_INNER/rd)**c.COLOR_POWER,
+        warm=c.DISK_OUTER_COLOR.map((value,i)=>value+(c.DISK_INNER_COLOR[i]-value)*colorMix),primary=[.2,.5,.8];
       for(let c=0;c<3;c++)colorError=Math.max(colorError,Math.abs(pixels[(64+x)*4+c]-warm[c]));
-      const gain=.45*(rd<6.5?1+2.6*(1-smooth(3,6.5,rd)):1);
+      const gain=c.MUSIC_BASE*(rd<c.KICK_RADIUS?1+c.KICK_GAIN*(1-smooth(c.DISK_INNER,c.KICK_RADIUS,rd)):1);
       kickError=Math.max(kickError,Math.abs(pixels[(64+x)*4+3]-gain));
-      const n=pixels[(192+x)*4+2],streak=.3+.7*smooth(.3,.7,n),env=smooth(3,3.25,rd)*(1-smooth(15,24,rd));
-      const alpha=env*Math.min(.9,.45+.5*streak),I=6*env*streak*(3/rd)**.8;
-      for(let c=0;c<3;c++)diskError=Math.max(diskError,Math.abs(pixels[(128+x)*4+c]-warm[c]*(.85+.15*primary[c]*1.6)*I*gain));
+      const n=pixels[(192+x)*4+2],streak=c.STREAK_FLOOR+(1-c.STREAK_FLOOR)*smooth(c.STREAK_LO,c.STREAK_HI,n),
+        env=smooth(c.DISK_INNER,c.INNER_FADE,rd)*(1-smooth(c.OUTER_FADE,c.DISK_OUTER,rd));
+      const alpha=env*Math.min(c.OPACITY_MAX,c.OPACITY_BASE+c.OPACITY_STREAK*streak),I=c.DISK_HDR*env*streak*(c.DISK_INNER/rd)**c.INTENSITY_POWER;
+      for(let i=0;i<3;i++)diskError=Math.max(diskError,Math.abs(pixels[(128+x)*4+i]-warm[i]*(1-c.PALETTE_TINT+c.PALETTE_TINT*primary[i]*c.PALETTE_GAIN)*I*gain));
       diskError=Math.max(diskError,Math.abs(pixels[(128+x)*4+3]-alpha));
-      lodError=Math.max(lodError,Math.abs(pixels[(192+x)*4]-(1-smooth(.6,2,x/63*3))),Math.abs(pixels[(192+x)*4+1]));
-      const trans=(1-alpha)**3,emission=pixels[(128+x)*4]*(1-trans);
+      const noiseMean=c.NOISE_MEAN*(1-2**(-c.FBM_OCTAVES));
+      lodError=Math.max(lodError,Math.abs(pixels[(192+x)*4]-(1-smooth(c.LOD_START,c.LOD_END,x/63*3))),Math.abs(pixels[(192+x)*4+1]-noiseMean));
+      const trans=(1-alpha)**c.MAX_CROSSINGS,emission=pixels[(128+x)*4]*(1-trans);
       integrationError=Math.max(integrationError,Math.abs(pixels[(256+x)*4]-emission),Math.abs(pixels[(256+x)*4+1]-trans));
     }
     // 非一様な帯域入力でも14より外が同じ低域へ固定され、境界補間も復元元と一致する。
@@ -269,8 +291,8 @@ async function world17RenderCheck(engine){
     stars:world17Stars(capture,geometry),arcs:world17Arcs(capture,geometry,a.gravity[1]),png:canvas.toDataURL('image/png')};
 }
 const browserFunctions=[world17Median,world17Correlation,world17RealKick,world17Stars,world17Arcs,world17Acceptance,
-  world17ShaderChecks,world17RenderCheck,world17Seek,world17QueuePixels,world17ReadPixels,world17ReleasePixels,world17Geometry,world12Shoot,world13Shoot];
-export const world17BrowserSource='const WORLD17_CHECKS='+JSON.stringify(WORLD17_CHECKS)+';\n'+browserFunctions.map(f=>f.toString().replace(/^export /,'')).join('\n');
+  world17ShaderChecks,world17RenderCheck,world21DrainGpu,world17Seek,world17QueuePixels,world17ReadPixels,world17ReleasePixels,world17Geometry,world12Shoot,world13Shoot];
+export const world17BrowserSource='const WORLD17_CHECKS='+JSON.stringify(WORLD17_CHECKS)+';\nconst WORLD21_DRAIN_BUFFER=new Uint8Array(4);\n'+browserFunctions.map(f=>f.toString().replace(/^export /,'')).join('\n');
 async function main(){
   const root=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'../..'),output=path.join(root,'tests/world/output/live');
   const options={types:['g-gargantua'],times:[7,20,31,45,62,90],wav:null},args=process.argv.slice(2);
@@ -327,11 +349,12 @@ async function unitChecks(){
     const r=loadClassic(['js/world/gl-util.js','js/world/score.js','js/world/analyzer-types.js','js/world/g-gargantua.js']);
     const c=r.get('WORLD_GARGANTUA'),A=r.get('WorldGargantuaAnalyzer'),a=new A();
     for(const [name,value] of Object.entries({MAX_CROSSINGS:3,STREAK_RADIAL:60,STREAK_ANGULAR:3,STREAK_TIME:.03,
-      FBM_OCTAVES:4,FBM_FREQUENCY:2.03,LOD_HEIGHT:540,STREAK_FLOOR:.3,DISK_HDR:6,INTENSITY_POWER:.8,DISK_OUTER:24,OUTER_FADE:15,BAND_OUTER:14,
-      STAR_PROBABILITY:.03,STAR_RADIUS_PX:.6,STAR_POWER:18,STAR_HDR:6,VEIL_GAIN:.12}))assert.equal(c[name],value,name);
+      FBM_OCTAVES:4,FBM_FREQUENCY:2.03,LOD_HEIGHT:540,STREAK_FLOOR:.15,DISK_HDR:3,INTENSITY_POWER:.8,DISK_OUTER:20,OUTER_FADE:12,BAND_OUTER:14,
+      GRAZE_MIN:.05,TURN_START:1.2,TURN_MAX_LOG:6.3,NOISE_MEAN:.5,
+      STAR_PROBABILITY:.03,STAR_RADIUS_PX:.6,STAR_POWER:18,STAR_HDR:6,VEIL_GAIN:.10}))assert.equal(c[name],value,name);
     assert.equal(a.setQuality,undefined);assert.equal(a.flowQuality,undefined);
     const shader=r.get('WORLD_GARGANTUA_FRAGMENT');assert.ok(!/SLAB_|DISK_LAYER|history|EMA|BEAM_|blackbody|SPIKE_|STAR_HALO/.test(shader));
-    console.log('UW-55 plane=1 crossings=3 octaves=4 frequency=2.03 starFloor=0 starPeak=6 veil=.12');
+    console.log('UW-55 plane=1 crossings=3 octaves=4 frequency=2.03 starFloor=0 starPeak=6 veil=.10');
   });
   test('UW-56 WORLD-17 G-1は20標本/0.4秒・定数/空領域を拒否',()=>{
     const rows=Array.from({length:21},(_,n)=>({tSec:7+n*.025,levels:Array.from({length:32},(_,b)=>(n+b)%9),
@@ -394,6 +417,7 @@ async function unitChecks(){
     // t=7より前を含めて120描画。pixel転送の完了処理はpause後であることも検査する。
     app.start=async function(){this.state='playing';for(let i=0;i<140&&this.state==='playing';i++){audioTime=5.5+i/60;engine.latestSec=audioTime;engine.onFrame();}};
     const ctx={createImageData:()=>({data:new Uint8Array(4)}),putImageData(){}},scope={__world:{app,engine,audio,score:{durationSec:20}},WORLD17_CHECKS,
+      world21DrainGpu:async()=>{},
       world17Seek:async(a,t)=>{audioTime=t;},world17QueuePixels:()=>{rows.push(engine.latestSec);return {};},
       world17ReadPixels:async()=>{assert.equal(app.state,'paused');firstReadAt??=engine.latestSec;reads++;return [{width:1,height:1,pixels:new Uint8Array(4)}];},
       world17ReleasePixels(){},document:{createElement:()=>({getContext:()=>ctx,toDataURL:()=> 'data:image/png;base64,AA=='})},
@@ -402,6 +426,82 @@ async function unitChecks(){
     assert.equal(shot.capturedSec,7);assert.equal(shot.records.length,25);assert.ok(shot.sampleEndSec-7>=.4);
     assert.equal(rows[0],6.85);assert.equal(reads,rows.length);assert.ok(firstReadAt>=7.4);assert.deepEqual(engine.timeline,[1]);assert.equal(engine.onFrame,null);
     assert.ok(cancelled>=2);console.log('UW-61 capturedSec='+shot.capturedSec+' lag=0 postFrames='+shot.records.length+' duration='+(shot.sampleEndSec-7)+' queuedFrames='+rows.length+' readsAfterPause='+reads);
+  });
+  test('UW-64 WORLD-21 mock audio/GL: GPU drainがstartより先・lagは1回再試行して失敗',async()=>{
+    const vm=await import('node:vm');
+    async function capture(lags){
+      const order=[],listeners=new Map(),buffers=new Set(),fences=new Set(),drainBuffers=[],timeline=[1];
+      let audioTime=0,seeking=false,starts=0,reads=0,transfers=0,cancelled=0,framebuffer={},packBuffer={};
+      const engine={timeline,latestSec:0,type:{id:'g-fluid',bandUniforms:new Float32Array(128)},
+        post:{output:{width:1,height:1,fbo:{}}},selectType(id,reset){assert.equal(id,'g-fluid');assert.equal(reset,true);order.push('select');},
+        setScore(){order.push('score');},async renderAt(t){assert.equal(this.timeline,timeline);assert.equal(t,5.5);this.latestSec=t;order.push('render');
+          framebuffer={};packBuffer={};},metrics(){return {};},mfsFrames:40};
+      const audio={pause(){},get currentTime(){return audioTime;},set currentTime(t){
+        assert.ok(listeners.has('seeked'));audioTime=t;seeking=true;order.push('seek');
+        queueMicrotask(()=>{seeking=false;order.push('seeked');listeners.get('seeked')();});},get seeking(){return seeking;},
+        addEventListener(name,fn){listeners.set(name,fn);},removeEventListener(name){listeners.delete(name);}};
+      const app={state:'paused',raf:1,audioEngine:{resetAnalysis(){order.push('reset');}},async start(){
+        assert.equal(audio.currentTime,5.5);assert.equal(this.previousSec,5.5);assert.equal(engine.timeline,null);
+        const lag=lags[starts++];assert.notEqual(lag,undefined,'再試行は1回まで');order.push('start');this.state='playing';
+        for(let i=0;i<100&&this.state==='playing';i++){audioTime=7+lag+i/60;engine.latestSec=audioTime;engine.onFrame();}
+        assert.equal(this.state,'paused','撮影窓内で完了する');
+      }};
+      const gl={FRAMEBUFFER:1,PIXEL_PACK_BUFFER:2,RGBA:3,UNSIGNED_BYTE:4,STREAM_READ:5,SYNC_GPU_COMMANDS_COMPLETE:6,
+        WAIT_FAILED:7,TIMEOUT_EXPIRED:8,bindFramebuffer(target,value){assert.equal(target,this.FRAMEBUFFER);framebuffer=value;},
+        bindBuffer(target,value){assert.equal(target,this.PIXEL_PACK_BUFFER);packBuffer=value;},
+        readPixels(x,y,width,height,format,type,destination){
+          assert.deepEqual([x,y,width,height,format,type],[0,0,1,1,this.RGBA,this.UNSIGNED_BYTE]);
+          if(destination===0){assert.equal(app.state,'playing');assert.ok(buffers.has(packBuffer));assert.equal(framebuffer,engine.post.output.fbo);transfers++;}
+          else {assert.equal(app.state,'paused');assert.equal(framebuffer,null);assert.equal(packBuffer,null);
+            assert.equal(Object.prototype.toString.call(destination),'[object Uint8Array]');assert.equal(destination.length,4);
+            drainBuffers.push(destination);order.push('drain');}
+        },createBuffer(){const buffer={};buffers.add(buffer);return buffer;},bufferData(){},
+        createFence(){const fence={};fences.add(fence);return fence;},fenceSync(){return this.createFence();},flush(){},getError(){return 0;},
+        clientWaitSync(){return 9;},getBufferSubData(target,offset,pixels){assert.equal(app.state,'paused');assert.ok(buffers.has(packBuffer));pixels.fill(128);reads++;},
+        deleteBuffer(buffer){assert.equal(app.state,'paused');assert.equal(buffers.delete(buffer),true);},
+        deleteSync(fence){assert.equal(fences.delete(fence),true);}};
+      engine.gpu={gl};
+      const ctx={createImageData:()=>({data:new Uint8Array(4)}),putImageData(){}},scope={__world:{app,engine,audio,score:{durationSec:20}},
+        document:{createElement:()=>({getContext:()=>ctx,toDataURL:()=> 'data:image/png;base64,AA=='})},
+        requestAnimationFrame:fn=>{assert.equal(app.state,'paused');order.push('rAF');queueMicrotask(fn);return 1;},
+        cancelAnimationFrame:()=>cancelled++,setTimeout,clearTimeout,performance};
+      vm.createContext(scope);vm.runInContext(world17BrowserSource,scope);
+      let shot,error;try {shot=await scope.world12Shoot('g-fluid',7);}catch(value){error=value;}
+      assert.equal(engine.timeline,timeline);assert.equal(engine.onFrame,null);assert.equal(app.state,'paused');
+      assert.equal(audio.seeking,false);assert.equal(listeners.size,0);assert.equal(buffers.size,0);assert.equal(fences.size,0);
+      assert.ok(cancelled>=2*starts);assert.equal(drainBuffers.length,2*starts);
+      assert.ok(drainBuffers.every(buffer=>buffer===drainBuffers[0]),'4-byte bufferを全試行で使い回す');
+      const attemptOrder=['select','score','render','drain','rAF','rAF','seek','seeked','rAF','drain','rAF','rAF','reset','start'];
+      assert.deepEqual(order,Array.from({length:starts},()=>attemptOrder).flat());
+      return {shot,error,starts,reads,transfers,drains:drainBuffers.length};
+    }
+    assert.equal(WORLD17_CHECKS.LAG_MAX_SECONDS,1/30);
+    const onTime=await capture([0]);assert.equal(onTime.error,undefined);assert.equal(onTime.starts,1);assert.equal(onTime.shot.captureLagSec,0);
+    const boundary=await capture([WORLD17_CHECKS.LAG_MAX_SECONDS]);assert.equal(boundary.error,undefined);assert.equal(boundary.starts,1);
+    assert.ok(Math.abs(boundary.shot.captureLagSec-WORLD17_CHECKS.LAG_MAX_SECONDS)<1e-12);
+    const retried=await capture([2.5,0]);assert.equal(retried.error,undefined);assert.equal(retried.starts,2);assert.equal(retried.shot.captureLagSec,0);
+    assert.equal(retried.transfers-retried.reads,1,'遅れた試行のPBOはreadbackせず破棄');
+    const failed=await capture([2.5,.1]);assert.equal(failed.starts,2);assert.equal(failed.shot,undefined);assert.equal(failed.reads,0);assert.equal(failed.transfers,2);
+    assert.equal(failed.error?.message,'capture lag 0.100s > '+WORLD17_CHECKS.LAG_MAX_SECONDS);
+    const overBoundary=await capture([WORLD17_CHECKS.LAG_MAX_SECONDS+1e-6,WORLD17_CHECKS.LAG_MAX_SECONDS+1e-6]);
+    assert.equal(overBoundary.starts,2);assert.equal(overBoundary.error?.message,'capture lag 0.033s > '+WORLD17_CHECKS.LAG_MAX_SECONDS);
+    console.log('UW-64 lagMax='+WORLD17_CHECKS.LAG_MAX_SECONDS+' cases=5 drainsPerAttempt=2 rAFPerDrain=2 bufferBytes=4 retryStarts='+retried.starts+
+      ' retryLag='+retried.shot.captureLagSec+' failedStarts='+failed.starts+' failedLag=.1 failedReads='+failed.reads+' leakedBuffers=0 leakedFences=0');
+  });
+  test('UW-65 WORLD-21 probeのJS/GLSL定数参照とdiskSample署名が現行ソースに存在する',async()=>{
+    const r=loadClassic(['js/world/gl-util.js','js/world/score.js','js/world/analyzer-types.js','js/world/g-gargantua.js']);
+    const constants=r.get('WORLD_GARGANTUA'),shader=r.get('WORLD_GARGANTUA_FRAGMENT'),source=await fs.readFile(fileURLToPath(import.meta.url),'utf8');
+    const directNames=[...source.matchAll(/WORLD_GARGANTUA\.(\w+)/g)].map(match=>match[1]);
+    const probeSource=world17ShaderChecks.toString(),jsSource=probeSource.replace(/const body=`[\s\S]*?`;/,''),
+      aliasNames=[...jsSource.matchAll(/\bc\.(\w+)/g)].map(match=>match[1]);
+    const jsNames=new Set([...directNames,...aliasNames]);for(const name of jsNames)assert.ok(Object.hasOwn(constants,name),name);
+    const body=probeSource.match(/const body=`([\s\S]*?)`;/)[1],glslNames=new Set(body.match(/\b[A-Z][A-Z_0-9]*\b/g)),
+      declared=new Set([...shader.matchAll(/\bconst\s+(?:float|int|vec3)\s+(\w+)/g)].map(match=>match[1]));
+    for(const name of glslNames)assert.ok(declared.has(name),name);
+    assert.equal((body.match(/diskSample\(vec3\(rd,0\.,0\.\),0\.,vec3\(0\.,-1\.,0\.\),0\.\)/g)||[]).length,2);
+    assert.match(shader,/vec4 diskSample\(vec3 hit,float travel,vec3 ndir,float turn\)/);
+    assert.equal(constants.NOISE_MEAN*(1-2**(-constants.FBM_OCTAVES)),.46875);
+    console.log('UW-65 JSConstants='+jsNames.size+' GLSLConstants='+glslNames.size+' diskSampleCalls=2 fullyFilteredNoise=.46875 missingConstants=0');
   });
 }
 if(process.argv[1]&&path.resolve(process.argv[1])===fileURLToPath(import.meta.url))await main();

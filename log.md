@@ -1,3 +1,33 @@
+## 2026-10-07 — [WORLD-21] shoot-live 撮影時刻ずれ（GPU drain）
+
+### 作業内容
+- `tests/world/shoot-live.mjs`: world21DrainGpu(e)を追加。初期化時に確保する4-byte Uint8Arrayを使い回し、PIXEL_PACK_BUFFERを解除・default framebufferへbindして1×1 RGBA/UNSIGNED_BYTEを同期readPixelsした後、2回のrequestAnimationFrameを待つ。renderAt(start)直後とseek完了直後の2箇所から呼び、app.start()前にGPUをdrainする。ブラウザ注入ソースにも関数と事前確保バッファを含める。
+- `tests/world/shoot-live.mjs`: WORLD17_CHECKSへLAG_MAX_SECONDS=1/30を追加。tSec以降の最初の転送フレームが超過したら直ちにpauseし、finallyでtimeline・callback・PBO/fenceを後始末して撮影全体を1回だけ再試行する。再試行でも超過したら指定形式のcapture lagエラーをthrowする。成功した試行だけをreadback・集計する。
+- `tests/world/shoot-live.mjs`: GLSL probeのdiskSample呼び出し2箇所を(hit,travel,vec3(0.,-1.,0.),0.)へ更新。現行WORLD_GARGANTUAの色・指数・露出・外縁・streak定数と§10.11のNOISE_MEAN補填へCPU側の期待値を追従させる。UW-55の旧§10.8定数値も§10.9〜10.11へ更新し、製品の定数と受け入れ閾値は変更しない。
+- `tests/world/shoot-live.mjs`: UW-64を追加し、mock audio/GLで実際のブラウザ注入関数・seek・GPU drain・PBO転送/readback/解放を動かす。start前の順序、バッファ再利用、lag境界・再試行成功・再試行失敗・資源解放を検査する。UW-65を追加し、JS/GLSLの全probe定数参照、diskSample署名と2呼び出しを現行ソースと照合する。
+- `log.md`: 本エントリを先頭に追加。
+
+### 検証
+- `node tests/run.mjs --unit`: 186件／185成功／0失敗／既存の想定U15-00スキップ1、88,790ms、終了コード0。既存ランナーがtests/output/report.jsonへ結果を保存。このランナーの探索対象はtests/unitだけなので、shoot-live内のUW-55〜61・64・65は次の専用コマンドで別途実行。
+- `node tests/world/shoot-live.mjs --unit`: 9件／9成功／0失敗／0スキップ、76.766083ms、終了コード0。
+- UW-64: mockの5ケースでLAG_MAX_SECONDS=.03333333333333333秒、各試行のdrain=2回／各drainのrAF=2回／共通バッファ=4byte。入力lag=2.5秒→0秒はstart=2回で成功。2.5秒→.1秒はstart=2回でcapture lag 0.100s > 0.03333333333333333をthrowし、readback=0回。閾値そのものは成功、閾値+1e-6秒は2試行後に失敗。全ケースの残存PBO/fence=0。これらはmockの検証値であり実音・実GPUの測定値ではない。
+- UW-65: JS定数25種類／GLSL定数11種類／diskSample呼び出し2箇所、欠落参照0。全減衰時のノイズ期待値=.46875（NOISE_MEAN=.5、4オクターブ）を確認。rgでも全定数参照を確認し、廃止されたLENS_DEMAG／SUBSAMPLE_OFFSETへの参照は0。
+- UW-61: mock撮影時刻7秒／lag=0秒／25標本／.40000000000000036秒、34転送すべてpause後readbackを維持。
+- 全JS/MJS `node --check`: 129件／129成功／0失敗、43,881.059ms、終了コード0。UW-64でブラウザ注入ソース全体のvmコンパイル・実行も成功。git diff --check成功。
+- 専用単体テストの初回は9件／8成功／1失敗、77.634334ms。UW-65がGLSLのローカルvec3 c.rをJSの定数alias cとして誤検出したため、JS定数参照の検索からGLSL文字列を除外して修正。GLSL側は別の宣言照合で引き続き検査する。定数・閾値の調整なし。
+- ブラウザテストファイルの追加なし。変更した実GPU撮影・lag guard・384標本GLSL probeはCODEX_ADDENDUM.mdのChrome禁止に従い未実行。file://・console・実画像・実GPUのlagも未測定。
+
+### spec.md 変更
+- なし。テストハーネスのみの修正。製品ソース／doc/spec.md／README.md／tests/browserは編集しない。
+
+### 備考
+- 実装: Codex gpt-6.1-sol high
+- 判断: 依頼末尾の「Do not stop for ambiguity: decide」を適用。編集範囲を守るため単体テストは既存shoot-live.mjsのunitChecks内へ追加し、全単体スイートと専用単体コマンドの両方を実行した。
+- 判断: lag超過は最初の転送フレームで検出して再生を止め、既存finallyを通るcontinueで全試行をやり直す。seek/render/startなどlag以外のエラーは再試行しない。同期readPixelsへTypedArrayを渡すためにPBOも明示解除する。
+- 判断: 旧GLSL probe期待値とUW-55の定数assertは現行製品に一致せず、署名だけ直しても実GPU照合に失敗するため、§10.9の色／streak／露出／外縁と§10.11の平均ノイズに追従した。probeの半径3.5〜24（現在の外縁20の外側も含む）・384標本・既存誤差閾値は維持し、定数を調整していない。
+- レビュアー確認: 実GPUラッパーをWORLD_CHROME_WRAPPERへ指定してnode tests/world/shoot-live.mjsを実行し、t=7／20／31／45／62／90の各captureLagSecが1/30秒以内で、撮影をまたぐ遅れが累積しないことを確認すること。2試行とも遅れた場合の指定エラーも確認すること。384標本の実GLSLコンパイル・全誤差条件、G-1／キック／1280×720の星・上下弧条件、consoleエラー0も未確認。
+- 編集はこのworktree内の上記2ファイルのみ。commit／push／PR／Chrome起動は行っていない。
+
 ## 2026-10-07 — [WORLD-20] g-gargantua LOD（曲がり角・平均補填）
 
 ### 作業内容
