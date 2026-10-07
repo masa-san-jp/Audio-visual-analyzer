@@ -1,4 +1,4 @@
-// 目的 — キック休止ゲイン・減衰・postへの伝達と撮影の適用条件を検査する — doc/20261004-design-gargantua-v1.md §10.13〜10.14
+// 目的 — キック休止ゲイン・減衰・postへの伝達と撮影の適用条件を検査する — doc/20261004-design-gargantua-v1.md §10.13〜10.15
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -54,9 +54,9 @@ test('UW-69 WORLD-23 engine→post→uniform・全他タイプは0・ブルー�
   console.log('UW-69 kickUniform=.6000000238418579 otherTypesZero=3 bloomRest/Peak=1.8/3.24 veilRest/Peak=.2/.36 multiplier100ms='+(1+.8*Math.exp(-.1/.18)));
 });
 
-test('UW-70 WORLD-24 無分散/無キックの除外・1e-3境界・最大値35%境界・集計',()=>{
+test('UW-70 WORLD-25 無分散/無キックの除外・1e-3境界・最小値基準35%境界・集計',()=>{
   assert.equal(WORLD17_CHECKS.G1_MIN_STD_DEV,1e-3);assert.equal(WORLD17_CHECKS.KICK_INCREASE,.35);
-  assert.equal(WORLD17_CHECKS.KICK_SECONDS,C.KICK_SECONDS);assert.equal(WORLD17_CHECKS.STAR_PIXELS,30);
+  assert.equal(WORLD17_CHECKS.PRE_WINDOW,.10);assert.equal(WORLD17_CHECKS.KICK_SECONDS,C.KICK_SECONDS);assert.equal(WORLD17_CHECKS.STAR_PIXELS,30);
   assert.equal('KICK_100MS_INCREASE' in WORLD17_CHECKS,false);assert.equal('KICK_FRAME_TOLERANCE' in WORLD17_CHECKS,false);
   const rows=amplitude=>Array.from({length:22},(_,i)=>({tSec:i/40,levels:Array.from({length:32},(_,b)=>b===0?amplitude*(i%2?1:-1):0),
     luminance:Array.from({length:32},(_,b)=>b===0?amplitude*(i%2?1:-1):0),counts:new Array(32).fill(1)}));
@@ -81,24 +81,26 @@ test('UW-70 WORLD-24 無分散/無キックの除外・1e-3境界・最大値35%
   console.log('UW-70 quietStd=.000999 excluded boundaryStd='+boundary.bandStdDevs[0]+' applicable peakIncrease='+hit.increase+' beforeSamples='+hit.beforeSamples+' afterSamples='+hit.afterSamples+' applicableCounts=1/1 missingData/weakKick/GPURejected=true');
 });
 
-test('UW-71 WORLD-24 .18秒の前平均/後最大値・ロールを飛ばす・ロールだけの窓は非適用',()=>{
+test('UW-71 WORLD-25 前.10秒の最小値/後.18秒の最大値・ロール窓の端点と候補選択',()=>{
   const row=(tSec,inner=1,onset=false)=>({tSec,inner,onset,innerCount:12});
-  // .1秒より前の値も平均に含め、.1秒より後のピークを使う。後続オンセットは拒否しない。
-  const rows=[row(.8,100),row(.83,4),row(.9),row(.99),row(1,1,true),row(1.02),row(1.1),row(1.15,2.7,true),row(1.19,100)];
-  const peak=world17RealKick(rows,1);assert.equal(peak.pass,true);assert.equal(peak.before,2);assert.equal(peak.after,2.7);close(peak.increase,.35);
-  const endpoint=world17RealKick([row(1-WORLD17_CHECKS.KICK_SECONDS),row(.9),row(1,1,true),row(1+WORLD17_CHECKS.KICK_SECONDS,1.35),row(1.180001,100)],1);
+  // 前窓外の低値とオンセットを除外し、前窓内の減衰中の高値を平均せず、後.18秒のピークを使う。
+  const rows=[row(.8,.01),row(.83,.02,true),row(.899999,.03),row(.9,2),row(.99,4),row(1,1,true),row(1.02),row(1.1),row(1.15,2.7,true),row(1.19,100)];
+  const peak=world17RealKick(rows,1);assert.equal(peak.pass,true);assert.equal(peak.kickSec,1);assert.equal(peak.before,2);assert.equal(peak.beforeSamples,2);assert.equal(peak.after,2.7);close(peak.increase,.35);
+  const endpoint=world17RealKick([row(1-WORLD17_CHECKS.PRE_WINDOW),row(.99,2),row(1,.5,true),row(1+WORLD17_CHECKS.KICK_SECONDS,1.35),row(1.180001,100)],1);
   assert.equal(endpoint.pass,true);assert.equal(endpoint.beforeSamples,2);assert.equal(endpoint.afterSamples,2);close(endpoint.increase,.35);
   const short=world17RealKick([row(.9),row(.99),row(1,1.35,true),row(1.01)],1);
   assert.equal(short.pass,true,'100ms標本がなくても前後2標本と最大値で判定');
   // 候補窓より前のオンセットもロール判定に使う。休みのある次の候補へ進む。
-  const roll=[row(.7),row(.8,1,true),row(.9,1,true),row(1),row(1.01,1,true),row(1.1),row(1.19),row(1.2,1.35,true),row(1.21)];
+  const roll=[row(.7),row(.84,1,true),row(.9,1,true),row(.99,1,true),row(1),row(1.01,1,true),row(1.1),row(1.19),row(1.2,1.35,true),row(1.21)];
   const next=world17RealKick(roll,1);assert.equal(next.kickSec,1.2);assert.equal(next.pass,true);
-  const onlyRoll=world17RealKick(roll.slice(0,7),1);assert.equal(onlyRoll.applicable,false);assert.equal(onlyRoll.reason,'休みのないロール');
-  const boundaryRoll=world17RealKick([row(1-WORLD17_CHECKS.KICK_SECONDS,1,true),row(.9),row(1,1.35,true),row(1.01)],1);
-  assert.equal(boundaryRoll.applicable,false,'直前KICK_SECONDSの左端のオンセットも含む');
+  const onlyRoll=world17RealKick(roll.slice(0,8),1);assert.equal(onlyRoll.applicable,false);assert.equal(onlyRoll.reason,'休みのないロール');
+  const boundaryRoll=world17RealKick([row(.8,1,true),row(1-WORLD17_CHECKS.PRE_WINDOW,1,true),row(.99),row(1,1.35,true),row(1.01)],1);
+  assert.equal(boundaryRoll.applicable,false,'直前PRE_WINDOWの左端のオンセットも含む');
+  const outsideRoll=world17RealKick([row(.84,1,true),row(1-WORLD17_CHECKS.PRE_WINDOW-1e-6,1,true),row(.9),row(.99),row(1,1.35,true),row(1.01)],1);
+  assert.equal(outsideRoll.kickSec,1);assert.equal(outsideRoll.pass,true,'直前.10秒より前のオンセットはロール判定から除く');
   assert.equal(world17RealKick(roll.map(r=>({...r,onset:false})),1).reason,'撮影窓に実キックがない');
   assert.equal(world23LiveAcceptance([{mfsFrames:22,g1:{applicable:false},kick:onlyRoll}],{pass:true}).kickApplicable,0);
   assert.equal(world23LiveAcceptance([{mfsFrames:22,g1:{applicable:false},kick:onlyRoll}],{pass:true}).pass,true);
   assert.equal(world23LiveAcceptance([{mfsFrames:22,g1:{applicable:false},kick:onlyRoll}],{pass:false}).pass,false);
-  console.log('UW-71 beforeMean='+peak.before+' afterMax='+peak.after+' increase='+peak.increase+' endpointIncrease='+endpoint.increase+' nextRestedKick='+next.kickSec+' rollApplicable=false no100msRequired=true');
+  console.log('UW-71 preWindow='+WORLD17_CHECKS.PRE_WINDOW+' beforeMin='+peak.before+' beforeSamples='+peak.beforeSamples+' afterMax='+peak.after+' increase='+peak.increase+' endpointIncrease='+endpoint.increase+' nextRestedKick='+next.kickSec+' boundaryRollApplicable=false outsideRollPass='+outsideRoll.pass+' no100msRequired=true');
 });

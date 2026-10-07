@@ -10,7 +10,7 @@ function setup(kinds=['main'],duration=10) {
   const input={engine,song:score.song,features:f,dt:0,tSec:0},analyzer=new Analyzer();
   return {score,f,engine,input,analyzer};
 }
-test('UW-48 WORLD-18 カメラ全6kind表・4秒ease・同labelの第二drop・パレット15%の定数',()=>{
+test('UW-48 WORLD-25 カメラ全6kind表・4秒ease・同labelの第二drop倍率1.25・パレット15%の定数',()=>{
   const expected={intro:[50,38,2,2,.010,.010,.6,.6],build:[40,32,2,8,.020,.05,.8,1.1],drop:[30,30,3,3,.07,.07,1.35,1.35],break:[36,36,20,20,.012,.012,.7,.7],outro:[34,70,6,6,.008,.008,.9,0],main:[34,34,3,3,.03,.03,1,1]};
   const table=runtime.get('WORLD_GARGANTUA_CAMERA');assert.equal(JSON.stringify(table),JSON.stringify(expected));
   for(const kind of Object.keys(expected)){
@@ -23,12 +23,12 @@ test('UW-48 WORLD-18 カメラ全6kind表・4秒ease・同labelの第二drop・�
   const {input,engine,analyzer}=setup(['main','drop','break','drop']);analyzer.step(input);
   engine.sectionIndex=1;input.tSec=10;analyzer.step(input);assert.equal(analyzer.camera[0],34);
   input.tSec=12;analyzer.step(input);assert.equal(analyzer.camera[0],32);
-  input.tSec=14;analyzer.step(input);assert.equal(analyzer.camera[0],30);
+  input.tSec=14;analyzer.step(input);assert.equal(analyzer.camera[0],30);assert.ok(Math.abs(analyzer.camera[3]-1.35)<1e-6);
   engine.sectionIndex=2;input.tSec=24;analyzer.step(input);
   engine.sectionIndex=3;input.tSec=34;analyzer.step(input);assert.equal(analyzer.camera[0],27);assert.equal(analyzer.orbitSpeed,.09);
-  assert.ok(Math.abs(analyzer.camera[3]-1.35*1.5)<1e-6);assert.equal(C.CAMERA_EASE_SECONDS,4);assert.equal(C.PALETTE_TINT,.15);
+  assert.equal(C.SECOND_DROP_GAIN,1.25);assert.equal(analyzer.camera[3],1.6875);assert.equal(C.CAMERA_EASE_SECONDS,4);assert.equal(C.PALETTE_TINT,.15);
   assert.equal(C.MAX_STEPS,180);assert.equal(C.BLOOM_THRESHOLD,.55);assert.equal(C.BLOOM_STRENGTH,.90);
-  console.log('UW-48 cameraKinds=6 easeMidpointDist=32 secondDropDist=27 speed=.09 brightness=2.025 maxSteps=180');
+  console.log('UW-48 cameraKinds=6 easeMidpointDist=32 firstDropBrightness=1.35 secondDropDist=27 speed=.09 gain=1.25 brightness='+analyzer.camera[3]+' maxSteps=180');
 });
 test('UW-49 WORLD-13 キックexp(-age/.18)・高域pool12/寿命6秒・連続イベント・無拍反応・再演',()=>{
   const {input,f,analyzer}=setup();f.raw[layout.LEVEL]=.5;analyzer.step(input);

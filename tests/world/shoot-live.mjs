@@ -6,7 +6,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { launchChrome } from '../lib/chrome.mjs';
 export const WORLD17_CHECKS=Object.freeze({G1_FRAMES:20,G1_SECONDS:.4,G1_CORRELATION:.6,G1_MIN_STD_DEV:1e-3,LEAD_SECONDS:1.5,
   LAG_MAX_SECONDS:1/30,
-  PRE_KICK_SECONDS:.15,KICK_SECONDS:.18,KICK_INCREASE:.35,
+  PRE_KICK_SECONDS:.15,PRE_WINDOW:.10,KICK_SECONDS:.18,KICK_INCREASE:.35,
   ARC_TIME:45,ARC_THRESHOLD:.85,ARC_MASK_THRESHOLD:.5,ARC_UPPER_RATIO:.4,STAR_THRESHOLD:.5,STAR_PIXELS:30,
   WIDTH:1280,HEIGHT:720});
 const WORLD21_DRAIN_BUFFER=new Uint8Array(4);
@@ -36,17 +36,17 @@ export function world17Correlation(records){
     reason:applicable?null:'すべての帯域の標準偏差が1e-3未満',
     pass:applicable&&bandSamples.every(n=>n>=WORLD17_CHECKS.G1_FRAMES)&&duration>=WORLD17_CHECKS.G1_SECONDS&&median>=WORLD17_CHECKS.G1_CORRELATION};
 }
-// §10.14: 休みのある実低域オンセットの前平均と後最大値を比べる。
+// §10.15: 休みのある実低域オンセットの前.10秒の最小値と後.18秒の最大値を比べる。
 export function world17RealKick(records,requestedSec){
   const c=WORLD17_CHECKS;
   const candidates=records.filter(r=>r.onset&&r.tSec>=requestedSec-c.PRE_KICK_SECONDS);
-  const onset=candidates.find(r=>!records.some(p=>p.onset&&p.tSec<r.tSec&&p.tSec>=r.tSec-c.KICK_SECONDS));
+  const onset=candidates.find(r=>!records.some(p=>p.onset&&p.tSec<r.tSec&&p.tSec>=r.tSec-c.PRE_WINDOW));
   if(!onset){
     return {requestedSec,applicable:false,pass:false,reason:candidates.length?'休みのないロール':'撮影窓に実キックがない',samples:records.length};
   }
-  const t=onset.tSec,before=records.filter(r=>r.tSec>=t-c.KICK_SECONDS&&r.tSec<t),
+  const t=onset.tSec,before=records.filter(r=>r.tSec>=t-c.PRE_WINDOW&&r.tSec<t),
     after=records.filter(r=>r.tSec>=t&&r.tSec<=t+c.KICK_SECONDS);
-  const pre=before.reduce((sum,r)=>sum+r.inner,0)/Math.max(1,before.length),
+  const pre=before.length?before.reduce((minimum,r)=>Math.min(minimum,r.inner),Infinity):0,
     post=after.reduce((peak,r)=>Math.max(peak,r.inner),0),increase=pre>0?(post-pre)/pre:0;
   const valid=before.length>=2&&after.length>=2&&pre>0&&before.concat(after).every(r=>r.innerCount>0&&Number.isFinite(r.inner));
   return {requestedSec,applicable:true,kickSec:t,offsetSec:t-requestedSec,before:pre,after:post,increase,
@@ -186,7 +186,7 @@ async function world12Shoot(typeId,tSec){
       timeout=setTimeout(()=>rejectShot(new Error('playback/capture timeout')),60000);
       e.onFrame=()=>{
         try {
-          // 候補窓よりKICK_SECONDS早く記録し、先頭候補の直前平均とロールを判定する。
+          // 候補窓よりKICK_SECONDS早く記録し、先頭候補の直前最小値とロールを判定する。
           const time=e.latestSec;if(audio.seeking||time<tSec-c.PRE_KICK_SECONDS-c.KICK_SECONDS||time===previousTime)return;previousTime=time;
           const a=e.type,row={tSec:time,levels:Array.from({length:32},(_,i)=>a.bandUniforms[i*4]),
             onset:gargantua&&a.lastKick===time,kickSec:gargantua?a.lastKick:null,kick:gargantua?a.music[0]:null};
@@ -388,7 +388,7 @@ async function unitChecks(){
     assert.equal(world17Stars({width:0,height:0,rgba:[]},{width:0,height:0,pixels:[]}).pass,false);
     console.log('UW-57 pixels=31/30 pass 29/0 fail thresholdStrictlyGreater=.5');
   });
-  test('UW-58 WORLD-24 実キックの最大値35%・100ms条件なし・無キック/ロールは非適用',()=>{
+  test('UW-58 WORLD-25 実キックの前.10秒最小値/後最大値35%・無キック/ロールは非適用',()=>{
     const rows=Array.from({length:24},(_,i)=>({tSec:(48+i)/60,inner:i===12?.272:.2,innerCount:12,onset:i===12}));
     const result=world17RealKick(rows,1);assert.equal(result.pass,true);assert.ok(Math.abs(result.increase-.36)<1e-12);
     assert.equal(result.after,.272);assert.equal('at100msSec' in result,false);

@@ -1,3 +1,32 @@
+## 2026-10-07 — [WORLD-25] G-kick前値・SECOND_DROP_GAIN
+
+### 作業内容
+- `tests/world/shoot-live.mjs`: SSOT `doc/20261004-design-gargantua-v1.md` §10.15に従いWORLD17_CHECKSへPRE_WINDOW=.10を追加。world17RealKickのbeforeを直前PRE_WINDOWのinner最小値へ変更し、別オンセットによるロール判定もPRE_WINDOWを使用。後最大値のKICK_SECONDS=.18と合格条件increase>=.35を維持。UW-58の名称と記録開始の説明コメントを更新。
+- `js/world/g-gargantua.js`: SECOND_DROP_GAINを1.5から指定値1.25へ変更。
+- `tests/unit/world-kick.test.mjs`: UW-70でPRE_WINDOW=.10を照合。UW-71を新定義に更新し、前窓内の最小値、前窓外の低値/オンセットの除外、後窓の最大値、前後端点、オンセット当時の値の前窓からの除外、ロール候補を飛ばした次の休止候補、ロールだけの窓の集計除外を検証。前後標本不足/ROI欠落/非有限値/弱キック/GPU失敗の拒否は維持。
+- `tests/unit/world-gargantua.test.mjs`: UW-48でSECOND_DROP_GAIN=1.25、第一dropの円盤係数1.35、第二dropの円盤係数1.6875を照合。全6kind・カメラease・距離/速度の既存検証を維持。
+- `log.md`: 本エントリを先頭に追加。
+
+### 検証
+- `node tests/run.mjs --unit`: 192件／191成功／0失敗／既存の想定U15-00スキップ1、26,422ms、終了コード0。既存ランナーがtests/output/report.jsonへ結果を保存。
+- `node --test tests/unit/world-kick.test.mjs tests/unit/world-gargantua.test.mjs`: 13件／13成功／0失敗／0スキップ、78.755042ms、終了コード0。
+- `node tests/world/shoot-live.mjs --unit`: 9件／9成功／0失敗／0スキップ、24.350458ms、終了コード0。
+- UW-48: 第一drop円盤係数1.35、SECOND_DROP_GAIN=1.25、第二drop円盤係数1.6875、第二drop距離27・速度.09。UW-70: 合成innerの前最小値1、後最大値1.35、increase=.3500000000000001、前6標本/後11標本で成功、1.3499は失敗。
+- UW-71: 合成innerの前最小値2（前2標本は2/4）、後最大値2.7、increase=.3500000000000001。前窓左端t-.10と後窓右端t+.18を含む。ロール判定の左端の別オンセットは非適用、左端より1µs前の別オンセットは対象外。次の休止候補=1.2秒、ロールだけの窓はapplicable:false。100ms標本は要求しない。
+- UW-58: 合成画面ピーク増加=.36000000000000004、前6/後11標本で成功。UW-61: mock撮影t=7秒、lag=0、記録先頭6.683333333333334秒、撮影後25標本、期間.40000000000000036秒、44転送をpause後に読み戻し。UW-64: buffer/fence漏れ0、再試行1回。
+- 全JS/MJS `node --check`: 130件／130成功／0失敗、6,591.397ms、終了コード0（Node v26.7.0）。説明コメント更新後の`node --check tests/world/shoot-live.mjs`も成功。`git diff --check`: 成功。
+- ブラウザへ注入されるworld17RealKickのG-kick判定を更新したが、Chrome禁止に従い実GPUのshoot-liveは未実行。新規の独立ブラウザテストファイルは追加していない。実再生の画面輝度・GLSLコンパイル・GPU p95・file://のconsole・見た目は未検証。上記の数値はCPU/合成標本/モックによる検証であり実GPUの測定値ではない。
+
+### spec.md 変更
+- なし。指定ファイルのみ編集。開始時から存在した設計書の§10.15追加（8行）は保持し、doc/spec.mdとREADME.mdは変更しない。
+
+### 備考
+- 実装: Codex gpt-6.1-sol high
+- 判断: §10.15のみ実装し、定数/閾値を独自調整していない。区間端点の既存ルールを継承し、前区間は[t-.10,t)、後区間は[t,t+.18]。前後各2標本とROI有効性を維持。前標本がない場合のbefore=0と失敗判定を維持し、非適用に変えない。
+- 判断: 候補開始は既存の撮影時刻-.15秒、記録開始は既存の撮影時刻-.15-.18秒を維持。PRE_WINDOW=.10秒の履歴を十分含むため、world12Shootの記録開始やUW-61は変更不要。旧.18秒のロール用合成標本は、新しい.10秒以内の連続オンセットへ更新した。製品の毎フレーム経路に新規確保の追加なし。
+- 制約: 指定のscratchpad/CODEX_ADDENDUM.mdは存在せず、scratchpad内の検索でも見つからなかった。依頼本文のno commit/push/PR/Chromeを適用し、IMPLEMENTER_RULES.md、実装者ガイド、関連仕様/レンダラー契約を確認して進めた。編集はこのworktree内の上記5ファイルのみ。commit/push/PR/ブラウザ起動なし。
+- レビュアー確認: 実GPUのshoot-liveで7/20/31/45/62/90秒を撮影し、applicableな全時刻で§10.15のG-kick>=35%、GPU p95<=16msを確認。beforeが前.10秒の最小値であること、ロール判定が前.10秒であることと非適用時の集計除外を確認。第二dropの倍率1.25と、休止時でも内側が暗く沈みすぎないことをOpusが撮影して判定。実GLSLコンパイルとfile://直開きのconsoleエラー0も確認すること。
+
 ## 2026-10-07 — [WORLD-24] KICK_REST・G-kick定義
 
 ### 作業内容
