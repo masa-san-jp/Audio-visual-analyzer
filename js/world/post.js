@@ -70,18 +70,19 @@ ${WORLD_GLSL}
 uniform sampler2D scene, history, bloom0, bloom1, bloom2, bloom3, exposure;
 uniform float analyzerPulse;
 uniform float analyzerMode;
-uniform float gargantuaMode, exposureMultiplier;
+uniform float gargantuaMode, exposureMultiplier, kick;
 const float GARGANTUA_BLOOM_STRENGTH = ${WORLD_GARGANTUA.BLOOM_STRENGTH.toFixed(8)};
 const float VEIL_GAIN = ${WORLD_GARGANTUA.VEIL_GAIN.toFixed(8)};
+const float KICK_BLOOM = ${WORLD_GARGANTUA.KICK_BLOOM.toFixed(8)};
 out vec4 frag;
 vec3 aces(vec3 x){return clamp((x*(2.51*x+.03))/(x*(2.43*x+.59)+.14),0.,1.);}
 void main(){
  if(gargantuaMode>.5){
   vec3 b0=texture(bloom0,vUv).rgb,b1=texture(bloom1,vUv).rgb,b2=texture(bloom2,vUv).rgb,b3=texture(bloom3,vUv).rgb;
   vec3 bloom=b0*.25+b1*.25+b2*.30+b3*.45;
-  vec3 c=texture(scene,vUv).rgb+bloom*GARGANTUA_BLOOM_STRENGTH;
-  // §10.4: 最低解像度のベーリングフレアをACESの前へ足す。
-  c+=b3*VEIL_GAIN;
+  vec3 c=texture(scene,vUv).rgb+bloom*GARGANTUA_BLOOM_STRENGTH*(1.+KICK_BLOOM*kick);
+  // §10.13: 最低解像度のベーリングフレアもキックで脈動させ、ACESの前へ足す。
+  c+=b3*VEIL_GAIN*(1.+KICK_BLOOM*kick);
   c=aces(c*.75*exposureMultiplier);
   c=mix(c*12.92,1.055*pow(c,vec3(1./2.4))-.055,step(vec3(.0031308),c));
   frag=vec4(c,1.);return;
@@ -117,8 +118,9 @@ class WorldPost {
     this.exposureProgram = gpu.program(WORLD_EXPOSURE_FRAGMENT);
     this.meterSourceLoc = gpu.texture(this.exposureProgram, 'source'); this.firstLoc = gpu.texture(this.exposureProgram, 'firstPass');
     this.program = gpu.program(WORLD_POST_FRAGMENT); this.pulse = 0; this.analyzerMode = 0;
-    this.gargantua = false; this.exposureMultiplier = 1;
+    this.gargantua = false; this.exposureMultiplier = 1; this.kick = 0;
     this.gargantuaLoc = gpu.texture(this.program, 'gargantuaMode'); this.exposureMultiplierLoc = gpu.texture(this.program, 'exposureMultiplier');
+    this.kickLoc = gpu.texture(this.program, 'kick');
     this.pulseLoc = gpu.texture(this.program, 'analyzerPulse'); this.modeLoc = gpu.texture(this.program, 'analyzerMode');
     this.samplers = ['scene', 'history', 'bloom0', 'bloom1', 'bloom2', 'bloom3', 'exposure'].map(n => gpu.texture(this.program, n));
     this.feedbackProgram = gpu.program(WORLD_FEEDBACK_FRAGMENT);
@@ -163,6 +165,7 @@ class WorldPost {
     }
     g.bind(this.program, this.output);
     gl.uniform1f(this.gargantuaLoc, this.gargantua ? 1 : 0); gl.uniform1f(this.exposureMultiplierLoc, this.exposureMultiplier);
+    gl.uniform1f(this.kickLoc, this.kick);
     gl.uniform1f(this.pulseLoc, this.pulse); gl.uniform1f(this.modeLoc, this.analyzerMode);
     g.sampler(this.samplers[0], 0, scene); g.sampler(this.samplers[1], 1, this.feedback.read);
     for (let i = 0; i < 4; i++) g.sampler(this.samplers[i + 2], i + 2, this.bloom[i].read);

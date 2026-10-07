@@ -11,7 +11,7 @@ const WORLD_GARGANTUA = Object.freeze({
   STREAK_FLOOR: .15, STREAK_LO: .30, STREAK_HI: .70, DISK_HDR: 3.0, INTENSITY_POWER: .8,
   INNER_FADE: 3.25, OUTER_FADE: 12, OPACITY_BASE: .45, OPACITY_STREAK: .5, OPACITY_MAX: .90,
   BAND_COUNT: 32, BAND_BLEND: .15, MUSIC_BASE: .45, MUSIC_GAIN: 2.2,
-  KICK_SECONDS: .11, KICK_RADIUS: 6.5, KICK_GAIN: 2.6,
+  KICK_SECONDS: .18, KICK_RADIUS: 6.5, KICK_REST: .55, KICK_GAIN: 3.5, KICK_BLOOM: .8,
   HOTSPOT_COUNT: 12, HOTSPOT_INNER: 3.5, HOTSPOT_OUTER: 8, HOTSPOT_SECONDS: 6, HOTSPOT_RADIUS: .18, HOTSPOT_HDR: 6,
   EXPOSURE_BASE: .85, EXPOSURE_GAIN: .3, CAMERA_EASE_SECONDS: 4,
   SECOND_DROP_INC: -6, SWAY_DEGREES: 1.5, SWAY_SPEED: .07,
@@ -81,8 +81,9 @@ float musicGain(float rd){
  if(f<BAND_BLEND*.5&&k>0)L=mix(bands[BAND_COUNT-k].x,L,.5+.5*smoothstep(0.,BAND_BLEND*.5,f));
  if(f>1.-BAND_BLEND*.5&&k<BAND_COUNT-1)L=mix(L,bands[BAND_COUNT-2-k].x,.5*smoothstep(1.-BAND_BLEND*.5,1.,f));
  float gain=MUSIC_BASE+MUSIC_GAIN*L;
- // 逆順smoothstepはGLSL未定義なので、同じ下降曲線を正順で表す。
- if(rd<KICK_RADIUS)gain*=1.+KICK_GAIN*music.x*(1.-smoothstep(DISK_INNER,KICK_RADIUS,rd));
+ // §10.13: キックの間は内側を休ませ、包絡で増光する。
+ float inner=1.-smoothstep(DISK_INNER,KICK_RADIUS,rd);
+ gain*=mix(1.,KICK_REST,inner)*(1.+KICK_GAIN*music.x*inner);
  return gain;
 }
 vec3 streakInput(float rd,float phi,float omega){

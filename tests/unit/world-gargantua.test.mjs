@@ -30,14 +30,14 @@ test('UW-48 WORLD-18 カメラ全6kind表・4秒ease・同labelの第二drop・�
   assert.equal(C.MAX_STEPS,180);assert.equal(C.BLOOM_THRESHOLD,.55);assert.equal(C.BLOOM_STRENGTH,.90);
   console.log('UW-48 cameraKinds=6 easeMidpointDist=32 secondDropDist=27 speed=.09 brightness=2.025 maxSteps=180');
 });
-test('UW-49 WORLD-13 キックexp(-age/.11)・高域pool12/寿命6秒・連続イベント・無拍反応・再演',()=>{
+test('UW-49 WORLD-13 キックexp(-age/.18)・高域pool12/寿命6秒・連続イベント・無拍反応・再演',()=>{
   const {input,f,analyzer}=setup();f.raw[layout.LEVEL]=.5;analyzer.step(input);
   assert.ok(Math.abs(analyzer.exposureMultiplier-1)<1e-12);
   input.tSec=1;f.raw[layout.ONSET_FLAGS]=5;analyzer.step(input);assert.equal(analyzer.music[0],1);assert.equal(analyzer.hotspotSerial,1);assert.equal(analyzer.highOnsetPhase,1);
   const spots=analyzer.hotspots.slice();analyzer.step(input);assert.deepEqual(analyzer.hotspots,spots);
   input.tSec=1.01;analyzer.step(input);assert.equal(analyzer.hotspotSerial,2,'MFSの連続フレームのbitは別イベント');
   assert.equal(analyzer.music[0],1,'連続低域オンセットも包絡を再開する');
-  f.raw[layout.ONSET_FLAGS]=0;input.tSec=1.11;analyzer.step(input);assert.ok(Math.abs(analyzer.music[0]-Math.exp(-.1/.11))<1e-7);
+  f.raw[layout.ONSET_FLAGS]=0;input.tSec=1.11;analyzer.step(input);assert.ok(Math.abs(analyzer.music[0]-Math.exp(-.1/.18))<1e-7);
   const kick=analyzer.music[0];f.raw[layout.BEAT_FLAG]=1;f.raw[layout.DOWNBEAT_FLAG]=1;analyzer.step(input);assert.equal(analyzer.music[0],kick);
   for(let i=1;i<14;i++){f.raw[layout.ONSET_FLAGS]=0;input.tSec=1+i*.2;analyzer.step(input);f.raw[layout.ONSET_FLAGS]=4;input.tSec+=.1;analyzer.step(input);}
   assert.equal(analyzer.hotspots.length/4,12);assert.equal(analyzer.hotspotSerial,15);assert.equal(analyzer.highOnsetPhase,15);
@@ -93,7 +93,7 @@ test('UW-52 WORLD-14 重力の1.2秒/2秒ease・地平面/ISCO・第二drop負�
   const gravity=analyzer.gravity.slice(),camera=analyzer.camera.slice();
   analyzer.reset();engine.sectionIndex=3;input.tSec=34;analyzer.step(input);
   assert.deepEqual(analyzer.gravity,gravity);assert.deepEqual(analyzer.camera,camera);
-  assert.equal(C.KEPLER_SPEED,1.35);assert.equal(C.MAX_CROSSINGS,3);assert.equal(C.KICK_GAIN,2.6);
+  assert.equal(C.KEPLER_SPEED,1.35);assert.equal(C.MAX_CROSSINGS,3);assert.equal(C.KICK_GAIN,3.5);
   assert.equal(C.RING_SAMPLE_MIN,1.3);assert.equal(C.RING_SAMPLE_MAX,3.2);
   assert.equal(C.MILKY_WAY_MAX,.035);assert.equal(C.MILKY_WAY_OCTAVES,5);
   console.log('UW-52 surgeMidpoint=[1.8,1.09,3.2] surgePeak=[2.1,1.18,3.4] easeIn=1.2 easeOut=2 secondDropInc=-6 replayError=0');
@@ -211,10 +211,10 @@ test('UW-63 WORLD-20 §10.11 毎ステップの累積曲がり角・4オクタ�
 test('UW-54 WORLD-17 §10.7/10.8画面境界・継ぎ目4画素・postのフレアはACESより前',async()=>{
   const {world17Stars,world17Arcs,world17Acceptance,WORLD17_CHECKS}=await import('../world/shoot-live.mjs');
   const c={width:200,height:1,rgba:new Uint8Array(800)},g={width:200,height:1,pixels:new Float32Array(800)};
-  for(let x=0;x<150;x++){c.rgba.fill(128,x*4,x*4+3);g.pixels[x*4+3]=1;}
-  assert.equal(world17Stars(c,g).pixels,150);assert.equal(world17Stars(c,g).pass,true);
-  c.rgba.fill(127,0,3);assert.equal(world17Stars(c,g).pixels,149);assert.equal(world17Stars(c,g).pass,false);
-  g.pixels[7]=0;assert.equal(world17Stars(c,g).pixels,148,'円盤上の明るい画素を星に数えない');
+  for(let x=0;x<30;x++){c.rgba.fill(128,x*4,x*4+3);g.pixels[x*4+3]=1;}
+  assert.equal(world17Stars(c,g).pixels,30);assert.equal(world17Stars(c,g).pass,true);
+  c.rgba.fill(127,0,3);assert.equal(world17Stars(c,g).pixels,29);assert.equal(world17Stars(c,g).pass,false);
+  g.pixels[7]=0;assert.equal(world17Stars(c,g).pixels,28,'円盤上の明るい画素を星に数えない');
   assert.equal(WORLD17_CHECKS.STAR_THRESHOLD,.5);assert.equal(WORLD17_CHECKS.ARC_THRESHOLD,.85);
   assert.equal(WORLD17_CHECKS.ARC_UPPER_RATIO,.4);
   const r=loadClassic(['tests/browser/world14.test.js']),seam=r.get('world14SeamReport');
@@ -235,5 +235,5 @@ test('UW-54 WORLD-17 §10.7/10.8画面境界・継ぎ目4画素・postのフレ�
   assert.equal(world17Acceptance({width:1280,height:720,requestedSec:45,stars:{pass:true},arcs:{pass:true}}).pass,true);
   assert.equal(world17Acceptance(null).pass,false);
   assert.equal(world17Acceptance({width:1920,height:1080,requestedSec:45,stars:{pass:true},arcs:{pass:true}}).pass,false);
-  console.log('UW-54 starPixelsPass=150 fail=149 arcPeakPass='+217/255+' fail='+216/255+' upperThickness=5 lowerThickness=1 seamContinuous=1 bloomWeights=.25/.25/.30/.45 veil='+C.VEIL_GAIN+' beforeACES=true');
+  console.log('UW-54 starPixelsPass=30 fail=29 arcPeakPass='+217/255+' fail='+216/255+' upperThickness=5 lowerThickness=1 seamContinuous=1 bloomWeights=.25/.25/.30/.45 veil='+C.VEIL_GAIN+' beforeACES=true');
 });

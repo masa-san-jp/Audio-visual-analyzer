@@ -391,6 +391,7 @@ class WorldEngine {
     this.post.pulse = 0;
     this.post.analyzerMode = this.previousPostMode * (1 - blend) + (this.type.id === 'g-fluid' ? 0 : 1) * blend;
     this.post.gargantua = this.type.id === 'g-gargantua';
+    this.post.kick = this.post.gargantua ? this.type.music[0] : 0;
     this.post.exposureMultiplier = this.post.gargantua ? this.type.exposureMultiplier : 1;
     this.post.render(this.scene);
   }

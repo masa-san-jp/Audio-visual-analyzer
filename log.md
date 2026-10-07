@@ -1,3 +1,36 @@
+## 2026-10-07 — [WORLD-23] g-gargantua キックの脈動
+
+### 作業内容
+- `js/world/g-gargantua.js`: SSOT `doc/20261004-design-gargantua-v1.md` §10.13のKICK_REST=.55、KICK_GAIN=3.5、KICK_SECONDS=.18、KICK_BLOOM=.8を名前付き定数にし、musicGainのinnerと休止時/キック時の乗算を指定式そのままで実装。
+- `js/world/post.js`: kickの事前初期化・uniform location・送信を追加。gargantua分岐のbloomとb3のVEIL_GAINに指定の(1.+KICK_BLOOM*kick)を掛け、ACESの前に適用。
+- `js/world/world-engine.js`: _drawでg-gargantuaのtype.music[0]だけをpost.kickへ渡し、他タイプは0にする1行だけを追加。
+- `tests/world/shoot-live.mjs`: G-kickのapplicableと100ms時点25%条件、全帯域の標準偏差<1e-3の場合のG-1非適用、STAR_PIXELS=30を反映。実GLSL probeのピーク/休止ゲイン期待値も指定式へ更新。集計に適用対象のG-kickと既存GPU判定を追加し、非適用の窓は除外。UW-56〜58を新しい契約へ更新。
+- `tests/unit/world-gargantua.test.mjs`: UW-49の減衰時間、UW-52のKICK_GAIN、UW-54の星画素境界を現行SSOTへ更新。
+- `tests/unit/world-kick.test.mjs`: UW-68〜70を追加。製品GLSLのスカラー式を評価し、休止/ピーク/100ms/半径境界、実engine→post→uniformと他3タイプの0、ブルーム/フレア式、無分散/無キックの除外と閾値境界、標本不足/ROI欠落/弱キック/重複オンセット/GPU失敗の拒否を検証。
+- `log.md`: 本エントリを先頭に追加。
+
+### 検証
+- `node tests/run.mjs --unit`: 191件／190成功／0失敗／既存の想定U15-00スキップ1、73,676ms、終了コード0。UW-68〜70と既存の決定性UW-08/32/43/67、タイプ契約UW-39、feedback UW-21、export UW-34〜36/42も成功。既存ランナーがtests/output/report.jsonへ結果を保存。
+- `node --test tests/unit/world-kick.test.mjs tests/unit/world-gargantua.test.mjs`: 12件／12成功／0失敗／0スキップ、429.327ms、終了コード0。
+- `node tests/world/shoot-live.mjs --unit`: 9件／9成功／0失敗／0スキップ、26.576625ms、終了コード0。
+- UW-49: 実Analyzerの100ms後のFloat32包絡=.5737534165382385。UW-68: CPUで評価した製品GLSLの内縁休止係数=.55、ピーク係数=2.475（休止時の4.5倍）、100ms係数=1.6544753349195584、exp(-.1/.18)=.5737534207374327、exp(-.47/.18)=.07345288408931808。
+- UW-69: mock GLへのkick uniform=.6000000238418579、他3タイプは0。入力光量2のブルーム休止/ピーク=1.8/3.24、フレア=.2/.36。100ms時点の両倍率=1.4590027365899463。GPUの画素/輝度実測ではない。
+- UW-70: 全帯域の標準偏差.000999は除外、1帯域の標準偏差.0010000000000000002は適用。合成画面輝度の増加=.3500000000000001、100ms=.25は成功。集計の適用数G-1/G-kick=1/1。UW-54/57: 星30/31画素は成功、29/0画素は失敗。
+- 全JS/MJS `node --check`: 130件／130成功／0失敗、26,104.899667ms、終了コード0（Node v26.7.0）。
+- 対象単体テストの初回は12件／11成功／1失敗、84.621375ms。UW-70の合成標本1.35を6回加算した平均が1.3499999999999999（増加.34999999999999987）となり35%境界を下回った。境界テストを既存の最小標本数2で平均できる入力にし、通常6標本は36%とした。製品の式・定数・閾値・許容誤差は変更していない。
+- `git diff --check`: 成功。今回の変更は指定された製品3ファイル・shoot-live・関連ユニット2ファイル・log.mdの7ファイルのみ。開始時から存在した設計書の変更は保持。
+- ブラウザ側で実行されるworld17ShaderChecksのピーク/休止ゲインとworld17Correlation/world17RealKickの判定を更新したが、Chrome禁止に従い実行していない。実再生・実GLSLコンパイル・GPU p95・file://・console・見た目の受け入れは未検証。
+
+### spec.md 変更
+- なし。指定ファイルだけを編集し、doc/spec.mdとREADME.mdは変更しない。開始時から変更済みの設計書（§10.13の23行追加）は保持。
+
+### 備考
+- 実装: Codex gpt-6.1-sol high
+- 判断: 依頼末尾の「Do not stop for ambiguity: decide」を適用。G-1の分散は撮影窓の全音声level標本の母分散とし、ROIの欠落と独立に判定。空標本は無分散の根拠がないので非適用扱いにせず失敗を維持。キックが存在して前標本/100ms標本/ROIが不足する場合もapplicable:trueの失敗とする。
+- 判断: 既存の撮影ツールはG-kickとGPUのpassを表示するだけで終了コードへ反映していなかった。§10.13の集計除外・受け入れに従い、world23LiveAcceptanceで適用対象G-kickと既存world13PerformanceのGPU条件も全体の合否に反映する。新しいGPU閾値は追加していない。
+- 制約: 指定されたscratchpad/CODEX_ADDENDUM.mdは存在せず、/private/tmp/claude-501内のファイル検索でも見つからなかった。依頼本文に明記されたno commit/push/PR/Chromeを適用し、IMPLEMENTER_RULES.md、実装者ガイド、関連仕様/レンダラー契約を読んで進めた。全編集はこのworktree内のみ。毎フレームの製品経路に配列/オブジェクト/クロージャの新規生成なし。定数の独自調整なし。
+- レビュアー確認: 実GPUのshoot-liveで20/31/45/90秒のキックがある窓すべてについてG-kick>=35%、100ms>=25%、GPU p95<=16msを確認すること。7/62秒などの無キック/無分散の窓がapplicable:falseで集計から除外され、標本不足は失敗のままであること。キックの間でも内側の弧が暗くなりすぎないことを撮影してOpusが判定すること。星>=30、実GLSL probe、file://直開きのconsoleエラー0、他タイプのキックuniform=0を確認すること。CPU/モックの検証はこれらの実GPU受け入れを代替しない。
+
 ## 2026-10-07 — [WORLD-22] renderAt 途中フレームのGPU描画省略
 
 ### 作業内容

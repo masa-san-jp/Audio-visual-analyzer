@@ -476,3 +476,26 @@ sampleOpacity = clamp(env * (.55 + fil * .35), 0., .95)
   - g-gargantua の 1920×1080 で、`renderAt(45)` の直後に `gl.readPixels` 1 画素で同期した所要時間が 1 秒以下。
   - 決定性：同じ t への renderAt の画素が、修正前と一致する。g-gargantua の描画は uniform だけで決まるので、一致するはず。既存の決定性テストとゴールデンがあれば、それで確認する。
   - g-fluid の renderAt の結果は変わらない（既存のゴールデンで確認する）。
+
+### 10.13 キックの脈動（2026-10-07、Opus、実再生の計測にもとづく）
+- 実測（撮影時刻のずれを直した shoot-live、実 GPU）：
+  - G-kick（画面の明るさの増加）は t=31 で 39%、t=45 で 29%、t=90 で 18%、t=20 で 1%。100ms 時点では 12〜25%。
+  - キック前の明るさは .61〜.86 で、ACES のトーンカーブの肩に乗っている。そのため、キックで光量を掛けても画面がほとんど明るくならない。
+  - GPU の p95 は 7.6ms（合格）。
+- 修正 1（キック帯域を休ませる）：musicGain で `inner = 1. - smoothstep(DISK_INNER, KICK_RADIUS, rd)` とし、`gain *= mix(1., KICK_REST, inner) * (1. + KICK_GAIN*music.x*inner)` とする。
+  - KICK_REST = .55
+  - KICK_GAIN = 3.5
+  - キックの間は内側を約半分の明るさに落とし、キックで最大 4.5 倍に跳ねさせる。
+- 修正 2（減衰を少し長く）：KICK_SECONDS = .18（128BPM の拍の間隔 .47 秒の中で十分に減衰する）。
+- 修正 3（光の滲みの脈動）：
+  - post.js の gargantua 分岐で、`bloom*GARGANTUA_BLOOM_STRENGTH*(1. + KICK_BLOOM*kick)` と `b3*VEIL_GAIN*(1. + KICK_BLOOM*kick)` にする。KICK_BLOOM = .8。
+  - kick は、engine の `_draw` で `this.post.kick = gargantua ? this.type.music[0] : 0` として post に渡し、uniform で送る。
+  - 白飛びしている芯の上には明るさを上乗せできないので、周囲への滲みで脈動を見せる。
+- 撮影ツールの判定の修正：
+  - 撮影窓にキックがない場合（intro や break）は、G-kick を `applicable:false` として集計から除く。不合格にしない。
+  - G-1 も、帯域の分散が 0 に近い（どの帯域でも標準偏差が 1e-3 未満）場合は `applicable:false` とする。
+  - 星の基準：STAR_PIXELS = 150 は v1.0 の星の大きさとは両立しない（オーナー指定の v1.0 の大きさでは 30〜120 画素）。STAR_PIXELS = 30 に改める。
+- 受け入れ条件：
+  - キックがある撮影時刻（20/31/45/90）すべてで、G-kick ≥ 35%、100ms 時点 ≥ 25%。
+  - GPU の p95 ≤ 16ms を維持する。
+  - 見た目では、キックの間でも内側の弧が暗くなりすぎない（撮影して Opus が判定する）。

@@ -4,10 +4,10 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { launchChrome } from '../lib/chrome.mjs';
-export const WORLD17_CHECKS=Object.freeze({G1_FRAMES:20,G1_SECONDS:.4,G1_CORRELATION:.6,LEAD_SECONDS:1.5,
+export const WORLD17_CHECKS=Object.freeze({G1_FRAMES:20,G1_SECONDS:.4,G1_CORRELATION:.6,G1_MIN_STD_DEV:1e-3,LEAD_SECONDS:1.5,
   LAG_MAX_SECONDS:1/30,
-  PRE_KICK_SECONDS:.15,KICK_SECONDS:.1,KICK_FRAME_TOLERANCE:.05,KICK_INCREASE:.35,
-  ARC_TIME:45,ARC_THRESHOLD:.85,ARC_MASK_THRESHOLD:.5,ARC_UPPER_RATIO:.4,STAR_THRESHOLD:.5,STAR_PIXELS:150,
+  PRE_KICK_SECONDS:.15,KICK_SECONDS:.1,KICK_FRAME_TOLERANCE:.05,KICK_INCREASE:.35,KICK_100MS_INCREASE:.25,
+  ARC_TIME:45,ARC_THRESHOLD:.85,ARC_MASK_THRESHOLD:.5,ARC_UPPER_RATIO:.4,STAR_THRESHOLD:.5,STAR_PIXELS:30,
   WIDTH:1280,HEIGHT:720});
 const WORLD21_DRAIN_BUFFER=new Uint8Array(4);
 // WORLD-21: 再生前に既発行のGPU描画を同期し、続く2回のrAFまで待つ。
@@ -20,32 +20,45 @@ async function world21DrainGpu(e){
 }
 export function world17Median(values){const a=values.slice().sort((x,y)=>x-y),n=a.length;return n?(a[(n-1)>>1]+a[n>>1])*.5:null;}
 export function world17Correlation(records){
-  const correlations=[],bandSamples=[];
+  const correlations=[],bandSamples=[],bandStdDevs=[];
   for(let band=0;band<32;band++){
+    // §10.13: 適用可否はROIの有無と独立した、撮影窓の音声帯域の分散で決める。
+    const mean=records.reduce((sum,r)=>sum+r.levels[band],0)/Math.max(1,records.length);
+    bandStdDevs.push(Math.sqrt(records.reduce((sum,r)=>sum+(r.levels[band]-mean)**2,0)/Math.max(1,records.length)));
     let n=0,sx=0,sy=0,xx=0,yy=0,xy=0;
     for(const r of records){if(!r.counts[band])continue;const x=r.levels[band],y=r.luminance[band];n++;sx+=x;sy+=y;xx+=x*x;yy+=y*y;xy+=x*y;}
     const d=Math.sqrt(Math.max(0,n*xx-sx*sx)*Math.max(0,n*yy-sy*sy));
     correlations.push(d?(n*xy-sx*sy)/d:0);bandSamples.push(n);
   }
   const median=world17Median(correlations),duration=records.length?records.at(-1).tSec-records[0].tSec:0;
-  return {applicable:true,correlations,bandSamples,median,samples:records.length,durationSec:duration,
-    pass:bandSamples.every(n=>n>=WORLD17_CHECKS.G1_FRAMES)&&duration>=WORLD17_CHECKS.G1_SECONDS&&median>=WORLD17_CHECKS.G1_CORRELATION};
+  const applicable=!records.length||!bandStdDevs.every(s=>s<WORLD17_CHECKS.G1_MIN_STD_DEV);
+  return {applicable,correlations,bandSamples,bandStdDevs,median,samples:records.length,durationSec:duration,
+    reason:applicable?null:'すべての帯域の標準偏差が1e-3未満',
+    pass:applicable&&bandSamples.every(n=>n>=WORLD17_CHECKS.G1_FRAMES)&&duration>=WORLD17_CHECKS.G1_SECONDS&&median>=WORLD17_CHECKS.G1_CORRELATION};
 }
 // 同じ実再生窓の低域オンセットを使う。固定入力や偽のオンセットを挿入しない。
 export function world17RealKick(records,requestedSec){
   const c=WORLD17_CHECKS;
   const onset=records.find(r=>r.onset&&r.tSec>=requestedSec-c.PRE_KICK_SECONDS&&
     records.some(p=>p.tSec<r.tSec&&p.tSec>=r.tSec-c.KICK_SECONDS));
-  if(!onset)return {requestedSec,pass:false,reason:'撮影窓に前標本のある実キックがない',samples:records.length};
+  if(!onset){
+    const applicable=records.some(r=>r.onset&&r.tSec>=requestedSec-c.PRE_KICK_SECONDS);
+    return {requestedSec,applicable,pass:false,reason:applicable?'実キックの前標本がない':'撮影窓に実キックがない',samples:records.length};
+  }
   const t=onset.tSec,before=records.filter(r=>r.tSec>=t-c.KICK_SECONDS&&r.tSec<t),
     after=records.filter(r=>r.tSec>=t&&r.tSec<t+c.KICK_SECONDS),at100ms=records.find(r=>r.tSec>=t+c.KICK_SECONDS);
   const mean=a=>a.reduce((sum,r)=>sum+r.inner,0)/Math.max(1,a.length),pre=mean(before),post=mean(after);
   const increase=pre>0?(post-pre)/pre:0,at100msIncrease=pre>0&&at100ms?(at100ms.inner-pre)/pre:0;
   const valid=before.length>=2&&after.length>=2&&before.concat(after).every(r=>r.innerCount>0)&&at100ms?.innerCount>0&&
     at100ms.tSec-t<=c.KICK_SECONDS+c.KICK_FRAME_TOLERANCE&& !records.some(r=>r.onset&&r.tSec>t&&r.tSec<=at100ms.tSec);
-  return {requestedSec,kickSec:t,offsetSec:t-requestedSec,before:pre,after:post,increase,at100ms:at100ms?.inner??null,
+  return {requestedSec,applicable:true,kickSec:t,offsetSec:t-requestedSec,before:pre,after:post,increase,at100ms:at100ms?.inner??null,
     at100msSec:at100ms?.tSec??null,at100msIncrease,beforeSamples:before.length,afterSamples:after.length,
-    pass:!!valid&&increase>=c.KICK_INCREASE&&at100msIncrease>=c.KICK_INCREASE};
+    pass:!!valid&&increase>=c.KICK_INCREASE&&at100msIncrease>=c.KICK_100MS_INCREASE};
+}
+// §10.13: 無キック・無分散の窓は集計から除き、適用される測定と実GPU条件を判定する。
+export function world23LiveAcceptance(rows,gpu){
+  return {g1Applicable:rows.filter(r=>r.g1?.applicable).length,kickApplicable:rows.filter(r=>r.kick?.applicable).length,
+    pass:(!gpu||gpu.pass)&&rows.every(r=>r.mfsFrames&&(!r.g1?.applicable||r.g1.pass)&&(!r.kick?.applicable||r.kick.pass))};
 }
 // §10.7: 影と円盤を除いた逃走背景で、表示輝度>.5の画素数を数える。
 export function world17Stars(capture,geometry){
@@ -249,7 +262,7 @@ async function world17ShaderChecks(engine){
       const rd=3.5+x/63*20.5,colorMix=(c.DISK_INNER/rd)**c.COLOR_POWER,
         warm=c.DISK_OUTER_COLOR.map((value,i)=>value+(c.DISK_INNER_COLOR[i]-value)*colorMix),primary=[.2,.5,.8];
       for(let c=0;c<3;c++)colorError=Math.max(colorError,Math.abs(pixels[(64+x)*4+c]-warm[c]));
-      const gain=c.MUSIC_BASE*(rd<c.KICK_RADIUS?1+c.KICK_GAIN*(1-smooth(c.DISK_INNER,c.KICK_RADIUS,rd)):1);
+      const inner=1-smooth(c.DISK_INNER,c.KICK_RADIUS,rd),gain=c.MUSIC_BASE*(1+(c.KICK_REST-1)*inner)*(1+c.KICK_GAIN*inner);
       kickError=Math.max(kickError,Math.abs(pixels[(64+x)*4+3]-gain));
       const n=pixels[(192+x)*4+2],streak=c.STREAK_FLOOR+(1-c.STREAK_FLOOR)*smooth(c.STREAK_LO,c.STREAK_HI,n),
         env=smooth(c.DISK_INNER,c.INNER_FADE,rd)*(1-smooth(c.OUTER_FADE,c.DISK_OUTER,rd));
@@ -271,7 +284,8 @@ async function world17ShaderChecks(engine){
       if(f<.075&&k>0)level=((32-k)/31)*(1-(.5+.5*smooth(0,.075,f)))+level*(.5+.5*smooth(0,.075,f));
       if(f>.925&&k<31)level=level*(1-.5*smooth(.925,1,f))+((30-k)/31)*.5*smooth(.925,1,f);
       if(!Number.isFinite(gains[x*4]))nonfinite++;
-      bandError=Math.max(bandError,Math.abs(gains[x*4]-(.45+2.2*level)));
+      const inner=1-smooth(c.DISK_INNER,c.KICK_RADIUS,rd);
+      bandError=Math.max(bandError,Math.abs(gains[x*4]-(c.MUSIC_BASE+c.MUSIC_GAIN*level)*(1+(c.KICK_REST-1)*inner)));
     }
     const glError=gl.getError();return {samples:384,periodicError,colorError,diskError,kickError,lodError,integrationError,bandError,nonfinite,glError,
       pass:!glError&&!nonfinite&&periodicError<.0001&&colorError<.001&&diskError<.004&&kickError<.004&&lodError<.001&&integrationError<.001&&bandError<.004};
@@ -335,10 +349,11 @@ async function main(){
         durationSec:shot.g1.durationSec,g1:shot.g1.median,kick:shot.kick,v14:shot.v14,png}));
     }
     const v14=options.types.includes('g-gargantua')?world17Acceptance(snapshot):null;
-    const summary={v14,shader,gpu,environment:hardware,shots:rows.map(({records,...row})=>row),consoleErrors:chrome.errors};
+    const live=world23LiveAcceptance(rows,gpu);
+    const summary={v14,shader,gpu,live,environment:hardware,shots:rows.map(({records,...row})=>row),consoleErrors:chrome.errors};
     await fs.writeFile(path.join(output,'report.json'),JSON.stringify(summary,null,2)+'\n');
-    if((v14&&!v14.pass)||(shader&&!shader.pass)||chrome.errors.length||rows.some(r=>!r.mfsFrames||(r.g1.applicable&&!r.g1.pass)))process.exitCode=1;
-    console.log(JSON.stringify({v14,shader,gpu}));
+    if((v14&&!v14.pass)||(shader&&!shader.pass)||chrome.errors.length||!live.pass)process.exitCode=1;
+    console.log(JSON.stringify({v14,shader,gpu,live}));
   }finally {if(chrome)await chrome.close();}
 }
 // ブラウザを起動せず§10の計測契約と非同期撮影を検証する。
@@ -356,31 +371,31 @@ async function unitChecks(){
     const shader=r.get('WORLD_GARGANTUA_FRAGMENT');assert.ok(!/SLAB_|DISK_LAYER|history|EMA|BEAM_|blackbody|SPIKE_|STAR_HALO/.test(shader));
     console.log('UW-55 plane=1 crossings=3 octaves=4 frequency=2.03 starFloor=0 starPeak=6 veil=.10');
   });
-  test('UW-56 WORLD-17 G-1は20標本/0.4秒・定数/空領域を拒否',()=>{
+  test('UW-56 WORLD-23 G-1は20標本/0.4秒・無分散は非適用・空領域を拒否',()=>{
     const rows=Array.from({length:21},(_,n)=>({tSec:7+n*.025,levels:Array.from({length:32},(_,b)=>(n+b)%9),
       luminance:Array.from({length:32},(_,b)=>2*((n+b)%9)),counts:new Array(32).fill(3)}));
     const result=world17Correlation(rows);assert.equal(result.median,1);assert.equal(result.pass,true);assert.equal(result.durationSec,.5);
     assert.equal(world17Correlation(rows.slice(0,2)).pass,false);assert.equal(world17Correlation(rows.map(r=>({...r,tSec:7}))).pass,false);
-    assert.equal(world17Correlation(rows.map(r=>({...r,levels:new Array(32).fill(1)}))).pass,false);
+    const constant=world17Correlation(rows.map(r=>({...r,levels:new Array(32).fill(1)})));assert.equal(constant.applicable,false);assert.equal(constant.pass,false);
     assert.equal(world17Correlation(rows.map(r=>({...r,counts:new Array(32).fill(0)}))).pass,false);
-    console.log('UW-56 samples=21 duration=.5 PearsonMedian=1 twoSamples/constant/emptyRejected=true');
+    console.log('UW-56 samples=21 duration=.5 PearsonMedian=1 constantApplicable=false twoSamples/emptyRejected=true');
   });
-  test('UW-57 WORLD-17 背景輝度>.5の150画素・境界/空測定拒否',()=>{
-    const c={width:151,height:1,rgba:new Uint8Array(604)},g={width:151,height:1,pixels:new Float32Array(604)};
-    c.rgba.fill(128);g.pixels.fill(1);assert.equal(world17Stars(c,g).pixels,151);
+  test('UW-57 WORLD-23 背景輝度>.5の30画素・境界/空測定拒否',()=>{
+    const c={width:31,height:1,rgba:new Uint8Array(124)},g={width:31,height:1,pixels:new Float32Array(124)};
+    c.rgba.fill(128);g.pixels.fill(1);assert.equal(world17Stars(c,g).pixels,31);
     c.rgba.fill(127,0,4);assert.equal(world17Stars(c,g).pass,true);
     c.rgba.fill(127,4,8);assert.equal(world17Stars(c,g).pass,false);
     g.pixels.fill(0);assert.equal(world17Stars(c,g).pixels,0);
     assert.equal(world17Stars({width:0,height:0,rgba:[]},{width:0,height:0,pixels:[]}).pass,false);
-    console.log('UW-57 pixels=151/150 pass 149/0 fail thresholdStrictlyGreater=.5');
+    console.log('UW-57 pixels=31/30 pass 29/0 fail thresholdStrictlyGreater=.5');
   });
-  test('UW-58 WORLD-17 実キックの画面35%・100ms実標本・無オンセットを拒否',()=>{
+  test('UW-58 WORLD-23 実キックの画面35%・100msは25%・無キックは非適用',()=>{
     const rows=Array.from({length:18},(_,i)=>({tSec:(54+i)/60,inner:i<6?.2:.272,innerCount:12,onset:i===6}));
     const result=world17RealKick(rows,1);assert.equal(result.pass,true);assert.ok(Math.abs(result.increase-.36)<1e-12);
-    assert.ok(Math.abs(result.at100msSec-1.1)<1e-12);assert.equal(world17RealKick(rows.map(r=>({...r,onset:false})),1).pass,false);
+    assert.ok(Math.abs(result.at100msSec-1.1)<1e-12);const noKick=world17RealKick(rows.map(r=>({...r,onset:false})),1);assert.equal(noKick.applicable,false);assert.equal(noKick.pass,false);
     assert.equal(world17RealKick(rows.map(r=>({...r,inner:.2})),1).pass,false);assert.equal(world17RealKick(rows.slice(0,12),1).pass,false);
     assert.equal(world17RealKick(rows.map(r=>({...r,innerCount:0})),1).pass,false);
-    console.log('UW-58 realKickSec=1 screenIncrease=.36 at100ms=1.1 missingOnset/100ms/ROIRejected=true');
+    console.log('UW-58 realKickSec=1 screenIncrease=.36 at100ms=1.1 missingOnsetApplicable=false missing100ms/ROIRejected=true');
   });
   test('UW-59 WORLD-17 上下明弧>.85・上弧は影半径40%以上・GL上下方向・影なし拒否',()=>{
     const w=101,h=101,c={width:w,height:h,rgba:new Uint8Array(w*h*4)},g={width:w,height:h,pixels:new Float32Array(w*h*4)};
