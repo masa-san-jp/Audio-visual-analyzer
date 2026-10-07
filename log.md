@@ -1,3 +1,31 @@
+## 2026-10-07 — [WORLD-19] g-gargantua モアレ・光子リング
+
+### 作業内容
+- `js/world/g-gargantua.js`: SSOT `doc/20261004-design-gargantua-v1.md` §10.10を実装。GRAZE_MIN=.05／LENS_DEMAG=23.0を追加し、diskSampleに正規化した光線方向ndirとサンプル時点のcrossings（0始まり）を渡す。既存fpへ1/max(abs(ndir.y),GRAZE_MIN)とpow(LENS_DEMAG,float(c))を掛けてからstreakFbmへ渡す。
+- `js/world/g-gargantua.js`: SUBSAMPLE_OFFSETをSUBSAMPLE_NEAR=.125／SUBSAMPLE_FAR=.375へ置換。リング帯域だけ半解像度の画素単位の(±.125,±.375)／(±.375,±.125)の8点を平均する。リング判定の中心光線と測定用alphaは既存どおり保持。CPUの描画経路に配列／オブジェクト／クロージャの生成を追加していない。
+- `tests/unit/world-gargantua.test.mjs`: UW-53を39定数・旧SUBSAMPLE_OFFSET廃止・8点平均へ更新。UW-62を追加し、製品GLSLから取り出したfpのスカラー式による数値検査、正規化方向／交差番号の受け渡し、8点すべてのオフセットと平均重み、リング帯域外の中心光線を検査する。
+- `log.md`: 本エントリを先頭に追加。
+
+### 検証
+- `node tests/run.mjs --unit`: 185件／184成功／0失敗／既存の想定U15-00スキップ1、25,771ms、終了コード0。`tests/output/report.json`にも結果を保存する既存ランナーを使用。
+- `node --test tests/unit/world-gargantua.test.mjs`: UW-48〜54とUW-62の8件／8成功／0失敗／0スキップ、92.588ms、終了コード0。UW-53で39定数を確認。UW-62でtravel=30の基準fp=.02133180196881958、grazing最大fp=.4266360393763916（20倍）、交差0/1/2の最大補正倍率20／460／10580を確認。正負の視線角で同値、abs(ndir.y)<=.05の4例で20倍の上限を確認。SSAA平均用8点／中心判定を含むリング追跡9本／平均重み.125。これらはCPUで評価した数値とGLSLソースの契約検査であり、実GPU／画像の測定値ではない。
+- 全JS/MJS `node --check`: 129件／129成功／0失敗、6,548.238ms、終了コード0。
+- 読み取り専用git/Node比較: HEADとの差分は定数4追加／旧定数1削除、diskSampleの2補正と引数、リングSSAAのみ。その他の定数・カメラ表・upsample以降のCPUクラスがHEADと完全一致。`git diff --check`成功。
+- 対象単体テストの初回は8件／7成功／1失敗、83.599875ms。UW-53の既存EMA禁止正規表現が新定数LENS_DEMAG中の文字列EMAを誤検知したため、EMA識別子／EMA_接頭辞の禁止へ修正して成功。製品の定数や受け入れ閾値は調整していない。
+- ブラウザテストの追加／変更なし。CODEX_ADDENDUM.mdのChrome禁止に従い、ブラウザ／実GLSLコンパイル／実画像／実GPU p95／file://／console確認は未実行。
+
+### spec.md 変更
+- なし。チケットの編集範囲に従いdoc/spec.md／README.md／撮影ハーネス／tests/browserは編集していない。開始時から変更済みの設計書も保持。
+
+### 備考
+- 実装: Codex gpt-6.1-sol high
+- 設計からの逸脱・定数調整なし。依頼末尾の「Do not stop for ambiguity: decide」に従って必要な実装上の選択を記録して進めた。
+- 判断: ndirは交差を検出した積分ステップのdirをnormalizeして渡す。cはplaneCrossingsではなく指定どおりdiskSample呼び出し時点のcrossingsで、合成後に増やす。8点の平均に中心光線は含めず、中心は既存のリング判定／直接像測定用alphaだけへ使う。
+- 判断: EMAの禁止検査はLENS_DEMAGの誤検知を除くため識別子境界へ修正し、EMA自体とEMA_接頭辞を引き続き禁止。既存のテストを削除／スキップしたり、閾値を緩和したりしていない。
+- レビュアー確認: §10.10のt=20／45で穴の真下の帯にモアレがないこと、光子リングが途切れない細い線に見えること、実GPU p95<=16msを確認すること。実GLSLのコンパイルとfile://直開き時のconsoleエラー0も確認が必要。実画像・実GPUの受け入れは未判定。
+- レビュアー確認: 範囲外の`tests/world/shoot-live.mjs`のworld17GpuFormulas（212／214行付近）はdiskSample(hit,travel)の旧2引数呼び出しがあり、新4引数への追従が必要。同ハーネスの§10.9以前の定数assertについてはWORLD-18ログも参照。§10.10が測定に指定するperf.mjsはこのworktreeに存在せず、オーナー側の測定スクリプトを確認すること。
+- 編集はこのworktree内の上記3ファイルのみ。commit／push／PR／Chrome起動は行っていない。
+
 ## 2026-10-07 — [WORLD-18] g-gargantua v1.4 構図・露出調整
 
 ### 作業内容

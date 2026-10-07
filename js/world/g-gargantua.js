@@ -7,6 +7,7 @@ const WORLD_GARGANTUA = Object.freeze({
   COLOR_POWER: 1.3, PALETTE_TINT: .15, PALETTE_GAIN: 1.6,
   STREAK_RADIAL: 60, STREAK_ANGULAR: 3.0, STREAK_TIME: .03,
   FBM_OCTAVES: 4, FBM_FREQUENCY: 2.03, LOD_HEIGHT: 540, LOD_START: .6, LOD_END: 2,
+  GRAZE_MIN: .05, LENS_DEMAG: 23.0,
   STREAK_FLOOR: .15, STREAK_LO: .30, STREAK_HI: .70, DISK_HDR: 3.0, INTENSITY_POWER: .8,
   INNER_FADE: 3.25, OUTER_FADE: 12, OPACITY_BASE: .45, OPACITY_STREAK: .5, OPACITY_MAX: .90,
   BAND_COUNT: 32, BAND_BLEND: .15, MUSIC_BASE: .45, MUSIC_GAIN: 2.2,
@@ -15,7 +16,7 @@ const WORLD_GARGANTUA = Object.freeze({
   EXPOSURE_BASE: .85, EXPOSURE_GAIN: .3, CAMERA_EASE_SECONDS: 4,
   SECOND_DROP_INC: -6, SWAY_DEGREES: 1.5, SWAY_SPEED: .07,
   DROP_GRAVITY: 2.1, DROP_HORIZON: 1.18, DROP_DISK_INNER: 3.4, GRAVITY_EASE_IN: 1.2, GRAVITY_EASE_OUT: 2,
-  RING_SAMPLE_MIN: 1.3, RING_SAMPLE_MAX: 3.2, SUBSAMPLE_OFFSET: .25,
+  RING_SAMPLE_MIN: 1.3, RING_SAMPLE_MAX: 3.2, SUBSAMPLE_NEAR: .125, SUBSAMPLE_FAR: .375,
   SECOND_DROP_DIST: 27, SECOND_DROP_SPEED: .09, SECOND_DROP_GAIN: 1.5,
   STAR_CELLS: 180, STAR_PROBABILITY: .03, STAR_POWER: 18, STAR_HDR: 6,
   STAR_RADIUS_PX: .6, STAR_REFERENCE_HEIGHT: 1080,
@@ -88,12 +89,16 @@ vec3 streakInput(float rd,float phi,float omega){
  float rot=phi-omega*music.w;
  return vec3(log(rd)*STREAK_RADIAL,cos(rot)*STREAK_ANGULAR,sin(rot)*STREAK_ANGULAR+music.w*STREAK_TIME);
 }
-vec4 diskSample(vec3 hit,float travel){
+vec4 diskSample(vec3 hit,float travel,vec3 ndir,int c){
  float rd=length(hit.xz),phi=atan(hit.z,hit.x);
  float omega=KEPLER_SPEED*pow(rd/DISK_INNER,KEPLER_POWER)*music.z;
  vec3 warm=mix(DISK_OUTER_COLOR,DISK_INNER_COLOR,pow(DISK_INNER/rd,COLOR_POWER));
  vec3 tint=mix(warm,warm*primary*PALETTE_GAIN,PALETTE_TINT);
- float fp=travel*radians(FOV)/LOD_HEIGHT,n=streakFbm(streakInput(rd,phi,omega),rd,fp);
+ float fp=travel*radians(FOV)/LOD_HEIGHT;
+ // §10.10: すれすれの視線は最大20倍、高次像は交差番号ごとに23倍の画素幅でLODを引く。
+ fp*=1./max(abs(ndir.y),GRAZE_MIN);
+ fp*=pow(LENS_DEMAG,float(c));
+ float n=streakFbm(streakInput(rd,phi,omega),rd,fp);
  float streak=STREAK_FLOOR+(1.-STREAK_FLOOR)*smoothstep(STREAK_LO,STREAK_HI,n);
  float env=smoothstep(gravity.z,gravity.z+INNER_FADE-DISK_INNER,rd)*(1.-smoothstep(OUTER_FADE,DISK_OUTER,rd));
  float I=DISK_HDR*env*streak*pow(DISK_INNER/rd,INTENSITY_POWER);
@@ -159,7 +164,7 @@ vec4 traceRay(vec2 uv,out float closest,out float directPhi,out float background
     if(planeCrossings==1&&crossings==0&&dot(hit.xz,camPos.xz)>0.&&dot(hit,dir)<0.){
      directRadius=rd;directPhi=atan(hit.z,hit.x);
     }
-    vec4 sampleValue=diskSample(hit,travel+length(segment)*fraction);
+    vec4 sampleValue=diskSample(hit,travel+length(segment)*fraction,normalize(dir),crossings);
     col+=alpha*sampleValue.rgb*sampleValue.a;alpha*=1.-sampleValue.a;crossings++;
    }
   }
@@ -176,12 +181,17 @@ void main(){
  float closest,phi,background;
  vec4 center=traceRay(vUv,closest,phi,background);
  if(closest>=RING_SAMPLE_MIN&&closest<=RING_SAMPLE_MAX){
-  vec2 delta=vec2(SUBSAMPLE_OFFSET)/(outputResolution*HALF_RESOLUTION);
+  // §10.10: 半解像度の画素単位で8点の回転格子を平均し、測定用alphaは中心光線を保つ。
+  vec2 delta=vec2(SUBSAMPLE_NEAR,SUBSAMPLE_FAR)/(outputResolution*HALF_RESOLUTION);
   float r,a,b;vec4 sum=traceRay(vUv+vec2(-delta.x,-delta.y),r,a,b);
   sum+=traceRay(vUv+vec2(delta.x,-delta.y),r,a,b);
   sum+=traceRay(vUv+vec2(-delta.x,delta.y),r,a,b);
   sum+=traceRay(vUv+vec2(delta.x,delta.y),r,a,b);
-  frag=vec4(sum.rgb*.25,center.a);
+  sum+=traceRay(vUv+vec2(-delta.y,-delta.x),r,a,b);
+  sum+=traceRay(vUv+vec2(delta.y,-delta.x),r,a,b);
+  sum+=traceRay(vUv+vec2(-delta.y,delta.x),r,a,b);
+  sum+=traceRay(vUv+vec2(delta.y,delta.x),r,a,b);
+  frag=vec4(sum.rgb*.125,center.a);
  }else frag=center;
 }`;
 const WORLD_GARGANTUA_UPSAMPLE_FRAGMENT = `#version 300 es
