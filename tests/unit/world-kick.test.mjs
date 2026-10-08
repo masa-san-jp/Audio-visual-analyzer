@@ -47,7 +47,7 @@ test('UW-69 WORLD-23 engine→post→uniform・全他タイプは0・ブルー�
   assert.ok(shader.includes('const float KICK_BLOOM = 0.80000000;'));
   const bloom=branch.match(/bloom\*GARGANTUA_BLOOM_STRENGTH[^;]+/)[0],veil=branch.match(/b3\*VEIL_GAIN[^;]+/)[0];
   assert.ok(branch.indexOf(veil)<branch.indexOf('c=aces('));
-  for(const [expr,sourceName,scale] of [[bloom,'bloom',.9],[veil,'b3',.1]]){
+  for(const [expr,sourceName,scale] of [[bloom,'bloom',C.BLOOM_STRENGTH],[veil,'b3',C.VEIL_GAIN]]){
     const value=new Function(sourceName,'GARGANTUA_BLOOM_STRENGTH','VEIL_GAIN','KICK_BLOOM','kick','return '+expr);
     for(const kick of [0,Math.exp(-.1/.18),1])close(value(2,C.BLOOM_STRENGTH,C.VEIL_GAIN,C.KICK_BLOOM,kick),2*scale*(1+.8*kick));
   }

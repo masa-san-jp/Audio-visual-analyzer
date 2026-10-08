@@ -57,7 +57,7 @@ test('UW-48 WORLD-30 §10.20 全6kind/7項目のショット表・区間内smoot
     for(let i=0;i<7;i++)assert.equal(analyzer.cameraShot[i],from[i]+(analyzer.cameraTarget[i]-from[i])*ease);
   }
   assert.equal(C.CAMERA_EASE_SECONDS,4);assert.equal(C.SWAY_DEGREES,1);assert.equal(C.PALETTE_TINT,.15);
-  assert.equal(C.MAX_STEPS,180);assert.equal(C.BLOOM_THRESHOLD,.55);assert.equal(C.BLOOM_STRENGTH,.90);
+  assert.equal(C.MAX_STEPS,180);assert.equal(C.BLOOM_THRESHOLD,.45);assert.equal(C.BLOOM_STRENGTH,1.4);
   console.log('UW-48 shotRows=6 fields=7 progressCases='+cases+' transitionCases=35 maxFloat32Error='+maxError+' easeSeconds=4 swayDegrees=1');
 });
 test('UW-49 WORLD-28 キックexp(-age/.18)・光速の筋pool8/寿命.7秒・連続イベント・無拍反応・再演',()=>{
@@ -132,10 +132,10 @@ test('UW-53 WORLD-20 §10.9〜10.11定数・廃止した層/EMA/BEAM/黒体/ス�
     COLOR_POWER:1.3,PALETTE_TINT:.15,STREAK_RADIAL:60,STREAK_ANGULAR:3,STREAK_TIME:.03,
     FBM_OCTAVES:4,FBM_FREQUENCY:2.03,LOD_HEIGHT:540,LOD_START:.6,LOD_END:2,
     GRAZE_MIN:.05,TURN_START:1.2,TURN_MAX_LOG:6.3,NOISE_MEAN:.5,SUBSAMPLE_NEAR:.125,SUBSAMPLE_FAR:.375,
-    STREAK_FLOOR:.15,STREAK_LO:.30,STREAK_HI:.70,DISK_HDR:3,INTENSITY_POWER:.8,
+    STREAK_FLOOR:.15,STREAK_LO:.30,STREAK_HI:.70,DISK_HDR:5.2,INTENSITY_POWER:.65,
     DISK_OUTER:20,OUTER_FADE:12,BAND_OUTER:14,STAR_CELLS:180,STAR_REFERENCE_HEIGHT:1080,
     OPACITY_BASE:.45,OPACITY_STREAK:.5,OPACITY_MAX:.90,STAR_RADIUS_PX:.6,STAR_PROBABILITY:.03,
-    STAR_HDR:6,STAR_POWER:18,BLOOM_THRESHOLD:.55,BLOOM_STRENGTH:.90,VEIL_GAIN:.10};
+    STAR_HDR:6,STAR_POWER:18,BLOOM_THRESHOLD:.45,BLOOM_STRENGTH:1.4,VEIL_GAIN:.18};
   for(const [name,value] of Object.entries(expected))assert.equal(C[name],value,name);
   assert.equal(C.SUBSAMPLE_OFFSET,undefined);
   assert.equal(C.LENS_DEMAG,undefined);
