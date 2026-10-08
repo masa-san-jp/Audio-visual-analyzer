@@ -616,3 +616,43 @@ sampleOpacity = clamp(env * (.55 + fil * .35), 0., .95)
   - LIGHT_STREAK_HDR = 14
   - LIGHT_STREAK_TAIL = 1.6
 - 実験用のコピーで撮影して確認した：白い細い筋が上の弧を横切り、下の光子リング側にも同時に映る。円盤の端を回るときには、端がぱっと光る。
+
+### 10.20 ブラックホールは不動にする。音楽は光と星に、展開はカメラのショットに（2026-10-08、オーナーの指摘）
+- オーナーの指摘：
+  - ブラックホール自体が音楽に合わせて動くのは変（そんなに細かく動く天体ではない）。本体は動かさず、光のリングの光や周りの星の動きが変化する方が良い。
+  - 曲の展開ごとに、近づく・離れるだけでなく、もっとダイナミックなアングルにしたい。
+- **廃止するもの**（ブラックホール本体を動かす演出）：
+  - §10.18 の鳴動（QUAKE_*）。
+  - §7 の重力の高まり（DROP_GRAVITY、DROP_HORIZON、DROP_DISK_INNER、GRAVITY_EASE_*、gravityAmount 関係）。
+  - gravity の uniform は、常に (GRAVITY, Rs, DISK_INNER) で一定にする。
+- **星の反応**：
+  - 高域の強さ `hi` = 上位 8 帯域（バンド配列の高域側 8 本）の bandsSmooth の平均。starfield の明るさに `(1. + STAR_HIGH_GAIN*hi)` を掛ける。STAR_HIGH_GAIN = 1.5。
+  - 新しい uniform `vec4 view2` の w 成分で送る（下記）。
+  - 瞬きは従来どおり。
+- **星の流れ（カメラの周回速度を音量で変える）**：
+  - `azim += orbitSpeed * clamp(1. + ORBIT_LOUD_GAIN*(loudness - .5), ORBIT_MIN, ORBIT_MAX) * dt`
+  - ORBIT_LOUD_GAIN = .8、ORBIT_MIN = .5、ORBIT_MAX = 1.6。loudness は既存の露出の計算と同じ `input.features.loudness.level`。
+  - 重力レンズで、星が穴の周りを流れる速さが、曲の盛り上がりで変わる。
+- **カメラのショット**（ロールとフレーミングを追加）：
+  - uniform `vec4 view2 = (roll, offX, offY, hi)`。単位はラジアン。
+  - traceRay で、まず `forward = normalize(-camPos)`、`right`、`up` を従来どおり作る。
+  - 次に `forward = normalize(forward + right*tan(offX) + up*tan(offY))` とし、そこから right と up を作り直す。
+  - 最後にロールを掛ける：`r2 = cos(roll)*right + sin(roll)*up`、`u2 = -sin(roll)*right + cos(roll)*up`。
+  - offX が正なら、ブラックホールは画面の左に寄る（視線を右へ振るため）。
+  - カメラ表を、区間の種類ごとに「始点→終点」の 7 項目にする：dist、inc（度）、roll（度）、offX（度）、offY（度）、周回速度（rad/s）、円盤係数。
+    - intro（真横から接近）：dist 60→38、inc 2→3、roll 0→0、offX 0→0、offY 0→0、周回 .010→.010、円盤 .6→.7
+    - build（下から上へのクレーン）：dist 36→28、inc -10→16、roll 0→-6、offX 0→6、offY 0→0、周回 .02→.04、円盤 .8→1.1
+    - drop（近距離の周回、傾けて片側に寄せる）：dist 27→25、inc 4→6、roll 8→10、offX 9→9、offY -2→-2、周回 .09→.09、円盤 1.35→1.35
+    - break（俯瞰）：dist 42→42、inc 38→46、roll 0→0、offX 0→0、offY 0→0、周回 .015→.015、円盤 .7→.7
+    - main（すれすれの真横、片側に寄せる）：dist 32→30、inc 1.2→1.8、roll -4→-4、offX -8→-8、offY 0→0、周回 .03→.03、円盤 1→1
+    - outro（引き）：dist 34→80、inc 6→24、roll 0→0、offX 0→0、offY 0→0、周回 .008→.008、円盤 .9→0
+  - 2 回目以降の drop（`variation >= 2`）：inc -6→-8（下から見上げる）、roll -10→-12、offX -9→-9。dist は 27 のまま、周回速度と円盤係数は drop の行のまま。従来の SECOND_DROP_* は、この行で置き換えて削除する。
+  - 左右の反転：同じ種類の区間が再び出てくるとき（`variation` が奇数）は、roll と offX の符号を反転する。
+  - 区間の切り替えは、従来どおり CAMERA_EASE_SECONDS = 4 秒の smoothstep で全 7 項目を補間する。区間の中では始点から終点へ線形に進め、smoothstep を掛ける。
+  - 揺れ（SWAY_*）は inc にだけ残し、SWAY_DEGREES = 1.0 とする。
+- 撮影ツール（shoot-live の world17Geometry、弧の計測など）が、カメラが原点を中心に向いていることを前提にしている場合は、view2 を反映した投影に直す。
+- 受け入れ条件（Opus が撮影して判定する）：
+  - 影の大きさが、どの時刻でも曲に合わせて変化しない。キックの前後で影の縁が動かない。
+  - 区間ごとに構図がはっきり異なる（7 つのショット）。
+  - 高域が強い区間で星が明るくなる。
+  - GPU の p95 ≤ 16ms。単体テストに合格する。
