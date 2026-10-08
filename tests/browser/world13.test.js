@@ -107,7 +107,7 @@ async function world13Shoot(typeId,tSec) {
         const capture=e.capture(),time=e.latestSec;if(capture.glError)throw new Error('capture GL error '+capture.glError);
         if(time!==previousTime){
           const regions=world13ReadAnnuli(e,capture),levels=Array.from({length:32},(_,i)=>e.type.bandUniforms[i*4]);
-          records.push({tSec:time,levels,...regions,...(typeof world14ExposureReport==='function'?{exposure:world14ExposureReport(capture)}:{}),kick:e.type.music[0],highOnsetPhase:e.type.highOnsetPhase,camera:Array.from(e.type.camera)});previousTime=time;
+          records.push({tSec:time,levels,...regions,...(typeof world14ExposureReport==='function'?{exposure:world14ExposureReport(capture)}:{}),kick:e.type.music[0],highOnsetPhase:e.type.highOnsetPhase,camera:Array.from(e.type.camera),view2:Array.from(e.type.view2)});previousTime=time;
         }
         if(time>=tSec){
           audio.pause();app.state='paused';e.onFrame=null;
@@ -143,6 +143,39 @@ if(typeof avzTest==='function')avzTest('BW-13-render','h² shader実コンパイ
     })()`);
     avzAssert.equal(result.glError,0);avzAssert.equal(result.beatError,0);avzAssert.ok(result.directPixels>0);avzAssert.equal(result.width,960);avzAssert.equal(result.height,540);
     avzAssert.equal(result.streaks,8);avzAssert.equal(result.serial,13);avzAssert.equal(result.phase,13);console.log('BW-13-render '+JSON.stringify(result));
+  }finally {iframe.contentWindow.__world?.engine?.dispose();iframe.remove();}
+},{timeoutMs:60000});
+// §10.20: キックで影の測地線は変えず、view2の構図と高域増光を実GPUで検査する。
+if(typeof avzTest==='function')avzTest('BW-13-view2','固定重力のキック前後・片寄せ/ロールの影・高域の星空倍率2.5',async()=>{
+  const iframe=document.createElement('iframe');iframe.src=new URL('../../world.html',location.href).href;
+  const ready=new Promise(resolve=>iframe.onload=resolve);document.body.appendChild(iframe);
+  try {
+    await ready;const child=iframe.contentWindow;avzAssert.ok(child.__world?.engine,child.__world?.error);
+    const result=child.eval(`(()=>{
+      const e=__world.engine,g=e.gpu,gl=g.gl,source=WORLD_GARGANTUA_FRAGMENT.replace(/void main\\(\\)\\{[\\s\\S]*$/,''),w=128,h=128;
+      const read=(body,view,kick)=>{
+        const program=g.program(source+body),target=g.target(w,h,true);g.bind(program,target);
+        gl.uniform4fv(g.texture(program,'camera'),[30,.05,0,1]);gl.uniform4fv(g.texture(program,'view2'),view);
+        gl.uniform3fv(g.texture(program,'gravity'),[WORLD_GARGANTUA.GRAVITY,WORLD_GARGANTUA.Rs,WORLD_GARGANTUA.DISK_INNER]);
+        gl.uniform4fv(g.texture(program,'music'),[kick,0,1,5]);gl.uniform3fv(g.texture(program,'secondary'),[.4,.2,.8]);
+        gl.uniform2f(g.texture(program,'outputResolution'),w,h);g.draw();
+        const pixels=new Float32Array(w*h*4);gl.readPixels(0,0,w,h,gl.RGBA,gl.FLOAT,pixels);g.releaseTarget(target);return pixels;
+      };
+      const body='void main(){float r,phi,bg,d;vec4 a[MAX_CROSSINGS],b[MAX_CROSSINGS];int count;bool escaped;vec3 dir;traceRay(vUv,r,phi,bg,d,a,b,count,escaped,dir);frag=vec4(r,phi,bg,d);}',
+        center=read(body,[0,0,0,0],0),pose=[.15,.09,-.02,0],before=read(body,pose,0),after=read(body,pose,1);
+      let geometryError=0,shadowCount=0,shadowX=0,centerCount=0,centerX=0;
+      for(let i=0;i<before.length;i++){geometryError=Math.max(geometryError,Math.abs(before[i]-after[i]));
+        if(i%4===0&&before[i]<1){shadowCount++;shadowX+=(i/4)%w;}
+        if(i%4===0&&center[i]<1){centerCount++;centerX+=(i/4)%w;}}
+      const starsBody='void main(){vec2 p=vUv*2.-1.;frag=vec4(starfield(normalize(vec3(p,1))),1);}',
+        low=read(starsBody,[0,0,0,0],0),high=read(starsBody,[0,0,0,1],0);
+      let gainError=0,brightSamples=0;
+      for(let i=0;i<low.length;i++)if(i%4!==3){gainError=Math.max(gainError,Math.abs(high[i]-low[i]*2.5));if(low[i]>.01)brightSamples++;}
+      return {geometryError,shadowCount,centerCount,shadowX:shadowX/shadowCount,centerX:centerX/centerCount,gainError,brightSamples,glError:gl.getError()};
+    })()`);
+    avzAssert.equal(result.glError,0);avzAssert.equal(result.geometryError,0);avzAssert.ok(result.shadowCount>0&&result.centerCount>0);
+    avzAssert.ok(result.shadowX<result.centerX,'正offXは影を左へ投影');avzAssert.ok(result.gainError<.00001);avzAssert.ok(result.brightSamples>0);
+    console.log('BW-13-view2 '+JSON.stringify(result));
   }finally {iframe.contentWindow.__world?.engine?.dispose();iframe.remove();}
 },{timeoutMs:60000});
 if(typeof avzTest==='function')avzTest('BW-13-kick-gpu','キック直後0.1秒の内側直接像≥40%・1080p GPU p95≤16ms',async()=>{

@@ -68,14 +68,33 @@ export function world17Stars(capture,geometry){
   }
   return {pixels,backgroundPixels,threshold:WORLD17_CHECKS.STAR_THRESHOLD,pass:pixels>=WORLD17_CHECKS.STAR_PIXELS};
 }
-// 中心を含む地平面像の面積から半径を測り、明弧のピークと§10.8の上弧の厚みを判定する。
+// §10.20: 製品の視線オフセット→基底再計算→ロールと同じ順で撮影用の基底を作る。
+export function world17View(camera,view2){
+  const norm=v=>{const l=Math.hypot(...v);return v.map(x=>x/l);},
+    cross=(a,b)=>[a[1]*b[2]-a[2]*b[1],a[2]*b[0]-a[0]*b[2],a[0]*b[1]-a[1]*b[0]];
+  const forward=[-Math.cos(camera[1])*Math.cos(camera[2]),-Math.sin(camera[1]),-Math.cos(camera[1])*Math.sin(camera[2])],
+    right=norm(cross(forward,[0,1,0])),up=cross(right,forward),
+    f=norm(forward.map((x,i)=>x+right[i]*Math.tan(view2[1])+up[i]*Math.tan(view2[2]))),
+    r=norm(cross(f,[0,1,0])),u=cross(r,f),co=Math.cos(view2[0]),si=Math.sin(view2[0]);
+  return {forward,right,up,f,r:r.map((x,i)=>co*x+si*u[i]),u:u.map((x,i)=>-si*r[i]+co*x)};
+}
+// 原点を向く旧画面の画素オフセットを、view2を反映した画面へ透視投影する。
+export function world17Project(view,width,height,dx,dy){
+  const focal=height/(2*Math.tan(22*Math.PI/360)),
+    d=view.forward.map((x,i)=>x+view.right[i]*dx/focal+view.up[i]*dy/focal),
+    dot=a=>a.reduce((sum,x,i)=>sum+x*d[i],0),z=dot(view.f);
+  return {x:width/2+focal*dot(view.r)/z,y:height/2+focal*dot(view.u)/z};
+}
+// 投影した穴を含む地平面像の面積から半径を測り、元のカメラ基底に沿って上下弧を測る。
 export function world17Arcs(capture,geometry,horizon){
   const w=capture.width,h=capture.height,p=capture.rgba,n=w*h,queue=new Uint32Array(n),seen=new Uint8Array(n);
   const Y=(x,y)=>{const o=(y*w+x)*4;return (.2126*p[o]+.7152*p[o+1]+.0722*p[o+2])/255;};
   const dark=(x,y)=>{const o=(Math.floor(y*geometry.height/h)*geometry.width+Math.floor(x*geometry.width/w))*4;
     return geometry.pixels[o+2]<horizon;};
-  const cx=Math.floor(w/2),cy=Math.floor(h/2);let head=0,tail=0;
-  if(dark(cx,cy)){queue[tail++]=cy*w+cx;seen[cy*w+cx]=1;}
+  const view=geometry.view;
+  const project=(dx,dy)=>view?world17Project(view,w,h,dx,dy):{x:w/2+dx,y:h/2+dy};
+  const center=project(0,0),cx=Math.floor(center.x),cy=Math.floor(center.y);let head=0,tail=0;
+  if(cx>=0&&cx<w&&cy>=0&&cy<h&&dark(cx,cy)){queue[tail++]=cy*w+cx;seen[cy*w+cx]=1;}
   while(head<tail){const pos=queue[head++],x=pos%w,y=Math.floor(pos/w);
     for(const [dx,dy] of [[1,0],[-1,0],[0,1],[0,-1]]){
       const nx=x+dx,ny=y+dy;if(nx<0||nx>=w||ny<0||ny>=h)continue;const i=ny*w+nx;
@@ -83,10 +102,10 @@ export function world17Arcs(capture,geometry,horizon){
     }
   }
   const radius=Math.sqrt(tail/Math.PI),upper=[],lower=[];let upperPeak=0,lowerPeak=0;
-  if(radius>=1)for(let x=Math.max(0,Math.ceil(cx-radius*.5));x<=Math.min(w-1,Math.floor(cx+radius*.5));x++){
+  if(radius>=1)for(let dx=Math.ceil(-radius*.5);dx<=Math.floor(radius*.5);dx++){
     for(const sign of [-1,1]){let run=0,best=0;
       for(let d=1;d<=Math.ceil(radius*3);d++){
-        const y=cy+sign*d;if(y<0||y>=h)break;
+        const point=project(dx,sign*d),x=Math.floor(point.x),y=Math.floor(point.y);if(x<0||x>=w||y<0||y>=h)break;
         const o=(Math.floor(y*geometry.height/h)*geometry.width+Math.floor(x*geometry.width/w))*4;
         // 直接像と逃走背景を除き、地平面外を通る曲がった円盤像だけで弧の明るさを測る。
         const arc=geometry.pixels[o]===0&&geometry.pixels[o+2]>=horizon&&geometry.pixels[o+3]<.5;
@@ -163,11 +182,11 @@ function world17Geometry(engine,state){
   try {
     g.bind(program,target);gl.uniform4fv(g.texture(program,'bands[0]'),state.bands);
     gl.uniform3fv(g.texture(program,'primary'),e.score.song.palette.primary);gl.uniform3fv(g.texture(program,'secondary'),e.score.song.palette.secondary);
-    gl.uniform4fv(g.texture(program,'camera'),state.camera);gl.uniform4fv(g.texture(program,'music'),state.music);
+    gl.uniform4fv(g.texture(program,'camera'),state.camera);gl.uniform4fv(g.texture(program,'view2'),state.view2);gl.uniform4fv(g.texture(program,'music'),state.music);
     gl.uniform3fv(g.texture(program,'gravity'),state.gravity);gl.uniform4fv(g.texture(program,'streaks[0]'),state.streaks);
     gl.uniform2f(g.texture(program,'outputResolution'),e.canvas.width,e.canvas.height);g.draw();
     const pixels=new Float32Array(target.width*target.height*4);gl.readPixels(0,0,target.width,target.height,gl.RGBA,gl.FLOAT,pixels);
-    if(gl.getError())throw new Error('geometry GL error');return {pixels,width:target.width,height:target.height};
+    if(gl.getError())throw new Error('geometry GL error');return {pixels,width:target.width,height:target.height,view:world17View(state.camera,state.view2)};
   }finally {g.releaseTarget(target);}
 }
 // world12/13Shootをこのticketの計測経路へ差し替える（製品と他ticketのテストファイルは編集しない）。
@@ -193,7 +212,7 @@ async function world12Shoot(typeId,tSec){
           // 描画されたフレームの時刻とuniformを転送前に固定する。
           queued.push({row,pixels:world17QueuePixels(e)});
           if(time>=tSec&&firstTime===null){
-            firstTime=time;firstState=gargantua?{camera:a.camera.slice(),music:a.music.slice(),gravity:a.gravity.slice(),streaks:a.streaks.slice(),bands:a.bandUniforms.slice()}:null;
+            firstTime=time;firstState=gargantua?{camera:a.camera.slice(),view2:a.view2.slice(),music:a.music.slice(),gravity:a.gravity.slice(),streaks:a.streaks.slice(),bands:a.bandUniforms.slice()}:null;
             // 遅れた初回標本では再生を止め、finallyで破棄して撮影全体をやり直す。
             if(firstTime-tSec>c.LAG_MAX_SECONDS){audio.pause();app.state='paused';e.onFrame=null;resolveShot();return;}
           }
@@ -293,7 +312,7 @@ async function world17ShaderChecks(engine){
 // §10.7の指定時刻をrenderAtで正確に復元し、実音撮影と別に数値条件の画像を残す。
 async function world17RenderCheck(engine){
   const e=engine;e.selectType('g-gargantua',true);await e.renderAt(WORLD17_CHECKS.ARC_TIME);
-  const a=e.type,capture=e.capture(),state={camera:a.camera,music:a.music,gravity:a.gravity,streaks:a.streaks,bands:a.bandUniforms};
+  const a=e.type,capture=e.capture(),state={camera:a.camera,view2:a.view2,music:a.music,gravity:a.gravity,streaks:a.streaks,bands:a.bandUniforms};
   if(capture.glError)throw new Error('renderAt capture GL error');
   const geometry=world17Geometry(e,state);
   const canvas=document.createElement('canvas');canvas.width=capture.width;canvas.height=capture.height;
@@ -303,7 +322,7 @@ async function world17RenderCheck(engine){
   return {requestedSec:WORLD17_CHECKS.ARC_TIME,width:capture.width,height:capture.height,
     stars:world17Stars(capture,geometry),arcs:world17Arcs(capture,geometry,a.gravity[1]),png:canvas.toDataURL('image/png')};
 }
-const browserFunctions=[world17Median,world17Correlation,world17RealKick,world17Stars,world17Arcs,world17Acceptance,
+const browserFunctions=[world17View,world17Project,world17Median,world17Correlation,world17RealKick,world17Stars,world17Arcs,world17Acceptance,
   world17ShaderChecks,world17RenderCheck,world21DrainGpu,world17Seek,world17QueuePixels,world17ReadPixels,world17ReleasePixels,world17Geometry,world12Shoot,world13Shoot];
 export const world17BrowserSource='const WORLD17_CHECKS='+JSON.stringify(WORLD17_CHECKS)+';\nconst WORLD21_DRAIN_BUFFER=new Uint8Array(4);\n'+browserFunctions.map(f=>f.toString().replace(/^export /,'')).join('\n');
 async function main(){
@@ -410,6 +429,25 @@ async function unitChecks(){
     assert.equal(world17Arcs(c,g,1).pass,false,'厚みは輝度>.5の連続画素だけを数える');
     g.pixels.fill(4);assert.equal(world17Arcs(c,g,1).pass,false);
     console.log('UW-59 shadowRadius='+bright.shadowRadiusPx+' upperThickness=5 lowerThickness=1 upperRatio='+bright.upperRatio+' thinRatio='+thin.upperRatio+' brightPeak='+bright.upperPeak+' dimPeak='+216/255);
+  });
+  test('UW-83 WORLD-30 片寄せ/ロール後の影を起点に弧を計測・画面中央が背景でも有効',()=>{
+    const w=201,h=201,view=world17View([30,.05,.7,1],[10*Math.PI/180,3*Math.PI/180,-Math.PI/180,0]),
+      capture={width:w,height:h,rgba:new Uint8Array(w*h*4)},geometry={width:w,height:h,pixels:new Float32Array(w*h*4),view},
+      focal=h/(2*Math.tan(22*Math.PI/360)),dot=(a,b)=>a.reduce((sum,x,i)=>sum+x*b[i],0);
+    let shadowPixels=0;
+    for(let y=0;y<h;y++)for(let x=0;x<w;x++){
+      const d=view.f.map((v,i)=>v+view.r[i]*(x+.5-w/2)/focal+view.u[i]*(y+.5-h/2)/focal),
+        z=dot(d,view.forward),dx=focal*dot(d,view.right)/z,dy=focal*dot(d,view.up)/z,o=(y*w+x)*4,
+        dark=Math.hypot(dx,dy)<=10;
+      geometry.pixels[o+2]=dark?.9:4;if(dark)shadowPixels++;
+      if(Math.abs(dx)<=7&&((dy>=20&&dy<27)||(dy>=-21&&dy< -19)))capture.rgba.fill(217,o,o+3);
+    }
+    assert.equal(geometry.pixels[(100*w+100)*4+2],4,'画面中央は影ではない');
+    const result=world17Arcs(capture,geometry,1);assert.equal(result.pass,true);assert.equal(result.shadowPixels,shadowPixels);
+    assert.ok(result.upperThicknessPx>=6);assert.ok(result.lowerThicknessPx>=1);
+    const noView=world17Arcs(capture,{...geometry,view:null},1);assert.equal(noView.pass,false);
+    console.log('UW-83 shiftedRolledShadowPixels='+result.shadowPixels+' shadowRadius='+result.shadowRadiusPx+
+      ' upperThickness='+result.upperThicknessPx+' lowerThickness='+result.lowerThicknessPx+' upperRatio='+result.upperRatio+' centeredAssumptionRejected=true');
   });
   test('UW-60 WORLD-17 seek listener先行・seeked/first-rAFを待つ',async()=>{
     const events=new Map(),order=[];let time=2,seeking=false;

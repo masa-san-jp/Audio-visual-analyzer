@@ -1,3 +1,37 @@
+## 2026-10-08 — [WORLD-30] ブラックホール不動・星の反応・カメラショット
+
+### 作業内容
+- `js/world/g-gargantua.js`: 設計書 `doc/20261004-design-gargantua-v1.md` §10.20を実装。QUAKE_*、DROP_GRAVITY/HORIZON/DISK_INNER、GRAVITY_EASE_*、gravityAmount関係、SECOND_DROP_*を撤去。gravityはresetで(GRAVITY, Rs, DISK_INNER)=(1.5,1,3)へ設定し、stepで変調しない。キック包絡・光速の筋は保持。
+- `js/world/g-gargantua.js`: STAR_HIGH_GAIN=1.5、ORBIT_LOUD_GAIN=.8、ORBIT_MIN=.5、ORBIT_MAX=1.6、SWAY_DEGREES=1.0を指定名/値で共有定数に設定。高域側bandsSmooth[24..31]の生平均をview2.wへ格納し、starfieldの戻り値へ指定倍率を掛ける。瞬きと露出式を保持し、周回積分へ音量倍率のclampを追加。
+- `js/world/g-gargantua.js`: 6kindのカメラ表を7項目の始点/終点へ更新。第2回以降のdropはdist=27、inc=-6→-8、roll=-10→-12、offX=-9へ置換し、周回/円盤係数はdrop表のまま。再登場奇数variationでroll/offXを反転。区間内progressと区間切替4秒の双方にsmoothstepを適用し、全7項目を補間。view2の固定バッファ、location、uniform転送を追加。traceRayでは視線オフセット→right/up再計算→ロールの順に基底を作る。
+- `tests/unit/world-gargantua.test.mjs`: UW-48を新ショット表/全項目補間へ更新、UW-52のsurge検証とUW-79のquake検証を固定重力の区間切替/キック/再演へ置換。UW-53/78の廃止定数・旧starfield式の参照を同期。UW-80（variation）、UW-81（音量clamp/高域8本平均）、UW-82（製品GLSLのview2式をCPU評価/撮影投影の往復）を追加。光速の筋300ケースと既存の閾値は保持。
+- `tests/world/shoot-live.mjs`: world17Geometryのview2転送と撮影時のview2保存を追加。world17View/world17Projectで製品と同じ基底を計算し、world17Arcsは穴の投影位置から影を抽出し、元のカメラ基底の上下をview2画面へ投影して弧を測る。UW-83で画面中央が背景となる片寄せ/ロールの合成画素を検証。既存の撮影時刻・合否閾値は変更なし。
+- `tests/browser/world13.test.js`: 撮影記録へview2を追加。BW-13-view2を記述し、実GLSLのキック前後の幾何一致、正offXによる左寄せ、hi=0→1の星空倍率2.5、GLエラー0を検証する。
+- `log.md`: 本エントリを先頭に追加。
+
+### 検証
+- `node tests/run.mjs --unit`: 203件／202成功／0失敗／既存U15-00の想定スキップ1、26,529ms、終了コード0。
+- `node --test tests/unit/world-gargantua.test.mjs`: 最終20件／20成功／0失敗／0スキップ、97.925625ms、終了コード0。作業途中の初回は19件／16成功／3失敗、99.651458ms（旧starfield式assert、廃止QUAKE定数assert、新variation期待値の符号付き0）。旧参照を更新し、variationは補間のFloat64丸めを考慮して誤差<1e-14で検証した。
+- `node tests/world/shoot-live.mjs --unit`: 10件／10成功／0失敗／0スキップ、40.434917ms、終了コード0。
+- 全JS/MJS `node --check`: 130件／130成功／0失敗、6,764.282ms、Node v26.7.0、終了コード0。`git diff --check`: 成功。
+- UW-48: 表6行×7項目、区間内30ケース、遷移35項目。最大Float32誤差2.384185793236071e-8、ease=4秒、inc揺れ=1度。
+- UW-52/79: 区間/時刻42ケース、キック48ケースでgravity=(1.5,1,3)固定、重力差0、reset再演誤差0。キック包絡の最大誤差2.4057007830258215e-8。
+- UW-80: 6kind×variation1..5×progress4点=120ケース。初回は表どおり、第2dropの円盤係数1.35、3/5回目で左右反転を確認。
+- UW-81: 音量7ケース（範囲外を含む）で周回倍率clamp=.5..1.6、azim指定式の誤差0、dt=0の変化0。高域8本平均=.4375、星空倍率=1.65625。
+- UW-82: 8姿勢×3azim×2縦横比×9光線=432ケース、撮影投影と製品GLSLのCPU評価の最大光線誤差2.220446049250313e-16。1280×720でoffX=+9度の穴中心x=346.66576892603086（中央x=640）、ロール90度で右方向が画面下へ向くことを確認。
+- UW-83: 片寄せ/ロールの合成影317画素、影半径10.045109950630787画素、上弧厚み7/下弧2、上弧比.6968564838417156。中央を起点とする旧前提では失敗し、view2投影では成功。
+- 上記はCPU/合成画素の測定。新規BW-13-view2、更新した撮影記録・world17Geometry/world17Arcs/実音撮影・既存ブラウザスイートはChrome禁止に従い未実行。実GPU p95≤16ms、7ショットの見た目、実画像のキック前後の影の縁、file://コンソール確認は未測定。
+
+### spec.md 変更
+- なし。依頼で指定された5ファイルのみ編集し、README/spec/設計書は変更していない。
+
+### 備考
+- 判断: 「同じ種類の区間が再び出てくるとき（variationが奇数）」は、初回variation=1を除き3・5…に左右反転を適用すると解釈。第2dropの行へ置換してから符号を反転する。
+- 判断: 区間内は正規化した線形時刻pへsmoothstepを掛けて始点→終点を補間し、切替時は従来の4秒smoothstepを別に適用。揺れを含まない全7項目のcameraShotを遷移元に使い、incの揺れを重複させない。
+- 判断: starfieldの明るさへの倍率という指定に従い、星と既存の薄い背景を合成した戻り値全体へ高域倍率を掛ける。高域平均はWorldBandAnalyzerの正規化後levelを使わず、生のbandsSmoothを使う。
+- 判断: 弧の上下は元のカメラのup/rightに沿う測定点を新構図へ透視投影する。影の面積由来の半径・測定閾値・直接像/背景除外は保持。中央構図の合成テストにはviewなしの従来位置を許容する。
+- 制約/逸脱: 設計の定数/式を独自調整していない。初回反転などの曖昧さは上記の通り記録して継続。一般ガイドのREADME/spec更新と全ブラウザ実行は、今回の許可ファイル/Chrome禁止を優先して実施しない。実装の毎フレーム経路に新たな配列/オブジェクト/クロージャ確保なし。外部ライブラリ/build/npm追加なし、ネットワーク/Chrome/commit/push/PRなし。作業用出力はworktree内に置き、記録後に削除。
+
 ## 2026-10-08 — [WORLD-29] §10.19 テスト追従
 
 ### 作業内容

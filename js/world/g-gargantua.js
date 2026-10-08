@@ -16,23 +16,24 @@ const WORLD_GARGANTUA = Object.freeze({
   LIGHT_STREAK_COUNT: 8, LIGHT_STREAK_INNER: 5.5, LIGHT_STREAK_OUTER: 9,
   LIGHT_STREAK_LAP: .35, LIGHT_STREAK_SPEED: 2*Math.PI/.35, LIGHT_STREAK_TAIL: 1.6,
   LIGHT_STREAK_WIDTH: .08, LIGHT_STREAK_LOD: 1.5, LIGHT_STREAK_LIFE: .7, LIGHT_STREAK_HDR: 14,
-  QUAKE_GAIN: .03, QUAKE_HZ: 9,
   EXPOSURE_BASE: .85, EXPOSURE_GAIN: .3, CAMERA_EASE_SECONDS: 4,
-  SECOND_DROP_INC: -6, SWAY_DEGREES: 1.5, SWAY_SPEED: .07,
-  DROP_GRAVITY: 2.1, DROP_HORIZON: 1.18, DROP_DISK_INNER: 3.4, GRAVITY_EASE_IN: 1.2, GRAVITY_EASE_OUT: 2,
+  SWAY_DEGREES: 1.0, SWAY_SPEED: .07,
+  STAR_HIGH_GAIN: 1.5, ORBIT_LOUD_GAIN: .8, ORBIT_MIN: .5, ORBIT_MAX: 1.6,
   RING_SAMPLE_MIN: 1.3, RING_SAMPLE_MAX: 3.2, SUBSAMPLE_NEAR: .125, SUBSAMPLE_FAR: .375,
-  SECOND_DROP_DIST: 27, SECOND_DROP_SPEED: .09, SECOND_DROP_GAIN: 1.25,
   STAR_CELLS: 180, STAR_PROBABILITY: .03, STAR_POWER: 18, STAR_HDR: 6,
   STAR_RADIUS_PX: .6, STAR_REFERENCE_HEIGHT: 1080,
   TWINKLE_BASE: .75, TWINKLE_GAIN: .25, TWINKLE_ONSET: 1.7,
   MILKY_WAY_MAX: .035, MILKY_WAY_OCTAVES: 5, MILKY_WAY_WIDTH: .18, MILKY_WAY_TINT: .4, BACKGROUND_MAX: .04,
   BLOOM_THRESHOLD: .55, BLOOM_STRENGTH: .90, VEIL_GAIN: .10
 });
-// 各行はdist始/終、inc始/終、周回速度始/終、円盤係数始/終。incは度。
+// 各行はdist、inc、roll、offX、offY、周回速度、円盤係数の始/終。角度は度（§10.20）。
 const WORLD_GARGANTUA_CAMERA = Object.freeze({
-  intro: [50,38,2,2,.010,.010,.6,.6], build: [40,32,2,8,.020,.05,.8,1.1],
-  drop: [30,30,3,3,.07,.07,1.35,1.35], break: [36,36,20,20,.012,.012,.7,.7],
-  outro: [34,70,6,6,.008,.008,.9,0], main: [34,34,3,3,.03,.03,1,1]
+  intro: [60,38,2,3,0,0,0,0,0,0,.010,.010,.6,.7],
+  build: [36,28,-10,16,0,-6,0,6,0,0,.02,.04,.8,1.1],
+  drop: [27,25,4,6,8,10,9,9,-2,-2,.09,.09,1.35,1.35],
+  break: [42,42,38,46,0,0,0,0,0,0,.015,.015,.7,.7],
+  main: [32,30,1.2,1.8,-4,-4,-8,-8,0,0,.03,.03,1,1],
+  outro: [34,80,6,24,0,0,0,0,0,0,.008,.008,.9,0]
 });
 // worldHash(prefix + serial, seed)と同じFNV列を数値で作り、描画経路の文字列確保を避ける。
 function worldGargantuaEventHash(prefix, serial, seed) {
@@ -56,6 +57,7 @@ in vec2 vUv;
 uniform vec4 bands[32];
 uniform vec3 primary, secondary;
 uniform vec4 camera; // dist、inc(rad)、azim、円盤係数
+uniform vec4 view2; // roll(rad)、offX(rad)、offY(rad)、高域8帯域の平均
 uniform vec4 music; // キック包絡、高域位相、BPM速度、時刻
 uniform vec4 streaks[8]; // 半径、初期角度、誕生時刻、回転方向（+1固定）
 uniform vec2 outputResolution;
@@ -162,15 +164,19 @@ vec3 starfield(vec3 d){
  float cloud=milkyFbm(d*3.);
  float belt=exp(-pow(dot(d,beltNormal)/MILKY_WAY_WIDTH,2.));
  vec3 milk=secondary*MILKY_WAY_TINT*min(MILKY_WAY_MAX,cloud*belt*MILKY_WAY_MAX);
- return stars+min(vec3(BACKGROUND_MAX),milk);
+ return (stars+min(vec3(BACKGROUND_MAX),milk))*(1.+STAR_HIGH_GAIN*view2.w);
 }
 // §10.16: 陰影計算を遅らせ、手前から奥の交点と逃走方向だけを記録する。
 void traceRay(vec2 uv,out float closest,out float directPhi,out float background,out float directRadius,
  out vec4 hitA[MAX_CROSSINGS],out vec4 hitB[MAX_CROSSINGS],out int hitCount,out bool escaped,out vec3 escapeDir){
  vec3 camPos=cameraPosition();
  vec3 forward=normalize(-camPos),right=normalize(cross(forward,vec3(0,1,0))),up=cross(right,forward);
+ // §10.20: 視線をずらして基底を作り直し、その後にロールする。
+ forward=normalize(forward+right*tan(view2.y)+up*tan(view2.z));
+ right=normalize(cross(forward,vec3(0,1,0)));up=cross(right,forward);
+ vec3 r2=cos(view2.x)*right+sin(view2.x)*up,u2=-sin(view2.x)*right+cos(view2.x)*up;
  vec2 p=(uv*2.-1.)*vec2(outputResolution.x/outputResolution.y,1.)*tan(radians(FOV)*.5);
- vec3 pos=camPos,dir=normalize(forward+right*p.x+up*p.y),angular=cross(pos,dir),ndPrev=dir;
+ vec3 pos=camPos,dir=normalize(forward+r2*p.x+u2*p.y),angular=cross(pos,dir),ndPrev=dir;
  float h2=dot(angular,angular),travel=0.,turn=0.;int crossings=0,planeCrossings=0;
  escaped=false;closest=length(pos);directPhi=0.;background=0.;directRadius=0.;hitCount=0;
  // 未使用の交点も初期化し、mainの一様な微分計算で未定義値を読まない。
@@ -266,15 +272,15 @@ class WorldGargantuaAnalyzer extends WorldBandAnalyzer {
   constructor() {
     super();this.id='g-gargantua';this.label='ブラックホール';
     this.statelessRender=true; // フレーム間のGPU履歴を持たない（設計 §10.12）。
-    this.camera=new Float32Array(4);this.cameraFrom=new Float64Array(4);this.cameraTarget=new Float64Array(4);
+    this.camera=new Float32Array(4);this.view2=new Float32Array(4);this.cameraFrom=new Float64Array(7);this.cameraTarget=new Float64Array(7);this.cameraShot=new Float64Array(7);
     this.gravity=new Float32Array(3);this.music=new Float32Array(4);this.streaks=new Float32Array(WORLD_GARGANTUA.LIGHT_STREAK_COUNT*4);
     this.reset();
   }
   reset() {
     super.reset();if(!this.camera)return;
-    this.camera.fill(0);this.cameraFrom.fill(0);this.cameraTarget.fill(0);this.music.fill(0);
+    this.camera.fill(0);this.cameraFrom.fill(0);this.cameraTarget.fill(0);this.cameraShot.fill(0);this.view2.fill(0);this.music.fill(0);
     this.streaks.fill(0);for(let i=0;i<WORLD_GARGANTUA.LIGHT_STREAK_COUNT;i++)this.streaks[i*4+2]=-100;
-    this.baseInclination=0;this.gravityAmount=0;this.gravityFrom=0;this.gravityTarget=0;this.gravityChangedSec=0;
+    this.baseInclination=0;
     this.gravity[0]=WORLD_GARGANTUA.GRAVITY;this.gravity[1]=WORLD_GARGANTUA.Rs;this.gravity[2]=WORLD_GARGANTUA.DISK_INNER;
     this.section=null;this.sectionChangedSec=0;this.azim=0;this.orbitSpeed=0;this.streakSerial=0;this.highOnsetPhase=0;
     this.lastKick=-100;this.lastEventSec=-1;this.exposureMultiplier=WORLD_GARGANTUA.EXPOSURE_BASE;
@@ -282,7 +288,7 @@ class WorldGargantuaAnalyzer extends WorldBandAnalyzer {
   init(gpu) {
     super.init(gpu);this.program=gpu.program(WORLD_GARGANTUA_FRAGMENT);
     this.bandLoc=gpu.texture(this.program,'bands[0]');this.primaryLoc=gpu.texture(this.program,'primary');this.secondaryLoc=gpu.texture(this.program,'secondary');
-    this.gravityLoc=gpu.texture(this.program,'gravity');this.cameraLoc=gpu.texture(this.program,'camera');this.musicLoc=gpu.texture(this.program,'music');
+    this.gravityLoc=gpu.texture(this.program,'gravity');this.cameraLoc=gpu.texture(this.program,'camera');this.view2Loc=gpu.texture(this.program,'view2');this.musicLoc=gpu.texture(this.program,'music');
     this.streakLoc=gpu.texture(this.program,'streaks[0]');this.outputLoc=gpu.texture(this.program,'outputResolution');
     this.upsample=gpu.program(WORLD_GARGANTUA_UPSAMPLE_FRAGMENT);this.sourceLoc=gpu.texture(this.upsample,'source');
     this.resize(gpu.gl.canvas.width,gpu.gl.canvas.height);
@@ -298,31 +304,29 @@ class WorldGargantuaAnalyzer extends WorldBandAnalyzer {
     this.colors.set(input.song.palette.primary,0);this.colors.set(input.song.palette.secondary,3);
     const s=input.engine.score.sections[input.engine.sectionIndex],t=input.tSec,c=WORLD_GARGANTUA;
     const p=Math.max(0,Math.min(1,(t-s.startSec)/Math.max(.001,s.endSec-s.startSec)));
-    const row=WORLD_GARGANTUA_CAMERA[s.kind],target=this.cameraTarget;
-    for(let i=0;i<4;i++)target[i]=row[i*2]+(row[i*2+1]-row[i*2])*p;
-    target[1]*=Math.PI/180;
-    if(s.kind==='drop'&&s.variation>=2){target[0]=c.SECOND_DROP_DIST;target[2]=c.SECOND_DROP_SPEED;target[3]*=c.SECOND_DROP_GAIN;target[1]=c.SECOND_DROP_INC*Math.PI/180;}
+    const row=WORLD_GARGANTUA_CAMERA[s.kind],target=this.cameraTarget,shot=this.cameraShot;
+    const progress=p*p*(3-2*p);
+    for(let i=0;i<7;i++)target[i]=row[i*2]+(row[i*2+1]-row[i*2])*progress;
+    if(s.kind==='drop'&&s.variation>=2){target[0]=27;target[1]=-6-2*progress;target[2]=-10-2*progress;target[3]=-9;}
+    // 初回は表の構図。再登場する奇数variationだけ左右を反転する。
+    if(s.variation>=3&&s.variation%2===1){target[2]=-target[2];target[3]=-target[3];}
+    for(let i=1;i<=4;i++)target[i]*=Math.PI/180;
     if(s!==this.section){
-      if(this.section){this.cameraFrom[0]=this.camera[0];this.cameraFrom[1]=this.baseInclination;this.cameraFrom[2]=this.orbitSpeed;this.cameraFrom[3]=this.camera[3];}
+      if(this.section)this.cameraFrom.set(shot);
       else this.cameraFrom.set(target);
       this.sectionChangedSec=this.section?s.startSec:s.startSec-c.CAMERA_EASE_SECONDS;this.section=s;
     }
     const x=Math.max(0,Math.min(1,(t-this.sectionChangedSec)/c.CAMERA_EASE_SECONDS)),ease=x*x*(3-2*x);
-    this.camera[0]=this.cameraFrom[0]+(target[0]-this.cameraFrom[0])*ease;
-    this.baseInclination=this.cameraFrom[1]+(target[1]-this.cameraFrom[1])*ease;
+    for(let i=0;i<7;i++)shot[i]=this.cameraFrom[i]+(target[i]-this.cameraFrom[i])*ease;
+    this.camera[0]=shot[0];this.baseInclination=shot[1];
     this.camera[1]=this.baseInclination+c.SWAY_DEGREES*Math.PI/180*Math.sin(t*c.SWAY_SPEED);
-    this.orbitSpeed=this.cameraFrom[2]+(target[2]-this.cameraFrom[2])*ease;
-    this.camera[3]=this.cameraFrom[3]+(target[3]-this.cameraFrom[3])*ease;
-    this.azim+=this.orbitSpeed*input.dt;this.camera[2]=this.azim;
-    const gravityTarget=s.kind==='drop'?1:0;
-    if(gravityTarget!==this.gravityTarget){
-      this.gravityFrom=this.gravityAmount;this.gravityTarget=gravityTarget;this.gravityChangedSec=s.startSec;
-    }
-    const gx=Math.max(0,Math.min(1,(t-this.gravityChangedSec)/(this.gravityTarget?c.GRAVITY_EASE_IN:c.GRAVITY_EASE_OUT)));
-    this.gravityAmount=this.gravityFrom+(this.gravityTarget-this.gravityFrom)*gx*gx*(3-2*gx);
-    this.gravity[0]=c.GRAVITY+(c.DROP_GRAVITY-c.GRAVITY)*this.gravityAmount;
-    this.gravity[1]=c.Rs+(c.DROP_HORIZON-c.Rs)*this.gravityAmount;
-    this.gravity[2]=c.DISK_INNER+(c.DROP_DISK_INNER-c.DISK_INNER)*this.gravityAmount;
+    this.view2[0]=shot[2];this.view2[1]=shot[3];this.view2[2]=shot[4];
+    let hi=0;for(let i=c.BAND_COUNT-8;i<c.BAND_COUNT;i++)hi+=input.features.bandsSmooth[i];
+    this.view2[3]=hi/8;
+    this.orbitSpeed=shot[5];this.camera[3]=shot[6];
+    const loudness=input.features.loudness.level;
+    this.azim+=this.orbitSpeed*Math.max(c.ORBIT_MIN,Math.min(c.ORBIT_MAX,1+c.ORBIT_LOUD_GAIN*(loudness-.5)))*input.dt;
+    this.camera[2]=this.azim;
     // MFSは未消費ホップを集約し、同じホップの再取得では0を返す。
     // 連続フレームの同じbitも別イベント。再描画の同時刻だけ二重消費を防ぐ。
     const flags=input.features.onset.flags;
@@ -338,15 +342,13 @@ class WorldGargantuaAnalyzer extends WorldBandAnalyzer {
     }
     this.music[0]=Math.exp(-Math.max(0,t-this.lastKick)/c.KICK_SECONDS);this.music[1]=this.highOnsetPhase;
     this.music[2]=input.song.motionSpeed;this.music[3]=t;
-    // §10.18: キックの包絡で鳴動し、dropの重力の高まりへ掛け合わせる。
-    this.gravity[0]*=1+c.QUAKE_GAIN*this.music[0]*Math.sin(2*Math.PI*c.QUAKE_HZ*(t-this.lastKick));
     this.exposureMultiplier=c.EXPOSURE_BASE+c.EXPOSURE_GAIN*input.features.loudness.level;
   }
   render(input) {
     const g=this.gpu,gl=g.gl;
     g.bind(this.program,this.half);gl.uniform4fv(this.bandLoc,this.bandUniforms);
     gl.uniform3fv(this.primaryLoc,input.song.palette.primary);gl.uniform3fv(this.secondaryLoc,input.song.palette.secondary);
-    gl.uniform3fv(this.gravityLoc,this.gravity);gl.uniform4fv(this.cameraLoc,this.camera);gl.uniform4fv(this.musicLoc,this.music);gl.uniform4fv(this.streakLoc,this.streaks);
+    gl.uniform3fv(this.gravityLoc,this.gravity);gl.uniform4fv(this.cameraLoc,this.camera);gl.uniform4fv(this.view2Loc,this.view2);gl.uniform4fv(this.musicLoc,this.music);gl.uniform4fv(this.streakLoc,this.streaks);
     gl.uniform2f(this.outputLoc,input.target.width,input.target.height);g.draw();
     g.bind(this.upsample,input.target);g.sampler(this.sourceLoc,0,this.half);g.draw();
   }
