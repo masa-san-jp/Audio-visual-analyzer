@@ -575,3 +575,34 @@ sampleOpacity = clamp(env * (.55 + fil * .35), 0., .95)
   - どの時刻でもモアレがない。
   - 8 秒周期の作り直しが見えない（4 秒おきに 0.1 秒間隔で連続撮影し、明るさの段差が < 2%）。
   - GPU の p95 ≤ 16ms。
+
+### 10.18 ホットスポットを廃止し、光速の筋と全体の鳴動にする（2026-10-08、オーナーの指摘）
+- オーナーの指摘：
+  - 光のリングの中に、パルスに応じて光の塊がゆっくり現れる。重力に囚われた光がゆっくり現れるのは不自然である。
+  - 全体が鳴動する、あるいは光速で動いて見える光の筋が現れる、なら直感的に受け入れられる。
+- 廃止するもの：HOTSPOT_*（6 秒かけてケプラー速度で漂う光の塊）。uniform の配列は名前を変えて流用する。
+- **光速の筋**（高域のオンセットで生まれる。生成の契機とシードは従来のホットスポットと同じ）：
+  - プール：LIGHT_STREAK_COUNT = 8。uniform は `vec4 streaks[8] = (r0, a0, 誕生時刻, 回転方向 ±1)`。回転方向は円盤の回転と同じ向き（+1）に固定する。
+  - 生成：`r0 = LIGHT_STREAK_INNER + (LIGHT_STREAK_OUTER - LIGHT_STREAK_INNER)*hash`、`a0 = hash2*2π`。
+    - LIGHT_STREAK_INNER = 3.2
+    - LIGHT_STREAK_OUTER = 4.6
+  - 先頭の角度：`head = a0 + LIGHT_STREAK_SPEED*age`。LIGHT_STREAK_SPEED = 2π/LIGHT_STREAK_LAP、LIGHT_STREAK_LAP = .35 秒（1 周 .35 秒）。
+  - 円盤上の点 (rd, φ) での明るさ：
+    - `d = mod(head - φ, 2π)`（先頭より後ろ側の角度距離）
+    - `tail = exp(-d/LIGHT_STREAK_TAIL)`、LIGHT_STREAK_TAIL = 1.2 rad
+    - 半径方向：`width = max(LIGHT_STREAK_WIDTH, rd*lf*LIGHT_STREAK_LOD)`。LIGHT_STREAK_WIDTH = .05、LIGHT_STREAK_LOD = 1.5、lf は §10.16 の log 単位の画素の大きさ。
+    - `radial = exp(-pow((rd - r0)/width, 2.)) * (LIGHT_STREAK_WIDTH/width)`（太らせた分、明るさを下げて光量を保つ）
+    - 寿命：`fade = pow(1. - age/LIGHT_STREAK_LIFE, 2.)`、LIGHT_STREAK_LIFE = .7 秒
+    - `col += tint * LIGHT_STREAK_HDR * tail * radial * fade`。LIGHT_STREAK_HDR = 9。tint は DISK_INNER_COLOR 寄りの白（`mix(tint, vec3(1.), .5)`）。
+  - 円盤上の現象なので、重力レンズによって直接像、上の弧、光子リングに同時に映る。
+- **全体の鳴動**（低域のキック）：
+  - `gravity.x *= 1. + QUAKE_GAIN * music.x * sin(TAU*QUAKE_HZ*(t - lastKick))`
+    - QUAKE_GAIN = .03
+    - QUAKE_HZ = 9
+  - music.x はキックの包絡で、KICK_SECONDS .18 で減衰する。JS 側で毎フレームこの式で gravity[0] を更新し、既存の重力の高まり（DROP_GRAVITY）に掛け合わせる。
+  - 重力レンズの強さがわずかに震えて、星空・弧・影の縁が一斉に揺らぐ。
+- 受け入れ条件（Opus が撮影して判定する）：
+  - 高域のオンセットの直後、連続 6 フレーム（1/60 秒間隔）で、筋が 1 フレームあたり約 17° 進み、尾を引いて見える。
+  - ゆっくり漂う塊が残っていない。
+  - キックの直後、2 フレーム間で影の縁が数画素揺らぐ。
+  - GPU の p95 ≤ 16ms。単体テストに合格する。

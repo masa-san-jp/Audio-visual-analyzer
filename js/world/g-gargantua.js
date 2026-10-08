@@ -13,7 +13,10 @@ const WORLD_GARGANTUA = Object.freeze({
   INNER_FADE: 3.25, OUTER_FADE: 12, OPACITY_BASE: .45, OPACITY_STREAK: .5, OPACITY_MAX: .90,
   BAND_COUNT: 32, BAND_BLEND: .15, MUSIC_BASE: .45, MUSIC_GAIN: 2.2,
   KICK_SECONDS: .18, KICK_RADIUS: 6.5, KICK_REST: .40, KICK_GAIN: 3.5, KICK_BLOOM: .8,
-  HOTSPOT_COUNT: 12, HOTSPOT_INNER: 3.5, HOTSPOT_OUTER: 8, HOTSPOT_SECONDS: 6, HOTSPOT_RADIUS: .18, HOTSPOT_HDR: 6,
+  LIGHT_STREAK_COUNT: 8, LIGHT_STREAK_INNER: 3.2, LIGHT_STREAK_OUTER: 4.6,
+  LIGHT_STREAK_LAP: .35, LIGHT_STREAK_SPEED: 2*Math.PI/.35, LIGHT_STREAK_TAIL: 1.2,
+  LIGHT_STREAK_WIDTH: .05, LIGHT_STREAK_LOD: 1.5, LIGHT_STREAK_LIFE: .7, LIGHT_STREAK_HDR: 9,
+  QUAKE_GAIN: .03, QUAKE_HZ: 9,
   EXPOSURE_BASE: .85, EXPOSURE_GAIN: .3, CAMERA_EASE_SECONDS: 4,
   SECOND_DROP_INC: -6, SWAY_DEGREES: 1.5, SWAY_SPEED: .07,
   DROP_GRAVITY: 2.1, DROP_HORIZON: 1.18, DROP_DISK_INNER: 3.4, GRAVITY_EASE_IN: 1.2, GRAVITY_EASE_OUT: 2,
@@ -43,7 +46,7 @@ function worldGargantuaEventHash(prefix, serial, seed) {
 }
 // SSOTの定数をJSとGLSLで共有する。文字列生成は読込時だけ。
 const WORLD_GARGANTUA_GLSL = Object.entries(WORLD_GARGANTUA).map(([name,value]) =>
-  Array.isArray(value) ? `const vec3 ${name} = vec3(${value.map(v=>v.toFixed(8)).join(',')});` : `const ${['MAX_STEPS','MAX_CROSSINGS','FBM_OCTAVES','MILKY_WAY_OCTAVES','BAND_COUNT','HOTSPOT_COUNT'].includes(name)?'int':'float'} ${name} = ${['MAX_STEPS','MAX_CROSSINGS','FBM_OCTAVES','MILKY_WAY_OCTAVES','BAND_COUNT','HOTSPOT_COUNT'].includes(name)?value:Number(value).toFixed(8)};`).join('\n');
+  Array.isArray(value) ? `const vec3 ${name} = vec3(${value.map(v=>v.toFixed(8)).join(',')});` : `const ${['MAX_STEPS','MAX_CROSSINGS','FBM_OCTAVES','MILKY_WAY_OCTAVES','BAND_COUNT','LIGHT_STREAK_COUNT'].includes(name)?'int':'float'} ${name} = ${['MAX_STEPS','MAX_CROSSINGS','FBM_OCTAVES','MILKY_WAY_OCTAVES','BAND_COUNT','LIGHT_STREAK_COUNT'].includes(name)?value:Number(value).toFixed(8)};`).join('\n');
 const WORLD_GARGANTUA_FRAGMENT = `#version 300 es
 precision highp float;
 precision highp int;
@@ -54,7 +57,7 @@ uniform vec4 bands[32];
 uniform vec3 primary, secondary;
 uniform vec4 camera; // dist、inc(rad)、azim、円盤係数
 uniform vec4 music; // キック包絡、高域位相、BPM速度、時刻
-uniform vec4 hotspots[12]; // 半径、初期角度、誕生時刻、未使用
+uniform vec4 streaks[8]; // 半径、初期角度、誕生時刻、回転方向（+1固定）
 uniform vec2 outputResolution;
 uniform vec3 gravity; // 曲がりの係数、地平面半径、ISCO内縁
 out vec4 frag;
@@ -120,12 +123,16 @@ vec4 diskSample(vec3 hit,float travel,vec3 ndir,float turn,float lf){
  float env=smoothstep(gravity.z,gravity.z+INNER_FADE-DISK_INNER,rd)*(1.-smoothstep(OUTER_FADE,DISK_OUTER,rd));
  float I=DISK_HDR*env*streak*pow(DISK_INNER/rd,INTENSITY_POWER);
  vec3 col=tint*I*musicGain(rd);
- for(int i=0;i<HOTSPOT_COUNT;i++){
-  vec4 spot=hotspots[i];float age=music.w-spot.z;
-  if(age<0.||age>=HOTSPOT_SECONDS)continue;
-  float a=spot.y+KEPLER_SPEED*pow(spot.x/DISK_INNER,KEPLER_POWER)*music.z*age;
-  vec2 center=spot.x*vec2(cos(a),sin(a));float d2=dot(hit.xz-center,hit.xz-center);
-  col+=tint*HOTSPOT_HDR*exp(-d2/(2.*HOTSPOT_RADIUS*HOTSPOT_RADIUS))*(1.-age/HOTSPOT_SECONDS);
+ // §10.18: 先頭から後ろへ減衰する筋。LODで太らせた分だけ明るさを下げる。
+ for(int i=0;i<LIGHT_STREAK_COUNT;i++){
+  vec4 light=streaks[i];float age=music.w-light.z;
+  if(age<0.||age>=LIGHT_STREAK_LIFE)continue;
+  float head=light.y+LIGHT_STREAK_SPEED*age;
+  float d=mod(head-phi,TAU),tail=exp(-d/LIGHT_STREAK_TAIL);
+  float width=max(LIGHT_STREAK_WIDTH,rd*lf*LIGHT_STREAK_LOD);
+  float radial=exp(-pow((rd-light.x)/width,2.))*(LIGHT_STREAK_WIDTH/width);
+  float fade=pow(1.-age/LIGHT_STREAK_LIFE,2.);
+  col+=mix(tint,vec3(1.),.5)*LIGHT_STREAK_HDR*tail*radial*fade;
  }
  return vec4(col*camera.w,env*clamp(OPACITY_BASE+OPACITY_STREAK*streak,0.,OPACITY_MAX));
 }
@@ -260,23 +267,23 @@ class WorldGargantuaAnalyzer extends WorldBandAnalyzer {
     super();this.id='g-gargantua';this.label='ブラックホール';
     this.statelessRender=true; // フレーム間のGPU履歴を持たない（設計 §10.12）。
     this.camera=new Float32Array(4);this.cameraFrom=new Float64Array(4);this.cameraTarget=new Float64Array(4);
-    this.gravity=new Float32Array(3);this.music=new Float32Array(4);this.hotspots=new Float32Array(WORLD_GARGANTUA.HOTSPOT_COUNT*4);
+    this.gravity=new Float32Array(3);this.music=new Float32Array(4);this.streaks=new Float32Array(WORLD_GARGANTUA.LIGHT_STREAK_COUNT*4);
     this.reset();
   }
   reset() {
     super.reset();if(!this.camera)return;
     this.camera.fill(0);this.cameraFrom.fill(0);this.cameraTarget.fill(0);this.music.fill(0);
-    this.hotspots.fill(0);for(let i=0;i<WORLD_GARGANTUA.HOTSPOT_COUNT;i++)this.hotspots[i*4+2]=-100;
+    this.streaks.fill(0);for(let i=0;i<WORLD_GARGANTUA.LIGHT_STREAK_COUNT;i++)this.streaks[i*4+2]=-100;
     this.baseInclination=0;this.gravityAmount=0;this.gravityFrom=0;this.gravityTarget=0;this.gravityChangedSec=0;
     this.gravity[0]=WORLD_GARGANTUA.GRAVITY;this.gravity[1]=WORLD_GARGANTUA.Rs;this.gravity[2]=WORLD_GARGANTUA.DISK_INNER;
-    this.section=null;this.sectionChangedSec=0;this.azim=0;this.orbitSpeed=0;this.hotspotSerial=0;this.highOnsetPhase=0;
+    this.section=null;this.sectionChangedSec=0;this.azim=0;this.orbitSpeed=0;this.streakSerial=0;this.highOnsetPhase=0;
     this.lastKick=-100;this.lastEventSec=-1;this.exposureMultiplier=WORLD_GARGANTUA.EXPOSURE_BASE;
   }
   init(gpu) {
     super.init(gpu);this.program=gpu.program(WORLD_GARGANTUA_FRAGMENT);
     this.bandLoc=gpu.texture(this.program,'bands[0]');this.primaryLoc=gpu.texture(this.program,'primary');this.secondaryLoc=gpu.texture(this.program,'secondary');
     this.gravityLoc=gpu.texture(this.program,'gravity');this.cameraLoc=gpu.texture(this.program,'camera');this.musicLoc=gpu.texture(this.program,'music');
-    this.hotspotLoc=gpu.texture(this.program,'hotspots[0]');this.outputLoc=gpu.texture(this.program,'outputResolution');
+    this.streakLoc=gpu.texture(this.program,'streaks[0]');this.outputLoc=gpu.texture(this.program,'outputResolution');
     this.upsample=gpu.program(WORLD_GARGANTUA_UPSAMPLE_FRAGMENT);this.sourceLoc=gpu.texture(this.upsample,'source');
     this.resize(gpu.gl.canvas.width,gpu.gl.canvas.height);
   }
@@ -322,22 +329,24 @@ class WorldGargantuaAnalyzer extends WorldBandAnalyzer {
     if(t!==this.lastEventSec){
       if(flags&1)this.lastKick=t;
       if(flags&4){
-        const serial=this.hotspotSerial++,o=(serial%c.HOTSPOT_COUNT)*4;
+        const serial=this.streakSerial++,o=(serial%c.LIGHT_STREAK_COUNT)*4;
         const h=worldGargantuaEventHash('gargantua:',serial,input.engine.seed),h2=worldGargantuaEventHash('gargantua-angle:',serial,input.engine.seed);
-        this.hotspots[o]=c.HOTSPOT_INNER+(c.HOTSPOT_OUTER-c.HOTSPOT_INNER)*h/4294967296;
-        this.hotspots[o+1]=h2/4294967296*Math.PI*2;this.hotspots[o+2]=t;this.highOnsetPhase++;
+        this.streaks[o]=c.LIGHT_STREAK_INNER+(c.LIGHT_STREAK_OUTER-c.LIGHT_STREAK_INNER)*h/4294967296;
+        this.streaks[o+1]=h2/4294967296*Math.PI*2;this.streaks[o+2]=t;this.streaks[o+3]=1;this.highOnsetPhase++;
       }
       this.lastEventSec=t;
     }
     this.music[0]=Math.exp(-Math.max(0,t-this.lastKick)/c.KICK_SECONDS);this.music[1]=this.highOnsetPhase;
     this.music[2]=input.song.motionSpeed;this.music[3]=t;
+    // §10.18: キックの包絡で鳴動し、dropの重力の高まりへ掛け合わせる。
+    this.gravity[0]*=1+c.QUAKE_GAIN*this.music[0]*Math.sin(2*Math.PI*c.QUAKE_HZ*(t-this.lastKick));
     this.exposureMultiplier=c.EXPOSURE_BASE+c.EXPOSURE_GAIN*input.features.loudness.level;
   }
   render(input) {
     const g=this.gpu,gl=g.gl;
     g.bind(this.program,this.half);gl.uniform4fv(this.bandLoc,this.bandUniforms);
     gl.uniform3fv(this.primaryLoc,input.song.palette.primary);gl.uniform3fv(this.secondaryLoc,input.song.palette.secondary);
-    gl.uniform3fv(this.gravityLoc,this.gravity);gl.uniform4fv(this.cameraLoc,this.camera);gl.uniform4fv(this.musicLoc,this.music);gl.uniform4fv(this.hotspotLoc,this.hotspots);
+    gl.uniform3fv(this.gravityLoc,this.gravity);gl.uniform4fv(this.cameraLoc,this.camera);gl.uniform4fv(this.musicLoc,this.music);gl.uniform4fv(this.streakLoc,this.streaks);
     gl.uniform2f(this.outputLoc,input.target.width,input.target.height);g.draw();
     g.bind(this.upsample,input.target);g.sampler(this.sourceLoc,0,this.half);g.draw();
   }

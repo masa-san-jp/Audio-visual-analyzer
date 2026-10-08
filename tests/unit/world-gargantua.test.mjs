@@ -1,4 +1,4 @@
-// 目的 — カメラ表・平面円盤・色/縞/星/フレア・LOD/平均補填/2位相の流れと再演を検査する — doc/20261004-design-gargantua-v1.md §10・§10.9〜10.17
+// 目的 — カメラ・円盤・LOD/2位相の流れ・光速の筋/鳴動と再演を検査する — doc/20261004-design-gargantua-v1.md §10・§10.9〜10.18
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { loadClassic } from '../lib/load-classic.mjs';
@@ -21,6 +21,20 @@ function setup(kinds=['main'],duration=10) {
   const input={engine,song:score.song,features:f,dt:0,tSec:0},analyzer=new Analyzer();
   return {score,f,engine,input,analyzer};
 }
+// 製品GLSLの筋のループをスカラーJSへ置換し、GPUなしで指定式を評価する。
+function lightStreakEvaluator() {
+  const shader=runtime.get('WORLD_GARGANTUA_FRAGMENT');
+  const body=shader.match(/for\(int i=0;i<LIGHT_STREAK_COUNT;i\+\+\)\{([\s\S]*?)\n \}/)?.[1];
+  assert.ok(body,'筋のループを取得できる');
+  const scalar=body.replaceAll(/\bfloat\b|\bvec4\b/g,'let').replaceAll('vec3(1.)','1')
+    .replaceAll(/\b(exp|pow|max)\(/g,'Math.$1(');
+  const names=Object.keys(C).filter(name=>name.startsWith('LIGHT_STREAK_'));
+  return new Function('rd','phi','lf','music','streaks','tint','C',
+    'const {'+names.join(',')+'}=C;const TAU=2*Math.PI;'+
+    'const mod=(x,y)=>x-y*Math.floor(x/y),mix=(a,b,t)=>a+(b-a)*t;let col=0;const values=[];'+
+    'for(let i=0;i<LIGHT_STREAK_COUNT;i++){'+scalar+
+    'values.push({age,head,d,tail,width,radial,fade});}return {col,values};');
+}
 test('UW-48 WORLD-25 カメラ全6kind表・4秒ease・同labelの第二drop倍率1.25・パレット15%の定数',()=>{
   const expected={intro:[50,38,2,2,.010,.010,.6,.6],build:[40,32,2,8,.020,.05,.8,1.1],drop:[30,30,3,3,.07,.07,1.35,1.35],break:[36,36,20,20,.012,.012,.7,.7],outro:[34,70,6,6,.008,.008,.9,0],main:[34,34,3,3,.03,.03,1,1]};
   const table=runtime.get('WORLD_GARGANTUA_CAMERA');assert.equal(JSON.stringify(table),JSON.stringify(expected));
@@ -41,21 +55,29 @@ test('UW-48 WORLD-25 カメラ全6kind表・4秒ease・同labelの第二drop倍�
   assert.equal(C.MAX_STEPS,180);assert.equal(C.BLOOM_THRESHOLD,.55);assert.equal(C.BLOOM_STRENGTH,.90);
   console.log('UW-48 cameraKinds=6 easeMidpointDist=32 firstDropBrightness=1.35 secondDropDist=27 speed=.09 gain=1.25 brightness='+analyzer.camera[3]+' maxSteps=180');
 });
-test('UW-49 WORLD-13 キックexp(-age/.18)・高域pool12/寿命6秒・連続イベント・無拍反応・再演',()=>{
+test('UW-49 WORLD-28 キックexp(-age/.18)・光速の筋pool8/寿命.7秒・連続イベント・無拍反応・再演',()=>{
   const {input,f,analyzer}=setup();f.raw[layout.LEVEL]=.5;analyzer.step(input);
   assert.ok(Math.abs(analyzer.exposureMultiplier-1)<1e-12);
-  input.tSec=1;f.raw[layout.ONSET_FLAGS]=5;analyzer.step(input);assert.equal(analyzer.music[0],1);assert.equal(analyzer.hotspotSerial,1);assert.equal(analyzer.highOnsetPhase,1);
-  const spots=analyzer.hotspots.slice();analyzer.step(input);assert.deepEqual(analyzer.hotspots,spots);
-  input.tSec=1.01;analyzer.step(input);assert.equal(analyzer.hotspotSerial,2,'MFSの連続フレームのbitは別イベント');
+  input.tSec=1;f.raw[layout.ONSET_FLAGS]=5;analyzer.step(input);assert.equal(analyzer.music[0],1);assert.equal(analyzer.streakSerial,1);assert.equal(analyzer.highOnsetPhase,1);
+  const streaks=analyzer.streaks.slice();analyzer.step(input);assert.deepEqual(analyzer.streaks,streaks);
+  const hash=runtime.get('worldGargantuaEventHash');
+  assert.ok(Math.abs(streaks[0]-(3.2+(4.6-3.2)*hash('gargantua:',0,11)/4294967296))<2e-7);
+  assert.ok(Math.abs(streaks[1]-hash('gargantua-angle:',0,11)/4294967296*2*Math.PI)<3e-7);
+  assert.equal(streaks[2],1);assert.equal(streaks[3],1);
+  input.tSec=1.01;analyzer.step(input);assert.equal(analyzer.streakSerial,2,'MFSの連続フレームのbitは別イベント');
   assert.equal(analyzer.music[0],1,'連続低域オンセットも包絡を再開する');
   f.raw[layout.ONSET_FLAGS]=0;input.tSec=1.11;analyzer.step(input);assert.ok(Math.abs(analyzer.music[0]-Math.exp(-.1/.18))<1e-7);
   const kick=analyzer.music[0];f.raw[layout.BEAT_FLAG]=1;f.raw[layout.DOWNBEAT_FLAG]=1;analyzer.step(input);assert.equal(analyzer.music[0],kick);
   for(let i=1;i<14;i++){f.raw[layout.ONSET_FLAGS]=0;input.tSec=1+i*.2;analyzer.step(input);f.raw[layout.ONSET_FLAGS]=4;input.tSec+=.1;analyzer.step(input);}
-  assert.equal(analyzer.hotspots.length/4,12);assert.equal(analyzer.hotspotSerial,15);assert.equal(analyzer.highOnsetPhase,15);
-  for(let i=0;i<12;i++){assert.ok(analyzer.hotspots[i*4]>=3.5&&analyzer.hotspots[i*4]<=8);assert.ok(analyzer.hotspots[i*4+1]>=0&&analyzer.hotspots[i*4+1]<2*Math.PI);}
-  analyzer.reset();input.tSec=1;f.raw[layout.ONSET_FLAGS]=5;analyzer.step(input);assert.deepEqual(analyzer.hotspots,spots);
-  assert.equal(C.HOTSPOT_SECONDS,6);assert.equal(C.HOTSPOT_RADIUS,.18);assert.equal(C.HOTSPOT_HDR,6);
-  console.log('UW-49 kick100ms='+kick+' hotspotCapacity=12 events=15 lifetime=6 onsetReplayError=0 consecutiveOnsets=2 exposure=.85+.3*.5=1');
+  assert.equal(analyzer.streaks.length/4,8);assert.equal(analyzer.streakSerial,15);assert.equal(analyzer.highOnsetPhase,15);
+  for(let i=0;i<8;i++){
+    assert.ok(analyzer.streaks[i*4]>=3.2&&analyzer.streaks[i*4]<=4.6);
+    assert.ok(analyzer.streaks[i*4+1]>=0&&analyzer.streaks[i*4+1]<2*Math.PI);assert.equal(analyzer.streaks[i*4+3],1);
+    const serial=i<7?i+8:7;assert.ok(Math.abs(analyzer.streaks[i*4+2]-(1+(serial-1)*.2+.1))<2e-7,'循環プールは新しい誕生時刻を保持');
+  }
+  analyzer.reset();input.tSec=1;f.raw[layout.ONSET_FLAGS]=5;analyzer.step(input);assert.deepEqual(analyzer.streaks,streaks);
+  assert.equal(C.LIGHT_STREAK_LIFE,.7);assert.equal(C.LIGHT_STREAK_WIDTH,.05);assert.equal(C.LIGHT_STREAK_HDR,9);
+  console.log('UW-49 kick100ms='+kick+' streakCapacity=8 events=15 lifetime=.7 onsetReplayError=0 direction=+1 consecutiveOnsets=2 exposure=.85+.3*.5=1');
 });
 test('UW-51 WORLD-13 数値イベントhash: 旧worldHashと一致・seed差・桁境界',()=>{
   const hash=runtime.get('worldGargantuaEventHash'),reference=runtime.get('worldHash');
@@ -427,4 +449,69 @@ test('UW-77 WORLD-27 §10.17 オクターブごとの巻き込み比・8秒の�
   for(const values of frequencies)for(const f of values)assert.ok(f<maxFrequency);
   console.log('UW-77 octaveRatioCases='+cases+' maxRatioError='+maxRatioError+' fullyFilteredPerPhase='+mean+
     ' innerFrequency20/45/90='+JSON.stringify(frequencies)+' innerFrequencyBound='+maxFrequency+' boundVsRadial='+maxFrequency/C.STREAK_RADIAL);
+});
+
+test('UW-78 WORLD-28 §10.18 共有定数・筋の先頭/尾/LOD半径/寿命を製品GLSLからCPU評価',()=>{
+  const expected={LIGHT_STREAK_COUNT:8,LIGHT_STREAK_INNER:3.2,LIGHT_STREAK_OUTER:4.6,
+    LIGHT_STREAK_LAP:.35,LIGHT_STREAK_SPEED:2*Math.PI/.35,LIGHT_STREAK_TAIL:1.2,
+    LIGHT_STREAK_WIDTH:.05,LIGHT_STREAK_LOD:1.5,LIGHT_STREAK_LIFE:.7,LIGHT_STREAK_HDR:9,QUAKE_GAIN:.03,QUAKE_HZ:9};
+  for(const [name,value] of Object.entries(expected))assert.equal(C[name],value,name);
+  const shader=runtime.get('WORLD_GARGANTUA_FRAGMENT'),glsl=runtime.get('WORLD_GARGANTUA_GLSL');
+  assert.ok(shader.includes('uniform vec4 streaks[8]'));assert.ok(glsl.includes('const int LIGHT_STREAK_COUNT = 8;'));
+  for(const [name,value] of Object.entries(expected))if(name!=='LIGHT_STREAK_COUNT')assert.ok(glsl.includes(`const float ${name} = ${value.toFixed(8)};`),name);
+  assert.ok(!Object.keys(C).some(name=>name.startsWith('HOT'+'SPOT_')));
+  assert.ok(!/KEPLER|music\.z/.test(shader.match(/for\(int i=0;i<LIGHT_STREAK_COUNT;i\+\+\)\{([\s\S]*?)\n \}/)[1]));
+  const evaluate=lightStreakEvaluator(),streaks=Array.from({length:8},()=>({x:4,y:.3,z:-100,w:0}));
+  streaks[0]={x:4,y:.3,z:0,w:1};
+  const sample=(age,phi,rd=4,lf=0)=>evaluate(rd,phi,lf,{w:age},streaks,.8,C);
+  let maxError=0,cases=0;
+  for(const age of [0,1/60,.1,.35,.7-1e-8])for(const phi of [-7,-Math.PI,.3,Math.PI,9])for(const rd of [3.8,4,4.1])for(const lf of [0,.001,.02,.1]){
+    const result=sample(age,phi,rd,lf),actual=result.values[0],head=.3+2*Math.PI/.35*age,
+      d=((head-phi)%(2*Math.PI)+2*Math.PI)%(2*Math.PI),width=Math.max(.05,rd*lf*1.5),
+      values={head,d,tail:Math.exp(-d/1.2),width,radial:Math.exp(-(((rd-4)/width)**2))*(.05/width),fade:(1-age/.7)**2};
+    for(const [name,value] of Object.entries(values)){
+      const error=Math.abs(actual[name]-value);maxError=Math.max(maxError,error);assert.ok(error<1e-12,name);
+    }
+    assert.ok(Math.abs(result.col-.9*9*values.tail*values.radial*values.fade)<1e-12);cases++;
+  }
+  const heads=Array.from({length:6},(_,i)=>sample(i/60,0).values[0].head),advance=360/.35/60;
+  for(let i=1;i<6;i++)assert.ok(Math.abs((heads[i]-heads[i-1])*180/Math.PI-advance)<1e-12);
+  assert.ok(Math.abs(sample(.35,0).values[0].head-sample(0,0).values[0].head-2*Math.PI)<1e-12);
+  const behind=sample(0,.3-1.2).values[0],ahead=sample(0,.3+.01).values[0];
+  assert.ok(Math.abs(behind.tail-Math.exp(-1))<1e-12);assert.ok(ahead.tail<.006,'尾は先頭の後ろ側');
+  assert.equal(sample(0,.3).values[0].radial,1);
+  assert.ok(Math.abs(sample(0,.3,4,.1).values[0].radial-1/12)<1e-15);
+  assert.equal(sample(.35,0).values[0].fade,.25);
+  for(const age of [-.01,.7,1]){assert.equal(sample(age,0).col,0);assert.equal(sample(age,0).values.length,0);}
+  streaks[1]={...streaks[0]};assert.equal(sample(0,.3).col,16.2,'複数の筋は加算');
+  console.log('UW-78 formulaCases='+cases+' maxError='+maxError+' headAdvanceDegreesPer60fps='+advance+
+    ' sixFrames=6 lap=.35 tailAt1.2rad='+behind.tail+' radialCenter=1 LODwidth=.6 LODpeak='+1/12+' halfLifeFade=.25 expiredEmission=0 additiveHDR=16.2');
+});
+
+test('UW-79 WORLD-28 §10.18 鳴動9Hz/3%・包絡.18秒・drop重力との乗算・再演/同時刻非累積',()=>{
+  let cases=0,maxError=0;
+  for(const kind of ['main','drop']){
+    const {input,f,analyzer}=setup([kind]);input.tSec=3;analyzer.step(input);
+    const base=kind==='drop'?2.1:1.5;assert.ok(Math.abs(analyzer.gravity[0]-base)<1e-6,'無キックは既存重力');
+    const streaks=analyzer.streaks.slice();f.raw[layout.ONSET_FLAGS]=1;analyzer.step({...input,tSec:4});
+    assert.equal(analyzer.music[0],1);assert.equal(analyzer.lastKick,4);assert.deepEqual(analyzer.streaks,streaks,'低域だけでは筋を生成しない');
+    const gravity=analyzer.gravity.slice();
+    for(const age of [0,1/60,1/36,1/18,1/12,.1,.18,.7]){
+      f.raw[layout.ONSET_FLAGS]=0;input.tSec=4+age;analyzer.step(input);
+      const factor=1+.03*analyzer.music[0]*Math.sin(2*Math.PI*9*age),expected=Math.fround(Math.fround(base)*factor);
+      const error=Math.abs(analyzer.gravity[0]-expected);maxError=Math.max(maxError,error);assert.equal(analyzer.gravity[0],expected);
+      assert.ok(Math.abs(analyzer.music[0]-Math.exp(-age/.18))<1e-7);
+      assert.equal(analyzer.gravity[1],gravity[1]);assert.equal(analyzer.gravity[2],gravity[2]);
+      const repeat=analyzer.gravity.slice();analyzer.step(input);assert.deepEqual(analyzer.gravity,repeat,'同時刻の鳴動は累積しない');cases++;
+    }
+    f.raw[layout.ONSET_FLAGS]=1;input.tSec=5;analyzer.step(input);assert.equal(analyzer.music[0],1);
+    assert.equal(analyzer.gravity[0],Math.fround(base),'キックで位相を0へ戻す');
+    f.raw[layout.ONSET_FLAGS]=0;input.tSec=5+1/36;analyzer.step(input);assert.ok(analyzer.gravity[0]>base);
+    const positive=analyzer.gravity[0],replay=analyzer.gravity.slice();
+    analyzer.reset();f.raw[layout.ONSET_FLAGS]=1;input.tSec=5;analyzer.step(input);
+    f.raw[layout.ONSET_FLAGS]=0;input.tSec=5+1/36;analyzer.step(input);assert.deepEqual(analyzer.gravity,replay);
+    input.tSec=5+1/12;analyzer.step(input);assert.ok(analyzer.gravity[0]<base);
+    console.log('UW-79 kind='+kind+' base='+base+' positiveQuarterCycle='+positive+' negativeQuarterCycle='+analyzer.gravity[0]+' replayError=0');
+  }
+  console.log('UW-79 quakeCases='+cases+' float32FormulaError='+maxError+' gain=.03 Hz=9 envelope=.18');
 });

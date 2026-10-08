@@ -90,7 +90,7 @@ async function world13Shoot(typeId,tSec) {
   const timeline=e.timeline;
   const start=tSec-1.5;
   try {
-    // 4秒のcamera遷移・6秒のhotspot・累積azimを曲頭から復元してから実音へ渡す。
+    // 4秒のcamera遷移・.7秒の光速の筋・累積azimを曲頭から復元してから実音へ渡す。
     await e.renderAt(start);e.timeline=null;app.audioEngine.resetAnalysis();
     if(Math.abs(audio.currentTime-start)>1e-6)await new Promise((resolve,reject)=>{
       const timer=setTimeout(()=>{cleanup();reject(new Error('seek timeout'));},10000);
@@ -124,7 +124,7 @@ async function world13Shoot(typeId,tSec) {
     try {await app.start();return await completed;}finally {clearTimeout(timeout);}
   }finally {audio.pause();cancelAnimationFrame(app.raf);app.state='paused';e.onFrame=null;e.timeline=timeline;}
 }
-if(typeof avzTest==='function')avzTest('BW-13-render','h² shader実コンパイル・半解像度・直接像・32環・beat無反応・hotspot上限',async()=>{
+if(typeof avzTest==='function')avzTest('BW-13-render','h² shader実コンパイル・半解像度・直接像・32環・beat無反応・streak上限',async()=>{
   const iframe=document.createElement('iframe');iframe.src=new URL('../../world.html',location.href).href;
   const ready=new Promise(resolve=>iframe.onload=resolve);document.body.appendChild(iframe);
   try {
@@ -139,10 +139,10 @@ if(typeof avzTest==='function')avzTest('BW-13-render','h² shader実コンパイ
       e._draw();const c=e.capture(),gl=e.gpu.gl,target=e.type.half,pixels=new Float32Array(target.width*target.height*4);
       gl.bindFramebuffer(gl.FRAMEBUFFER,target.fbo);gl.readPixels(0,0,target.width,target.height,gl.RGBA,gl.FLOAT,pixels);
       let directPixels=0;for(let i=3;i<pixels.length;i+=4)if(pixels[i]>=3&&pixels[i]<=14)directPixels++;
-      return {beatError,directPixels,width:target.width,height:target.height,hotspots:e.type.hotspots.length/4,serial:e.type.hotspotSerial,phase:e.type.highOnsetPhase,glError:gl.getError()||c.glError,hdrMax:c.hdrMax};
+      return {beatError,directPixels,width:target.width,height:target.height,streaks:e.type.streaks.length/4,serial:e.type.streakSerial,phase:e.type.highOnsetPhase,glError:gl.getError()||c.glError,hdrMax:c.hdrMax};
     })()`);
     avzAssert.equal(result.glError,0);avzAssert.equal(result.beatError,0);avzAssert.ok(result.directPixels>0);avzAssert.equal(result.width,960);avzAssert.equal(result.height,540);
-    avzAssert.equal(result.hotspots,12);avzAssert.equal(result.serial,13);avzAssert.equal(result.phase,13);console.log('BW-13-render '+JSON.stringify(result));
+    avzAssert.equal(result.streaks,8);avzAssert.equal(result.serial,13);avzAssert.equal(result.phase,13);console.log('BW-13-render '+JSON.stringify(result));
   }finally {iframe.contentWindow.__world?.engine?.dispose();iframe.remove();}
 },{timeoutMs:60000});
 if(typeof avzTest==='function')avzTest('BW-13-kick-gpu','キック直後0.1秒の内側直接像≥40%・1080p GPU p95≤16ms',async()=>{

@@ -249,7 +249,7 @@ test('UW-67 WORLD-22 gargantua: renderAt(45)の2701CPU更新・uniform/イベン
   type.render = function (input) { renders++; render.call(this, input); };
   function state() {
     return { uniforms: engine.gpu.uniforms.slice(), camera: type.camera.slice(), music: type.music.slice(),
-      bands: type.bandUniforms.slice(), hotspots: type.hotspots.slice(), gravity: type.gravity.slice(),
+      bands: type.bandUniforms.slice(), streaks: type.streaks.slice(), gravity: type.gravity.slice(),
       beats: type.beats.slice(), responses: engine.responses.slice(0, engine.responseCount * 7),
       events: engine.events.map(e => ({ ...e })), frame: engine.frame, simTime: engine.simTime,
       eventIndex: engine.eventIndex, beatIndex: engine.beatIndex, sectionIndex: engine.sectionIndex,
@@ -775,10 +775,10 @@ test('UW-43 WORLD-11 決定性: タイプ選択を保ってlive/renderAt/逆シ�
   for(const typeId of ['g-fluid','g-gargantua']){
     engine.selectType(typeId,true);engine.setScore(engine.score);engine.setTimeline(frames,30);
     engine.render(.11,null,.17);engine.render(1,null,.9);const expected=engine.type.bandUniforms.slice(),beats=engine.type.beats.slice();
-    const camera=typeId==='g-gargantua'?engine.type.camera.slice():null,music=typeId==='g-gargantua'?engine.type.music.slice():null,spots=typeId==='g-gargantua'?engine.type.hotspots.slice():null;
+    const camera=typeId==='g-gargantua'?engine.type.camera.slice():null,music=typeId==='g-gargantua'?engine.type.music.slice():null,spots=typeId==='g-gargantua'?engine.type.streaks.slice():null;
     await engine.renderAt(.4);await engine.renderAt(1);assert.equal(engine.type.id,typeId);
     assert.deepEqual(engine.type.bandUniforms,expected);assert.deepEqual(engine.type.beats,beats);
-    if(camera){assert.deepEqual(engine.type.camera,camera);assert.deepEqual(engine.type.music,music);assert.deepEqual(engine.type.hotspots,spots);}
+    if(camera){assert.deepEqual(engine.type.camera,camera);assert.deepEqual(engine.type.music,music);assert.deepEqual(engine.type.streaks,spots);}
   }
   console.log('UW-43 types=2 fixedSteps=30 live/replayBandStateError=0 beatStateError=0');
 });

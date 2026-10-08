@@ -41,7 +41,7 @@ function world14ReadGeometry(engine) {
     g.bind(program,target);gl.uniform4fv(g.texture(program,'bands[0]'),a.bandUniforms);
     gl.uniform3fv(g.texture(program,'primary'),e.score.song.palette.primary);gl.uniform3fv(g.texture(program,'secondary'),e.score.song.palette.secondary);
     gl.uniform4fv(g.texture(program,'camera'),a.camera);gl.uniform4fv(g.texture(program,'music'),a.music);
-    gl.uniform3fv(g.texture(program,'gravity'),a.gravity);gl.uniform4fv(g.texture(program,'hotspots[0]'),a.hotspots);
+    gl.uniform3fv(g.texture(program,'gravity'),a.gravity);gl.uniform4fv(g.texture(program,'streaks[0]'),a.streaks);
     gl.uniform2f(g.texture(program,'outputResolution'),e.canvas.width,e.canvas.height);g.draw();
     const pixels=new Float32Array(target.width*target.height*4);gl.readPixels(0,0,target.width,target.height,gl.RGBA,gl.FLOAT,pixels);
     if(gl.getError())throw new Error('v1.1 geometry GL error');
@@ -72,7 +72,7 @@ function world14SeamReport(capture,geometry) {
 function world14StarReport(capture,geometry) {
   const w=capture.width,h=capture.height,n=w*h,p=capture.rgba,g=geometry.pixels;
   // 星空背景の上限.04（線形HDR）の表示値より明るい芯を8近傍で連結する。
-  // 背景のみ逃走した光線をマスクに使い、円盤やホットスポットを星として数えない。
+  // 背景のみ逃走した光線をマスクに使い、円盤や光速の筋を星として数えない。
   const mask=new Uint8Array(n),queue=new Uint32Array(n),threshold=.22;
   for(let y=0;y<h;y++)for(let x=0;x<w;x++){
     const o=(y*w+x)*4,gm=(Math.min(geometry.height-1,Math.floor(y*geometry.height/h))*geometry.width+

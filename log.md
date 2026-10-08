@@ -1,3 +1,37 @@
+## 2026-10-08 — [WORLD-28] 光速の筋・全体の鳴動
+
+### 作業内容
+- `js/world/g-gargantua.js`: SSOT `doc/20261004-design-gargantua-v1.md` §10.18を実装。HOTSPOT_*定数とケプラー速度で漂う光の塊の計算を撤去し、LIGHT_STREAK_*・QUAKE_*を指定名/値でJS/GLSL共有定数へ追加。uniformをstreaks[8]、CPUプールを32要素へ変更し、streakSerial/streakLocへ参照を統一。
+- `js/world/g-gargantua.js`: 高域オンセットのbit4、イベントhashのprefix/seed、同時刻二重消費防止、highOnsetPhaseを保持。半径3.2〜4.6・初期角度・誕生時刻・回転方向+1を循環プールへ格納。diskSample内でhead=a0+speed*age、modによる後方角度距離、指数の尾、lfによる幅と光量補正、二乗の寿命減衰、白との50%混合色を指定式どおり加算。未来/寿命切れは加算しない。
+- `js/world/g-gargantua.js`: 低域オンセットのlastKickとKICK_SECONDS=.18の包絡を更新した後、gravity[0]へ指定の3%/9Hzの鳴動係数を毎step乗算。既存drop重力easeの基準値を毎step設定してから乗算し、再描画で累積しない。gravity[1]/[2]は従来の式を保持。
+- `tests/unit/world-gargantua.test.mjs`: UW-49を筋の8本プール/範囲/方向/誕生時刻/シード/再演へ置換し、既存キック・連続イベント・無拍反応の検証を保持。UW-78で共有定数、製品GLSLループをスカラーJSへ変換したCPU検証（先頭角度/尾/LOD半径/寿命/色/加算）を追加。UW-79で通常/dropの鳴動、包絡、位相再開、非累積、再演を追加。
+- `tests/unit/world-score.test.mjs`: UW-43/67の状態比較をstreaksへ同期。live/renderAt/逆シークの決定性と、途中GPU描画省略時の2701CPU更新の比較を維持。
+- `tests/world/shoot-live.mjs`: removed hotspot参照のあるuniform転送/状態保存/無効化プールだけをstreaksとLIGHT_STREAK_COUNTへ同期。撮影/判定閾値は変更しない。
+- `tests/browser/world13.test.js`: removed hotspot参照のあるBW-13-renderのuniform状態検査を筋の8本プールへ置換し、撮影前復元コメントの寿命を.7秒へ同期。
+- `tests/browser/world14.test.js`: removed hotspot参照のあるuniform転送と星の除外コメントだけを筋へ同期。
+- `log.md`: 本エントリを先頭に追加。
+
+### 検証
+- `node tests/run.mjs --unit`: 200件／199成功／0失敗／既存の想定U15-00スキップ1、27,970ms、終了コード0。既存ランナーのtests/output/report.json出力はgit管理対象の変更なし。
+- `node --test tests/unit/world-gargantua.test.mjs`: 17件／17成功／0失敗／0スキップ、90.462458ms、終了コード0。初回は追加テストの単項マイナスと指数演算の構文エラーで失敗し、括弧を修正して再実行した。製品定数/式の調整なし。
+- `node tests/world/shoot-live.mjs --unit`: 9件／9成功／0失敗／0スキップ、30.239125ms、終了コード0。UW-65: JS定数28、GLSL定数12、欠落定数0。
+- 全JS/MJS `node --check`: 130件／130成功／0失敗、8,030.387ms、Node v26.7.0、終了コード0。`git diff --check`: 成功。
+- UW-49: kick100ms=.5737534165382385、プール8本/15イベント、生成方向+1、寿命.7秒、reset再演誤差0。UW-51: 従来イベントhashとの60ケースの一致を維持。
+- UW-78: 5age×5角度×3半径×4画素幅の300ケースを製品GLSLの式と比較し、最大誤差8.881784197001252e-16。連続6フレームの先頭角度は60fpsで毎フレーム17.142857142857146度、1周.35秒。尾の1.2rad後方は.36787944117144233、中心の半径係数1、rd=4/lf=.1でLOD幅.6・中心係数.08333333333333333、age=.35のfade=.25。age<0とage>=.7の発光0、2本の中心でスカラーtint=.8を白と混合した加算HDR=16.2。
+- UW-79: 通常/drop×8ageの16ケースでFloat32の指定鳴動式との最大誤差0。9Hzの正の四分周期でgravity[0]=1.5385648012161255/2.1539907455444336、負の四分周期で1.471676230430603/2.0603466033935547（通常/drop）。位相再開/reset再演誤差0、同時刻の二重更新非累積、低域のみで筋を生成しないことを確認。
+- 上記の式の数値はCPU評価であり、実GPU/画像の測定値ではない。更新したBW-13-render（実コンパイル/GLエラー/8本上限）・world14ReadGeometryのuniform転送・shoot-liveのworld17Geometry/world17ShaderChecks/world17RenderCheck/撮影時状態保存はChrome禁止に従いブラウザで未実行。独立した新規ブラウザテストは追加していない。実GPU p95、画素決定性、見た目、file://コンソールは未検証。
+
+### spec.md 変更
+- なし。依頼の許可ファイル7件だけ編集。開始時から存在した設計書の§10.18追加（31行）は保持し、本作業では変更していない。
+
+### 備考
+- 実装: Codex gpt-6.1-sol high
+- 判断: §10.18の定数/式を独自調整していない。LIGHT_STREAK_SPEEDは2*Math.PI/.35として定義し、LIGHT_STREAK_LAP=.35との指定関係をテストする。回転方向は生成時のw=+1に固定し、先頭式は指定どおりa0+speed*ageを使用する（BPM/ケプラー係数を掛けない）。色は既存diskSampleのtintを白へ50%混合して筋だけへ適用。
+- 判断: プールの初期無効時刻-100、生成契機/シード、寿命の範囲外除外は既存処理を流用。配列はconstructorで確保し、製品JSの毎フレーム経路に新たな配列/オブジェクト/クロージャ確保なし。鳴動はmusic[0]のFloat32包絡を使い、既存のdrop重力へ乗算する。uniformのFloat32丸めを含めて検証。
+- 制約: 指定のscratchpad/CODEX_ADDENDUM.mdは存在せず、セッションディレクトリ内の検索でも見つからなかった。依頼本文のno commit/push/PR/Chromeを適用し、IMPLEMENTER_RULES.md、実装者ガイド、関連仕様/レンダラー契約を確認。編集はこのworktree内だけ。commit/push/PR/ブラウザ起動なし。
+- レビュアー確認: 実WebGL2で製品/更新プローブのコンパイルとGLエラー0を確認。高域オンセット直後の連続6枚（1/60秒間隔）で約17度/フレームの筋と後方の尾が見え、ゆっくり漂う塊が残らず、直接像/上弧/光子リングへ映ることをOpusが撮影して判定。キック直後の2フレームで影の縁が数画素揺らぐこと、星空/弧も同時に揺らぐこと、実GPU p95<=16ms、画素決定性、file://コンソールエラー0も確認すること。
+- レビュアー確認: 既存`tests/browser/world14.test.js:37`は旧4引数/vec4戻り値のtraceRay呼び出しを保持し、新out署名と不一致。BW-14-periodicにも廃止済みfilamentInput/fbmの呼び出しが残る。今回の許可はremoved hotspot参照箇所だけなので、それらの既存の不一致は編集していない。WORLD-14ブラウザ検証を実行する前に担当者が署名/関数名を同期する必要がある。
+
 ## 2026-10-08 — [WORLD-27] ケプラー巻き込みの2位相化
 
 ### 作業内容

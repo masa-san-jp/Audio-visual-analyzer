@@ -164,7 +164,7 @@ function world17Geometry(engine,state){
     g.bind(program,target);gl.uniform4fv(g.texture(program,'bands[0]'),state.bands);
     gl.uniform3fv(g.texture(program,'primary'),e.score.song.palette.primary);gl.uniform3fv(g.texture(program,'secondary'),e.score.song.palette.secondary);
     gl.uniform4fv(g.texture(program,'camera'),state.camera);gl.uniform4fv(g.texture(program,'music'),state.music);
-    gl.uniform3fv(g.texture(program,'gravity'),state.gravity);gl.uniform4fv(g.texture(program,'hotspots[0]'),state.hotspots);
+    gl.uniform3fv(g.texture(program,'gravity'),state.gravity);gl.uniform4fv(g.texture(program,'streaks[0]'),state.streaks);
     gl.uniform2f(g.texture(program,'outputResolution'),e.canvas.width,e.canvas.height);g.draw();
     const pixels=new Float32Array(target.width*target.height*4);gl.readPixels(0,0,target.width,target.height,gl.RGBA,gl.FLOAT,pixels);
     if(gl.getError())throw new Error('geometry GL error');return {pixels,width:target.width,height:target.height};
@@ -193,7 +193,7 @@ async function world12Shoot(typeId,tSec){
           // 描画されたフレームの時刻とuniformを転送前に固定する。
           queued.push({row,pixels:world17QueuePixels(e)});
           if(time>=tSec&&firstTime===null){
-            firstTime=time;firstState=gargantua?{camera:a.camera.slice(),music:a.music.slice(),gravity:a.gravity.slice(),hotspots:a.hotspots.slice(),bands:a.bandUniforms.slice()}:null;
+            firstTime=time;firstState=gargantua?{camera:a.camera.slice(),music:a.music.slice(),gravity:a.gravity.slice(),streaks:a.streaks.slice(),bands:a.bandUniforms.slice()}:null;
             // 遅れた初回標本では再生を止め、finallyで破棄して撮影全体をやり直す。
             if(firstTime-tSec>c.LAG_MAX_SECONDS){audio.pause();app.state='paused';e.onFrame=null;resolveShot();return;}
           }
@@ -245,10 +245,10 @@ async function world17ShaderChecks(engine){
     else if(row==4.){vec4 value=diskSample(vec3(rd,0.,0.),0.,vec3(0.,-1.,0.),0.,-1.);float trans=1.;vec3 c=vec3(0.);for(int i=0;i<MAX_CROSSINGS;i++){c+=trans*value.rgb*value.a;trans*=1.-value.a;}frag=vec4(c.r,trans,value.a,1.);}
     else frag=vec4(musicGain(rd),0.,0.,1.);
   }`;
-  const target=g.target(64,6,true),program=g.program(source+body),bands=new Float32Array(128),hotspots=new Float32Array(48);
-  for(let i=0;i<12;i++)hotspots[i*4+2]=-100;
+  const target=g.target(64,6,true),program=g.program(source+body),bands=new Float32Array(128),streaks=new Float32Array(WORLD_GARGANTUA.LIGHT_STREAK_COUNT*4);
+  for(let i=0;i<WORLD_GARGANTUA.LIGHT_STREAK_COUNT;i++)streaks[i*4+2]=-100;
   try {
-    g.bind(program,target);gl.uniform4fv(g.texture(program,'bands[0]'),bands);gl.uniform4fv(g.texture(program,'hotspots[0]'),hotspots);
+    g.bind(program,target);gl.uniform4fv(g.texture(program,'bands[0]'),bands);gl.uniform4fv(g.texture(program,'streaks[0]'),streaks);
     gl.uniform3fv(g.texture(program,'primary'),[.2,.5,.8]);gl.uniform3fv(g.texture(program,'gravity'),[1.5,1,3]);
     gl.uniform4fv(g.texture(program,'camera'),[17,.1,0,1]);gl.uniform4fv(g.texture(program,'music'),[1,3,1,45]);
     gl.uniform2f(g.texture(program,'outputResolution'),1280,720);g.draw();
@@ -293,7 +293,7 @@ async function world17ShaderChecks(engine){
 // §10.7の指定時刻をrenderAtで正確に復元し、実音撮影と別に数値条件の画像を残す。
 async function world17RenderCheck(engine){
   const e=engine;e.selectType('g-gargantua',true);await e.renderAt(WORLD17_CHECKS.ARC_TIME);
-  const a=e.type,capture=e.capture(),state={camera:a.camera,music:a.music,gravity:a.gravity,hotspots:a.hotspots,bands:a.bandUniforms};
+  const a=e.type,capture=e.capture(),state={camera:a.camera,music:a.music,gravity:a.gravity,streaks:a.streaks,bands:a.bandUniforms};
   if(capture.glError)throw new Error('renderAt capture GL error');
   const geometry=world17Geometry(e,state);
   const canvas=document.createElement('canvas');canvas.width=capture.width;canvas.height=capture.height;
