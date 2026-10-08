@@ -61,7 +61,8 @@ test('UW-49 WORLD-28 キックexp(-age/.18)・光速の筋pool8/寿命.7秒・�
   input.tSec=1;f.raw[layout.ONSET_FLAGS]=5;analyzer.step(input);assert.equal(analyzer.music[0],1);assert.equal(analyzer.streakSerial,1);assert.equal(analyzer.highOnsetPhase,1);
   const streaks=analyzer.streaks.slice();analyzer.step(input);assert.deepEqual(analyzer.streaks,streaks);
   const hash=runtime.get('worldGargantuaEventHash');
-  assert.ok(Math.abs(streaks[0]-(3.2+(4.6-3.2)*hash('gargantua:',0,11)/4294967296))<2e-7);
+  const radius=C.LIGHT_STREAK_INNER+(C.LIGHT_STREAK_OUTER-C.LIGHT_STREAK_INNER)*hash('gargantua:',0,11)/4294967296;
+  assert.equal(streaks[0],Math.fround(radius),'生成半径は定数の範囲とhashから求めたFloat32値');
   assert.ok(Math.abs(streaks[1]-hash('gargantua-angle:',0,11)/4294967296*2*Math.PI)<3e-7);
   assert.equal(streaks[2],1);assert.equal(streaks[3],1);
   input.tSec=1.01;analyzer.step(input);assert.equal(analyzer.streakSerial,2,'MFSの連続フレームのbitは別イベント');
@@ -71,13 +72,13 @@ test('UW-49 WORLD-28 キックexp(-age/.18)・光速の筋pool8/寿命.7秒・�
   for(let i=1;i<14;i++){f.raw[layout.ONSET_FLAGS]=0;input.tSec=1+i*.2;analyzer.step(input);f.raw[layout.ONSET_FLAGS]=4;input.tSec+=.1;analyzer.step(input);}
   assert.equal(analyzer.streaks.length/4,8);assert.equal(analyzer.streakSerial,15);assert.equal(analyzer.highOnsetPhase,15);
   for(let i=0;i<8;i++){
-    assert.ok(analyzer.streaks[i*4]>=3.2&&analyzer.streaks[i*4]<=4.6);
+    assert.ok(analyzer.streaks[i*4]>=C.LIGHT_STREAK_INNER&&analyzer.streaks[i*4]<=C.LIGHT_STREAK_OUTER);
     assert.ok(analyzer.streaks[i*4+1]>=0&&analyzer.streaks[i*4+1]<2*Math.PI);assert.equal(analyzer.streaks[i*4+3],1);
     const serial=i<7?i+8:7;assert.ok(Math.abs(analyzer.streaks[i*4+2]-(1+(serial-1)*.2+.1))<2e-7,'循環プールは新しい誕生時刻を保持');
   }
   analyzer.reset();input.tSec=1;f.raw[layout.ONSET_FLAGS]=5;analyzer.step(input);assert.deepEqual(analyzer.streaks,streaks);
-  assert.equal(C.LIGHT_STREAK_LIFE,.7);assert.equal(C.LIGHT_STREAK_WIDTH,.05);assert.equal(C.LIGHT_STREAK_HDR,9);
-  console.log('UW-49 kick100ms='+kick+' streakCapacity=8 events=15 lifetime=.7 onsetReplayError=0 direction=+1 consecutiveOnsets=2 exposure=.85+.3*.5=1');
+  assert.equal(C.LIGHT_STREAK_LIFE,.7);assert.equal(C.LIGHT_STREAK_WIDTH,.08);assert.equal(C.LIGHT_STREAK_HDR,14);
+  console.log('UW-49 kick100ms='+kick+' streakCapacity=8 events=15 lifetime=.7 onsetReplayError=0 direction=+1 consecutiveOnsets=2 exposure=.85+.3*.5=1 radius='+streaks[0]+' radiusRange='+C.LIGHT_STREAK_INNER+'..'+C.LIGHT_STREAK_OUTER);
 });
 test('UW-51 WORLD-13 数値イベントhash: 旧worldHashと一致・seed差・桁境界',()=>{
   const hash=runtime.get('worldGargantuaEventHash'),reference=runtime.get('worldHash');
@@ -452,9 +453,9 @@ test('UW-77 WORLD-27 §10.17 オクターブごとの巻き込み比・8秒の�
 });
 
 test('UW-78 WORLD-28 §10.18 共有定数・筋の先頭/尾/LOD半径/寿命を製品GLSLからCPU評価',()=>{
-  const expected={LIGHT_STREAK_COUNT:8,LIGHT_STREAK_INNER:3.2,LIGHT_STREAK_OUTER:4.6,
-    LIGHT_STREAK_LAP:.35,LIGHT_STREAK_SPEED:2*Math.PI/.35,LIGHT_STREAK_TAIL:1.2,
-    LIGHT_STREAK_WIDTH:.05,LIGHT_STREAK_LOD:1.5,LIGHT_STREAK_LIFE:.7,LIGHT_STREAK_HDR:9,QUAKE_GAIN:.03,QUAKE_HZ:9};
+  const expected={LIGHT_STREAK_COUNT:8,LIGHT_STREAK_INNER:5.5,LIGHT_STREAK_OUTER:9,
+    LIGHT_STREAK_LAP:.35,LIGHT_STREAK_SPEED:2*Math.PI/.35,LIGHT_STREAK_TAIL:1.6,
+    LIGHT_STREAK_WIDTH:.08,LIGHT_STREAK_LOD:1.5,LIGHT_STREAK_LIFE:.7,LIGHT_STREAK_HDR:14,QUAKE_GAIN:.03,QUAKE_HZ:9};
   for(const [name,value] of Object.entries(expected))assert.equal(C[name],value,name);
   const shader=runtime.get('WORLD_GARGANTUA_FRAGMENT'),glsl=runtime.get('WORLD_GARGANTUA_GLSL');
   assert.ok(shader.includes('uniform vec4 streaks[8]'));assert.ok(glsl.includes('const int LIGHT_STREAK_COUNT = 8;'));
@@ -465,27 +466,31 @@ test('UW-78 WORLD-28 §10.18 共有定数・筋の先頭/尾/LOD半径/寿命を
   streaks[0]={x:4,y:.3,z:0,w:1};
   const sample=(age,phi,rd=4,lf=0)=>evaluate(rd,phi,lf,{w:age},streaks,.8,C);
   let maxError=0,cases=0;
-  for(const age of [0,1/60,.1,.35,.7-1e-8])for(const phi of [-7,-Math.PI,.3,Math.PI,9])for(const rd of [3.8,4,4.1])for(const lf of [0,.001,.02,.1]){
-    const result=sample(age,phi,rd,lf),actual=result.values[0],head=.3+2*Math.PI/.35*age,
-      d=((head-phi)%(2*Math.PI)+2*Math.PI)%(2*Math.PI),width=Math.max(.05,rd*lf*1.5),
-      values={head,d,tail:Math.exp(-d/1.2),width,radial:Math.exp(-(((rd-4)/width)**2))*(.05/width),fade:(1-age/.7)**2};
+  for(const age of [0,1/60,.1,C.LIGHT_STREAK_LIFE/2,C.LIGHT_STREAK_LIFE-1e-8])for(const phi of [-7,-Math.PI,.3,Math.PI,9])for(const rd of [3.8,4,4.1])for(const lf of [0,.001,.02,.1]){
+    const result=sample(age,phi,rd,lf),actual=result.values[0],head=.3+C.LIGHT_STREAK_SPEED*age,
+      d=((head-phi)%(2*Math.PI)+2*Math.PI)%(2*Math.PI),width=Math.max(C.LIGHT_STREAK_WIDTH,rd*lf*C.LIGHT_STREAK_LOD),
+      values={head,d,tail:Math.exp(-d/C.LIGHT_STREAK_TAIL),width,radial:Math.exp(-(((rd-4)/width)**2))*(C.LIGHT_STREAK_WIDTH/width),fade:(1-age/C.LIGHT_STREAK_LIFE)**2};
     for(const [name,value] of Object.entries(values)){
       const error=Math.abs(actual[name]-value);maxError=Math.max(maxError,error);assert.ok(error<1e-12,name);
     }
-    assert.ok(Math.abs(result.col-.9*9*values.tail*values.radial*values.fade)<1e-12);cases++;
+    assert.ok(Math.abs(result.col-.9*C.LIGHT_STREAK_HDR*values.tail*values.radial*values.fade)<1e-12);cases++;
   }
-  const heads=Array.from({length:6},(_,i)=>sample(i/60,0).values[0].head),advance=360/.35/60;
+  const heads=Array.from({length:6},(_,i)=>sample(i/60,0).values[0].head),advance=360/C.LIGHT_STREAK_LAP/60;
   for(let i=1;i<6;i++)assert.ok(Math.abs((heads[i]-heads[i-1])*180/Math.PI-advance)<1e-12);
-  assert.ok(Math.abs(sample(.35,0).values[0].head-sample(0,0).values[0].head-2*Math.PI)<1e-12);
-  const behind=sample(0,.3-1.2).values[0],ahead=sample(0,.3+.01).values[0];
-  assert.ok(Math.abs(behind.tail-Math.exp(-1))<1e-12);assert.ok(ahead.tail<.006,'尾は先頭の後ろ側');
+  assert.ok(Math.abs(sample(C.LIGHT_STREAK_LAP,0).values[0].head-sample(0,0).values[0].head-2*Math.PI)<1e-12);
+  const behind=sample(0,.3-C.LIGHT_STREAK_TAIL).values[0],ahead=sample(0,.3+.01).values[0];
+  assert.ok(Math.abs(behind.tail-Math.exp(-1))<1e-12);
+  assert.ok(Math.abs(ahead.tail-Math.exp(-(2*Math.PI-.01)/C.LIGHT_STREAK_TAIL))<1e-12);
+  assert.ok(ahead.tail<behind.tail,'尾は先頭の後ろ側');
   assert.equal(sample(0,.3).values[0].radial,1);
-  assert.ok(Math.abs(sample(0,.3,4,.1).values[0].radial-1/12)<1e-15);
-  assert.equal(sample(.35,0).values[0].fade,.25);
-  for(const age of [-.01,.7,1]){assert.equal(sample(age,0).col,0);assert.equal(sample(age,0).values.length,0);}
-  streaks[1]={...streaks[0]};assert.equal(sample(0,.3).col,16.2,'複数の筋は加算');
+  const lodWidth=Math.max(C.LIGHT_STREAK_WIDTH,4*.1*C.LIGHT_STREAK_LOD),lodPeak=C.LIGHT_STREAK_WIDTH/lodWidth;
+  assert.ok(Math.abs(sample(0,.3,4,.1).values[0].radial-lodPeak)<1e-15);
+  assert.equal(sample(C.LIGHT_STREAK_LIFE/2,0).values[0].fade,.25);
+  for(const age of [-.01,C.LIGHT_STREAK_LIFE,C.LIGHT_STREAK_LIFE+.3]){assert.equal(sample(age,0).col,0);assert.equal(sample(age,0).values.length,0);}
+  const additiveHDR=2*.9*C.LIGHT_STREAK_HDR;
+  streaks[1]={...streaks[0]};assert.equal(sample(0,.3).col,additiveHDR,'複数の筋は加算');
   console.log('UW-78 formulaCases='+cases+' maxError='+maxError+' headAdvanceDegreesPer60fps='+advance+
-    ' sixFrames=6 lap=.35 tailAt1.2rad='+behind.tail+' radialCenter=1 LODwidth=.6 LODpeak='+1/12+' halfLifeFade=.25 expiredEmission=0 additiveHDR=16.2');
+    ' sixFrames=6 lap='+C.LIGHT_STREAK_LAP+' tailAt'+C.LIGHT_STREAK_TAIL+'rad='+behind.tail+' radialCenter=1 LODwidth='+lodWidth+' LODpeak='+lodPeak+' halfLifeFade=.25 expiredEmission=0 additiveHDR='+additiveHDR);
 });
 
 test('UW-79 WORLD-28 §10.18 鳴動9Hz/3%・包絡.18秒・drop重力との乗算・再演/同時刻非累積',()=>{
