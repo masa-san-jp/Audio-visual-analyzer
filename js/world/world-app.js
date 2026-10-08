@@ -121,7 +121,7 @@ class WorldApp {
     this.exportStatus.textContent = '書き出し中…'; this._updateControls();
     try {
       const blob = await this.exporter.exportWorld(this.score, this.prepared, { typeId: this.engine.type.id });
-      if (blob) { this.exporter.download(); this.exportStatus.textContent = '保存しました'; }
+      if (blob) { this.exporter.save(); this.exportStatus.textContent = '保存しました'; }
       else this.exportStatus.textContent = '中止しました';
     } catch (error) { this.exportStatus.textContent = '書き出し失敗: ' + error.message; }
     finally { this.exportBusy = false; this._updateControls(); }

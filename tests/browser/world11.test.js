@@ -167,7 +167,7 @@ if(typeof avzTest==='function')avzTest('BW-11-export','選択fluid/gargantuaをU
       await new Promise((resolve,reject)=>{script.onload=resolve;script.onerror=reject;child.document.body.appendChild(script);});
     }
     await w.app.load(new child.File([encodeWav16(world11SyntheticSong(120,0,3))],'types-export.wav',{type:'audio/wav',lastModified:1}));
-    await w.app.setFps(30);let downloads=0;w.app.exporter.download=()=>downloads++;
+    await w.app.setFps(30);let downloads=0;if(typeof w.app.exporter.save!=="function")throw new Error("exporter.save missing");w.app.exporter.save=()=>downloads++;
     for(const typeId of ['g-fluid','g-gargantua']){
       w.app.selectType(typeId);await w.app.renderAt(3);const reference=w.engine.capture();
       w.engine.setScore(w.score);for(const t of [.12,.34,.72,1.5,2.2,3])w.engine.render(t,null,.017);
