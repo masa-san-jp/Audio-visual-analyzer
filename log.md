@@ -1,3 +1,44 @@
+## 2026-10-08 — [WORLD-31] g-attractor v1
+
+### 作業内容
+- `js/world/g-attractor.js`: SSOT `doc/20261008-design-attractor-v1.md` §1〜8を実装。WORLD_ATTRACTORの指定定数、固定7形、区間割り当て、カメラ表、seed付きuint hashを追加。2048×1024粒子のRGBA32F ping-pongをA/B二組、出力解像度のRGBA16F密度ping-pong、40反復暖機、写像更新、1画素点の加算、密度減衰と露出トーンマッピングを実装。
+- `js/world/g-attractor.js`: 3秒の遅延付き再組み立て・Y軸の渦・色補間、低域オンセットの表示散乱、高域オンセットの部分集合グリント、32帯域の方向別光、区間内/切替のsmoothstepカメラと音量周回積分を追加。GPU資源は初期化/resizeで確保し、変身終了後も再利用。再描画は密度/粒子を進めない。
+- `js/world/world-engine.js`: タイプ登録、warmFrames/statelessRenderの共通描画条件、CPUのみの区間から暖機窓へ入る際のwarmStartを同期advanceToと非同期renderAt/advancePreviewへ適用。g-attractorのfeedbackを除外し、postモードへ接続。既存g-fluid/g-gargantuaの条件と結果は保持。
+- `js/world/post.js`: g-attractor専用分岐、bloom閾値.6/強さ.8、sceneからの光学仕上げを追加。feedbackと自動露出縮約を使わない。
+- `js/world/analyzer-types.js`・`world.html`: g-terrain予約枠をkey3/availableのストレンジアトラクターへ置換し、classic script読込順へ追加。
+- `tests/unit/world-attractor.test.mjs`: UW-84〜93を追加。定数、形/割り当て、変身の端点/単調/遅延、hash/グリント決定性、カメラ表/補間、イベント、GPU命令/暖機窓、資源再利用、CPU状態一致を検証。
+- `tests/unit/world-score.test.mjs`・`tests/unit/world-shaders.test.mjs`: 新script依存と登録期待値を同期。全26シェーダーのprecision監査へ拡張。既存のテスト/閾値は削除・緩和していない。
+- `tests/unit/world-exporter.test.mjs`: UW-42をg-gargantuaとg-attractorの両方へ適用し、typeIdだけで180枚の書き出しと初期即時選択が動くことを確認。既存world-exporterはtypeIdを透過するため製品コードの変更不要。
+- `tests/browser/world31.test.js`: BW-31-state/render/gpu/exportを記述。実GLSLの初期化/写像、6区間、180連続変身フレーム、キック/グリント、逆シーク再演、同期GPU p95、実WebCodecs音声入り書き出しを検査。`tests/browser/world11.test.js`のキー3/available期待値も追従。
+- `README.md`・`doc/spec.md`: 選択可能なkey3と設計書への参照を追加。`log.md`: 本エントリを先頭に追加。
+
+### 検証
+- `node tests/run.mjs --unit`: 213件／212成功／0失敗／既存U15-00の想定スキップ1、140,520ms、終了コード0。
+- 全JS/MJS `node --check`: 133件／133成功／0失敗、66,466.577ms、Node v26.7.0、終了コード0。
+- `node --test tests/unit/world-score.test.mjs tests/unit/world-shaders.test.mjs`: 45件／45成功／0失敗、5,974.487791ms、終了コード0。26シェーダー（vertex6/fragment20）のヘッダー不一致0。
+- `node --test tests/unit/world-attractor.test.mjs tests/unit/world-exporter.test.mjs`: 13件／13成功／0失敗、918.322917ms、終了コード0（UW-93追加前）。初回のattractor単独実行は9件／8成功／1失敗、936.086958ms。フェードのmock期待値121を、既存の1/60累積丸めで32枚＋暖機90枚＝122へ訂正し、製品の0.5秒フェードは変更していない。
+- `node --test --test-name-pattern=UW-93 tests/unit/world-attractor.test.mjs`: 1件／1成功／0失敗、524.513541ms、終了コード0。最終UW-84〜93全10件は上記全スイートで成功。
+- UW-84: 粒子2,097,152、定数31件、720p POINT_GAIN=.006328125000000001、DECAY^90=1.7508410260531964e-8。UW-85: 割当30ケース、7,000写像反復、最大座標絶対値2.9957042379444028で各ex/ey内。
+- UW-86: 変身1,204サンプル、端点/遅延/単調性、最大式誤差0。UW-87: hash100,000粒子、グリント選択405粒、serial変更799粒/seed変更810粒、再演誤差0。
+- UW-88: カメラ450成分＋切替15成分、最大Float64式誤差0。UW-89: 音量5ケース、キック包絡の最大Float32誤差9.149755175741348e-9、イベント再演誤差0。
+- UW-90: 10秒でCPU601ステップ/GPU描画90回/warmStart1回。g-fluid601回、g-gargantua1回を保持。1ステップ前進は暖機を繰り返さず描画1回。時刻0要求は1回描画。feedbackはg-attractorで0回。
+- UW-91: RGBA32F状態4枚、初期化/40反復/通常更新計42パス、変身開始43パス、両組の暖機82パス、GPU資源増加0、再描画の粒子更新0、feedback/自動露出0。UW-92: 同形境界の変身0、短区間の宛先引継ぎJ→Hを確認。
+- UW-93: 12秒でCPU721ステップ、変身中の暖機開始10.516666666666667秒、両組暖機82＋90×2更新＝262パス、高域イベント25、全CPU上演とcamera/bands/music/形/イベント時刻の差0。
+- UW-42: g-gargantua/g-attractorそれぞれ180符号化フレーム、即時選択、初期フェードなし（encoder/engine mock）。`git diff --check`: 成功。
+- 新規BW-31-state/render/gpu/exportと更新BW-11-typesを含むブラウザスイートは依頼の禁止に従い未実行。実GLSLコンパイル、実画像の美しさ/散乱/渦、file://コンソール、実WebCodecs、1920×1080 GPU p95≤16msは未測定。上記の数値はCPUまたは命令mockの結果。
+
+### spec.md 変更
+- key3の選択可とSSOT参照を追加。設計の定数/式は転記せず、既存タイプの仕様文章は変更していない。
+
+### 備考
+- 判断: 形の「2回目以降かつvariation奇数」は3・5…でF/Ccへ切替。カメラ§7の「variationが奇数なら」は文面どおり初回1も含む1・3・5…でroll/yaw速度を反転する。UW-85/88で両者を区別して検証。
+- 判断: hashアルゴリズムが未指定のため、uint32の決定的混合と上位24bitの[0,1)変換を採用。CPU/GLSLで同じ演算とし、Float32丸めで1になることを避ける。初期座標2成分と散乱の単位球方向は固定serialを使う。
+- 判断: 3秒未満の区間で変身が重なったら進行中の宛先Bを旧形Aへ引き継いで次の変身を開始。同じ宛先の境界では再開始しない。CPUだけでBを通過した場合は次の暖機窓で現在形をseed初期化する。
+- 判断: 密度の全画面減衰は同一textureの読書きが禁止なので二枚のRGBA16Fを交代する。resetはGPU再初期化を保留し、最初の描画またはwarmStartで40反復する。GPUを省略した区間のCPU状態は連続して保持。
+- 判断: postの未指定の合成細部は既存g-gargantuaのbloom重み/ACES/sRGB変換/.75固定倍率を再利用し、指定強さ.8を適用。新しい美術調整、veil、キックの二重増光、自動露出、feedbackは加えない。
+- 判断: w13syncの具体コードは指定されていないため、BW-31-gpuでは既存engineのdisjoint timer queryを使い、各描画後のgl.finishで同期し次フレームでqueryを回収する。実ハードウェア/120以上のサンプル/disjoint0/p95≤16msを検査する。未実行のため性能達成は主張しない。
+- 制約/逸脱: SSOTの指定定数・数式を独自調整していない。曖昧な細部は依頼に従い上記判断で継続。一般ガイドのbranch/commit/PR/全ブラウザ確認は、今回の.git読取専用・commit/push禁止・ネットワーク禁止・Chrome禁止を優先し未実施。外部依存/build/npm追加なし。新規の毎フレーム経路に配列/オブジェクト/クロージャの生成なし。作業用ファイルはworktree内に作成して削除。
+
 ## 2026-10-08 — [WORLD-30] ブラックホール不動・星の反応・カメラショット
 
 ### 作業内容

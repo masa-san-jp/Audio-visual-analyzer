@@ -132,7 +132,7 @@ test('UW-06 GPU命令: 流体射影20反復・全粒子・同時合成・MFS即�
   const gl = worldCommandGl(), canvas = { width: 1920, height: 1080, getContext: () => gl };
   gl.canvas = canvas;
   const runtime = loadClassic(['js/vis-utils.js', 'js/mfs-const.js', 'js/mfs-view.js', 'js/world/gl-util.js',
-    'js/world/fluid.js', 'js/world/particles.js', 'js/world/score.js', 'js/world/analyzer-types.js', 'js/world/g-fluid.js', 'js/world/g-rings.js', 'js/world/g-galaxy.js', 'js/world/g-gargantua.js', 'js/world/post.js', 'js/world/world-engine.js']);
+    'js/world/fluid.js', 'js/world/particles.js', 'js/world/score.js', 'js/world/analyzer-types.js', 'js/world/g-fluid.js', 'js/world/g-rings.js', 'js/world/g-galaxy.js', 'js/world/g-gargantua.js', 'js/world/g-attractor.js', 'js/world/post.js', 'js/world/world-engine.js']);
   const engine = new (runtime.get('WorldEngine'))(canvas), score = runtime.get('compileWorldScore')(fixture, 11);
   const features = new (runtime.get('MfsFrameView'))(), layout = runtime.get('MFS_LAYOUT');
   engine.setScore(score);
@@ -172,7 +172,7 @@ test('UW-07 曲の三色だけで全抽象状態を配色・種別をまたぐ�
 function worldTestEngine() {
   const gl = worldCommandGl(), canvas = { width: 1920, height: 1080, getContext: () => gl }; gl.canvas = canvas;
   const runtime = loadClassic(['js/vis-utils.js', 'js/mfs-const.js', 'js/mfs-view.js', 'js/world/gl-util.js',
-    'js/world/fluid.js', 'js/world/particles.js', 'js/world/score.js', 'js/world/analyzer-types.js', 'js/world/g-fluid.js', 'js/world/g-rings.js', 'js/world/g-galaxy.js', 'js/world/g-gargantua.js', 'js/world/post.js', 'js/world/world-engine.js']);
+    'js/world/fluid.js', 'js/world/particles.js', 'js/world/score.js', 'js/world/analyzer-types.js', 'js/world/g-fluid.js', 'js/world/g-rings.js', 'js/world/g-galaxy.js', 'js/world/g-gargantua.js', 'js/world/g-attractor.js', 'js/world/post.js', 'js/world/world-engine.js']);
   const engine = new (runtime.get('WorldEngine'))(canvas); engine.setScore(runtime.get('compileWorldScore')(fixture, 11));
   return { engine, gl };
 }
@@ -605,7 +605,7 @@ test('UW-29 WORLD-8 領域: 1.5倍の速度・圧力・染料・補助場、リ�
     assert.equal(f.dye.read.width, Math.ceil(w * 1.5 / 2)); assert.equal(f.dye.read.height, Math.ceil(h * 1.5 / 2));
     assert.equal(engine.scene.width, w); assert.equal(engine.scene.height, h);
   }
-  const runtime = loadClassic(['js/world/gl-util.js', 'js/world/fluid.js', 'js/world/particles.js', 'js/world/analyzer-types.js', 'js/world/g-gargantua.js', 'js/world/post.js']);
+  const runtime = loadClassic(['js/world/gl-util.js', 'js/world/fluid.js', 'js/world/particles.js', 'js/world/analyzer-types.js', 'js/world/g-gargantua.js', 'js/world/g-attractor.js', 'js/world/post.js']);
   assert.equal(runtime.get('OVERSCAN'), 1.5);
   assert.match(runtime.get('WORLD_FLUID_FRAGMENT'), /worldDomainPosition\(uv\)/);
   assert.match(runtime.get('WORLD_PARTICLE_UPDATE'), /extent=worldExtent\(\)\*p.z\/3/);
@@ -743,9 +743,9 @@ test('UW-39 WORLD-13 タイプ契約: ブラックホールkey2・32帯域・半
   assert.deepEqual([engine.gpu.textures.length,engine.gpu.fbos.length,engine.gpu.programs.length],resources);
   for(const id of ['g-terrain','g-rings','g-galaxy'])assert.throws(()=>engine.selectType(id),RangeError);
   const types=loadClassic(['js/world/gl-util.js','js/world/analyzer-types.js']).get('WORLD_ANALYZER_TYPES');
-  assert.deepEqual(Array.from(types,t=>t.id),['g-fluid','g-gargantua','g-terrain','g-ribbons','g-kaleido']);
+  assert.deepEqual(Array.from(types,t=>t.id),['g-fluid','g-gargantua','g-attractor','g-ribbons','g-kaleido']);
   assert.equal(types[1].key,2);assert.equal(types[1].label,'ブラックホール');
-  console.log('UW-39 availableTypes=2 annuli=32 internal=960x540 latencyFrames=0 fadeSec=.5 inactiveFluidSteps=0 feedbackSteps=0 GPUResourceGrowth=0');
+  console.log('UW-39 availableTypes=3 annuli=32 internal=960x540 latencyFrames=0 fadeSec=.5 inactiveFluidSteps=0 feedbackSteps=0 GPUResourceGrowth=0');
 });
 test('UW-40 WORLD-11 曲固有値: クロマ上位・BPM比例・重心/オンセット密度・入力不変',()=>{
   const r=loadClassic(['js/vis-utils.js','js/world/score.js']),variation=r.get('worldSongVariation');

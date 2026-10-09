@@ -143,14 +143,14 @@ if(typeof avzTest==='function'){
         const slots=Array.from(app.typeInput.options,o=>({id:o.value,disabled:o.disabled}));
         document.dispatchEvent(new KeyboardEvent('keydown',{code:'Digit2',bubbles:true}));const selected=e.type.id,first=e.fadeElapsed;
         e.redrawTransition(.25);const halfway=e.fadeElapsed;
-        document.dispatchEvent(new KeyboardEvent('keydown',{code:'Digit3',bubbles:true}));const reserved=e.type.id;
+        document.dispatchEvent(new KeyboardEvent('keydown',{code:'Digit3',bubbles:true}));const attractor=e.type.id;
         document.dispatchEvent(new KeyboardEvent('keydown',{code:'Digit4',bubbles:true}));const galaxy=e.type.id;
-        e.redrawTransition(.5);return {slots,selected,first,halfway,reserved,galaxy,end:e.fadeElapsed,glError:e.gpu.gl.getError()};
+        e.redrawTransition(.5);return {slots,selected,first,halfway,attractor,galaxy,end:e.fadeElapsed,glError:e.gpu.gl.getError()};
       })()`);
-      avzAssert.equal(result.slots.length,5);avzAssert.equal(result.slots.filter(o=>!o.disabled).length,2);
+      avzAssert.equal(result.slots.length,5);avzAssert.equal(result.slots.filter(o=>!o.disabled).length,3);
       avzAssert.equal(result.selected,'g-gargantua');avzAssert.equal(result.first,0);avzAssert.equal(result.halfway,.25);
-      avzAssert.equal(result.reserved,'g-gargantua');avzAssert.equal(result.galaxy,'g-gargantua');avzAssert.equal(result.end,.5);avzAssert.equal(result.glError,0);
-      await w.engine.renderAt(.2);avzAssert.equal(w.engine.type.id,'g-gargantua');
+      avzAssert.equal(result.attractor,'g-attractor');avzAssert.equal(result.galaxy,'g-attractor');avzAssert.equal(result.end,.5);avzAssert.equal(result.glError,0);
+      await w.engine.renderAt(.2);avzAssert.equal(w.engine.type.id,'g-attractor');
     }finally{iframe.contentWindow.__world?.engine?.dispose();iframe.remove();}
   },{timeoutMs:30000});
 }

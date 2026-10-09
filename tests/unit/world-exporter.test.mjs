@@ -67,8 +67,10 @@ test('UW-36 WORLD-9 cancel/error: download用blob無し・encoder/engineを確�
 });
 
 test('UW-42 WORLD-11 書き出し: 選択タイプを固定して全フレームを符号化', async () => {
-  const { exporter, calls, prepared } = setup();
-  await exporter.exportWorld({ seed: 11 }, prepared(30), { typeId: 'g-gargantua' });
-  assert.equal(calls.typeId, 'g-gargantua'); assert.equal(calls.immediate, true); assert.equal(calls.video.length, 180);
-  console.log('UW-42 selectedExportType=g-gargantua frames=180 startupFade=false');
+  for (const typeId of ['g-gargantua', 'g-attractor']) {
+    const { exporter, calls, prepared } = setup();
+    await exporter.exportWorld({ seed: 11 }, prepared(30), { typeId });
+    assert.equal(calls.typeId, typeId); assert.equal(calls.immediate, true); assert.equal(calls.video.length, 180);
+    console.log('UW-42 selectedExportType='+typeId+' frames=180 startupFade=false');
+  }
 });

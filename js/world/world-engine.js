@@ -18,7 +18,7 @@ class WorldEngine {
     this.post = new WorldPost(this.gpu, canvas.width, canvas.height);
     this.scene = this.gpu.target(canvas.width, canvas.height);
     this.spectrum = new WorldSpectrum(this.gpu);
-    this.types = [new WorldFluidAnalyzer(), new WorldGargantuaAnalyzer()];
+    this.types = [new WorldFluidAnalyzer(), new WorldGargantuaAnalyzer(), new WorldAttractorAnalyzer()];
     for (let i = 0; i < this.types.length; i++) this.types[i].init(this.gpu);
     this.type = this.types[0]; this.fadeElapsed = .5; this.previousPostMode = 0;
     // 従来計測の公開口は保持。shader/programの所有者はg-fluid。
@@ -54,7 +54,7 @@ class WorldEngine {
     for (let i = 0; i < this.queries.length; i++) this.queries[i].slot = -1;
     // 再上演とpreviewは同じGPU状態から開始する。program/FBOを再作成しない。
     const g = this.gpu; g.uniforms.fill(0); this.particles.reset(score.seed); this.depthParticles.reset(score.seed); this.fluid.reset(); this.post.reset();
-    this.latestSec = 0; this.previewStep = 0; this.preview = false;
+    this.latestSec = 0; this.previewStep = 0; this.preview = false; this.matterSkipped = false;
     this.fadeElapsed = .5; this.lastBeat = -100; this.pulse = 0;
     for (let i = 0; i < this.types.length; i++) if (this.types[i].reset) this.types[i].reset();
   }
@@ -184,10 +184,13 @@ class WorldEngine {
     this.fadeElapsed = Math.min(.5, this.fadeElapsed + input.dt);
     this.type.step(input);
     if (drawMatter) {
+      // CPUだけの区間から暖機窓へ入る最初のステップでGPU履歴を作り直す（アトラクター §6）。
+      if (this.matterSkipped && this.type.warmStart) this.type.warmStart(tSec);
       this._renderMatter();
       // 履歴は描画した固定simulationステップで更新。captureや再描画では進めない。
-      if (this.type.id !== 'g-gargantua' && (dt > 0 || this.frame === 1 || boundaryNow)) this.post.stepFeedback(this.scene, this.fluid);
+      if (this.type.id !== 'g-gargantua' && this.type.id !== 'g-attractor' && (dt > 0 || this.frame === 1 || boundaryNow)) this.post.stepFeedback(this.scene, this.fluid);
     }
+    this.matterSkipped = !drawMatter;
   }
   _blend(s, tSec) {
     const p = Math.max(0, Math.min(1, (tSec - s.startSec) / Math.min(4, (s.endSec - s.startSec) * .25)));
@@ -313,12 +316,17 @@ class WorldEngine {
   advanceTo(tSec) {
     // ライブ・export・renderAt共通の整数ステップ。rAFの間隔に依存しない。
     const steps = Math.floor(tSec * this.fps + 1e-9);
-    if (!this.frame) this._step(0, this.frameFeatures(0), 0, !(steps > 0 && this.type.statelessRender && this.fadeElapsed >= .5));
+    if (!this.frame) this._step(0, this.frameFeatures(0), 0, this._drawMatterAt(0, steps));
     for (let i = this.previewStep + 1; i <= steps; i++) {
-      // 履歴を持たないタイプだけ途中のGPU描画を省く。混合中と最終ステップは必ず描く（設計 §10.12）。
-      const drawMatter = !(i < steps && this.type.statelessRender && this.fadeElapsed >= .5);
+      const drawMatter = this._drawMatterAt(i, steps);
       this._step(i / this.fps, this.frameFeatures(i), 1 / this.fps, drawMatter); this.previewStep = i;
     }
+  }
+  _drawMatterAt(i, steps) {
+    const type = this.type;
+    // g-fluidは全ステップ、statelessRenderは末尾1枚、warmFramesは指定窓を描く。
+    // 時刻0だけの要求も従来どおり描画する。
+    return steps === 0 || i > steps - (type.warmFrames || (type.statelessRender ? 1 : Infinity)) || this.fadeElapsed < .5;
   }
   // WORLD-8: 回転矩形の軸方向半径から必要ズームを解析的に求める。
   // まずパンを減らす。中心でも収まらない回転だけを減らし、過大なズームを避ける。
@@ -358,7 +366,7 @@ class WorldEngine {
     gl.bindFramebuffer(gl.READ_FRAMEBUFFER, this.scene.fbo); gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, this.typeSnapshot.fbo);
     gl.blitFramebuffer(0, 0, this.scene.width, this.scene.height, 0, 0, this.scene.width, this.scene.height, gl.COLOR_BUFFER_BIT, gl.NEAREST);
     this.previousPostMode = this.post.analyzerMode;
-    this.type = next; if (next.reset) next.reset(); this.fadeElapsed = immediate || !this.frame ? .5 : 0;
+    this.type = next; this.matterSkipped = false; if (next.reset) next.reset(); this.fadeElapsed = immediate || !this.frame ? .5 : 0;
     if (this.frame) { this.typeInput.dt = 0; this.typeInput.boundaryNow = false; next.step(this.typeInput); }
   }
   _renderMatter() {
@@ -375,7 +383,7 @@ class WorldEngine {
     if (!this.score || this.fadeElapsed >= .5 || !this.frame) return;
     this.fadeElapsed = Math.min(.5, this.fadeElapsed + Math.max(0, dt));
     this.typeInput.dt = 0; this.typeInput.boundaryNow = false;
-    this._renderMatter(); if (this.type.id !== 'g-gargantua') this.post.stepFeedback(this.scene, this.fluid); this._draw();
+    this._renderMatter(); if (this.type.id !== 'g-gargantua' && this.type.id !== 'g-attractor') this.post.stepFeedback(this.scene, this.fluid); this._draw();
   }
   _renderFluid(target) {
     const g = this.gpu;
@@ -391,6 +399,7 @@ class WorldEngine {
     this.post.pulse = 0;
     this.post.analyzerMode = this.previousPostMode * (1 - blend) + (this.type.id === 'g-fluid' ? 0 : 1) * blend;
     this.post.gargantua = this.type.id === 'g-gargantua';
+    this.post.attractor = this.type.id === 'g-attractor';
     this.post.kick = this.post.gargantua ? this.type.music[0] : 0;
     this.post.exposureMultiplier = this.post.gargantua ? this.type.exposureMultiplier : 1;
     this.post.render(this.scene);
@@ -405,9 +414,9 @@ class WorldEngine {
     try {
       // 毎回0から再生する契約。状態を再利用して途中から近似することはしない。
       this.setScore(this.score); this.preview = !this.timeline;
-      // 時刻0だけの要求は描く。後続ステップがあるstatelessタイプはCPU初期化だけを行う。
+      // 時刻0と暖機窓の条件は同期advanceToと共通。
       const steps = Math.floor(tSec * this.fps + 1e-9);
-      this._step(0, this.frameFeatures(0), 0, !(steps > 0 && this.type.statelessRender && this.fadeElapsed >= .5));
+      this._step(0, this.frameFeatures(0), 0, this._drawMatterAt(0, steps));
       return await this._advancePreview(tSec);
     } finally { this.previewBusy = false; }
   }
@@ -421,7 +430,7 @@ class WorldEngine {
     const steps = Math.floor(tSec * this.fps + 1e-9);
     for (let i = this.previewStep + 1; i <= steps; i++) {
       // renderAtの非同期ループにもadvanceToと同じ描画条件を適用する。
-      const drawMatter = !(i < steps && this.type.statelessRender && this.fadeElapsed >= .5);
+      const drawMatter = this._drawMatterAt(i, steps);
       this._step(i / this.fps, this.frameFeatures(i), 1 / this.fps, drawMatter); this.previewStep = i;
       // GPUキューとUIを定期的に解放する（dt・シェーダー時刻には影響しない）。
       if (i % 120 === 0) await new Promise(resolve => setTimeout(resolve, 0));
