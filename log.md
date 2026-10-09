@@ -1,3 +1,43 @@
+## 2026-10-10 — [WORLD-34] 数字キーのタイプ選択
+
+### 作業内容
+- `js/world/world-app.js`: keydown の数字キー処理を `Digit[1-9]` にマッチさせ、`n = Number(e.code.slice(5))` を `WORLD_ANALYZER_TYPES` の `key` で線形探索（アロケーションなしの for ループ）する形へ変更。現在のタイプ表（key 1〜3）では 4〜9 が割当なしで、従来の `WORLD_ANALYZER_TYPES[n-1].available` の未ガード参照による TypeError（Digit4〜6）が出ていた。割当があり `available` の場合のみ `e.preventDefault()` と `selectType(type.id)` を呼ぶ。
+- `world.html`: TYPE 選択の aria-label を「GPUアナライザー（1〜6）」から「GPUアナライザー（1〜3）」へ変更（残存タイプ数に合わせる）。
+- `tests/unit/world-keys.test.mjs`（新規）: `world-app.js` を実物のまま読み込み、WebGL・音声・書き出しだけをstubに置き換えて keydown を発火する。UW-94 で割当なしの数字（タイプ表の key にない 1〜9）が例外なく無視され、preventDefault と選択中のタイプが変わらないことを検査。UW-95 で割当済みの数字がタイプ表の key・id から導出した該当タイプを選ぶこと（Digit3→g-attractor）を検査。期待値はすべて `WORLD_ANALYZER_TYPES` から導出。
+
+### 検証
+- 修正前の `js/world/world-app.js` で UW-94 を実行し、`Digit4` の `Cannot read properties of undefined (reading 'available')` で失敗することを確認。UW-95 は修正前から成功。
+- `node tests/run.mjs --unit`: 215件／214成功／0失敗／1スキップ、84,591ms。修正前のベースラインは 213件／212成功／0失敗／1スキップ。
+- `node --check`: `js/world/world-app.js`・`tests/unit/world-keys.test.mjs` エラーなし。`world.html`・`log.md` は構文チェック対象外。
+- ブラウザテスト・Chrome実行は作業指示により未実行。コミット・プッシュは未実施。
+
+### 備考
+- `doc/spec.md`・`README.md` は変更なし（数字キーの割当や「1〜6」の記述はなし）。
+- `tests/browser/world11.test.js`（BW-11-types）は Digit4 を押す。修正後は TypeError が出なくなるが、ブラウザ実行は未実施のため結果は未確認。
+- 前エントリ（WORLD-33）の備考に残していた2件（`world-app.js` のキー処理・`world.html` の aria-label）は本エントリで解消。
+
+## 2026-10-10 — [WORLD-33] 準備中タイプの撤去
+
+### 作業内容
+- `js/world/analyzer-types.js`: 準備中の `g-ribbons`（光のリボン・key 5）と `g-kaleido`（万華鏡フィードバック・key 6）を `WORLD_ANALYZER_TYPES` から削除。g-fluid（key 1）・g-gargantua（key 2）・g-attractor（key 3）は値を変えていない。同ファイル先頭の注記「未実装の2枠は選択不能」も対象がなくなったため削除。
+- `tests/unit/world-score.test.mjs`: UW-39のタイプID期待値を3件へ更新。ログ出力の `availableTypes` を固定値 3 から `WORLD_ANALYZER_TYPES` の `available` 件数へ導出。
+- `tests/browser/world11.test.js`: BW-11-types のスロット数（旧 5）と利用可能数（旧 3）を、iframe 内の `WORLD_ANALYZER_TYPES` から導出するよう変更。Digit2・Digit3の選択とcrossfadeの期待値は変更なし。
+- `README.md`・`doc/spec.md`: 「5・6は準備中／予約枠」の記述のみ削除。
+
+### 検証
+- `node tests/run.mjs --unit`: 213件／212成功／0失敗／1スキップ（既存U15-00の想定スキップ）、98,852ms。
+- `node --check`: `js/world/analyzer-types.js`・`tests/unit/world-score.test.mjs`・`tests/browser/world11.test.js` すべてエラーなし。Markdown（README.md・doc/spec.md・log.md）は構文チェック対象外。`git diff --check`: 問題なし。
+- ブラウザテスト（BW-11-types を含む）・Chrome実行は作業指示により未実行。
+
+### spec.md 変更
+- §1.1「TYPEで…を切り替える。」の直後にあった「5・6は後続タイプの予約枠として選択不能で表示する。」を削除。理由: 準備中枠を撤去し、追加タイプは不要とオーナーが決定したため。版番号・改訂理由の行は変更していない。
+
+### 備考
+- 未対応（本体コード・チケット範囲外）: `js/world/world-app.js:60-61` のキー処理は `WORLD_ANALYZER_TYPES[n-1].available` を未ガードで読むため、削除後は Digit4〜6 の押下で TypeError が出る（状態は変わらず、コンソールのみ）。削除前も Digit6 は同じ経路で TypeError だった。`type && type.available` の1行ガードが必要。
+- 未対応（本体コード・チケット範囲外）: `world.html:26` の `aria-label`「GPUアナライザー（1〜6）」は残存タイプに合わせて更新が必要。
+- 未対応（文書・チケット範囲外）: `doc/20261004-concept-world-mode.md` の一覧表（93〜94行目）に g-ribbons／g-kaleido の構想表記が残る。過去の設計・履歴文書（`doc/20261008-design-attractor-v1.md` の「g-terrain（準備中）」、過去の log.md）は変更していない。
+- BW-11-types の Digit4 押下（未割当キーで選択が変わらないこと）は残し、期待値 `g-attractor` は変えていない。ハーネスは親windowの error だけを監視するため、この TypeError でテストが失敗する可能性は低い（未実行のため推定）。
+
 ## 2026-10-09 — [WORLD-32] g-attractor §10 テスト追従
 
 ### 作業内容

@@ -56,9 +56,11 @@ class WorldApp {
     document.addEventListener('keydown', e => {
       if (e.altKey || e.ctrlKey || e.metaKey || e.repeat) return;
       const editing = e.target && /^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName);
-      if (!editing && /^Digit[1-6]$/.test(e.code)) {
-        const type = WORLD_ANALYZER_TYPES[Number(e.code.slice(5)) - 1];
-        if (type.available) { e.preventDefault(); this.selectType(type.id); }
+      if (!editing && /^Digit[1-9]$/.test(e.code)) {
+        // タイプ表の key で引く。割当のない数字は type が null のまま何もしない。
+        const n = Number(e.code.slice(5)); let type = null;
+        for (let i = 0; i < WORLD_ANALYZER_TYPES.length && !type; i++) if (WORLD_ANALYZER_TYPES[i].key === n) type = WORLD_ANALYZER_TYPES[i];
+        if (type && type.available) { e.preventDefault(); this.selectType(type.id); }
       }
       if (e.code === 'KeyF') { e.preventDefault(); this.toggleFullscreen().catch(this._showError.bind(this)); }
       if (e.code === 'Space' && !editing && (!e.target || e.target.tagName !== 'BUTTON')) { e.preventDefault(); this.togglePlay().catch(this._showError.bind(this)); }

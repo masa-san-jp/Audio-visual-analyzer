@@ -743,9 +743,9 @@ test('UW-39 WORLD-13 タイプ契約: ブラックホールkey2・32帯域・半
   assert.deepEqual([engine.gpu.textures.length,engine.gpu.fbos.length,engine.gpu.programs.length],resources);
   for(const id of ['g-terrain','g-rings','g-galaxy'])assert.throws(()=>engine.selectType(id),RangeError);
   const types=loadClassic(['js/world/gl-util.js','js/world/analyzer-types.js']).get('WORLD_ANALYZER_TYPES');
-  assert.deepEqual(Array.from(types,t=>t.id),['g-fluid','g-gargantua','g-attractor','g-ribbons','g-kaleido']);
+  assert.deepEqual(Array.from(types,t=>t.id),['g-fluid','g-gargantua','g-attractor']);
   assert.equal(types[1].key,2);assert.equal(types[1].label,'ブラックホール');
-  console.log('UW-39 availableTypes=3 annuli=32 internal=960x540 latencyFrames=0 fadeSec=.5 inactiveFluidSteps=0 feedbackSteps=0 GPUResourceGrowth=0');
+  console.log(`UW-39 availableTypes=${types.filter(t=>t.available).length} annuli=32 internal=960x540 latencyFrames=0 fadeSec=.5 inactiveFluidSteps=0 feedbackSteps=0 GPUResourceGrowth=0`);
 });
 test('UW-40 WORLD-11 曲固有値: クロマ上位・BPM比例・重心/オンセット密度・入力不変',()=>{
   const r=loadClassic(['js/vis-utils.js','js/world/score.js']),variation=r.get('worldSongVariation');
