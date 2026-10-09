@@ -1,4 +1,4 @@
-// 目的 — アトラクターの定数・変身・hash・カメラ・暖機窓とGPU命令を検査する — doc/20261008-design-attractor-v1.md §9
+// 目的 — アトラクターの定数・変身・hash・カメラ・呼吸・暖機窓とGPU命令を検査する — doc/20261008-design-attractor-v1.md §9・§10
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -67,18 +67,18 @@ function realEngine(kinds=['main'],duration=10) {
   return {engine,gl,features:new Feature()};
 }
 test('UW-84 WORLD-31 定数表・POINT_GAIN正規化・登録',()=>{
-  const expected={PARTICLE_W:2048,PARTICLE_H:1024,PARTICLE_COUNT:2097152,WARM_ITERS:40,DECAY:.82,Z_SCALE:.9,SHAPE_SCALE:1,
-    BAND_COUNT:32,BAND_BASE:.35,BAND_GAIN:1.6,PALETTE_TINT:.25,DEPTH_REF:3.2,EXPOSURE_BASE:2.5,EXPOSURE_FLOOR:.75,EXPOSURE_GAIN:.5,
-    TRANS_SECONDS:3,TRANS_STAGGER:1.2,TRANS_FLIGHT:1.8,SWIRL:1.1,KICK_SCATTER:.07,KICK_SECONDS:.18,
+  const expected={PARTICLE_W:2048,PARTICLE_H:1024,PARTICLE_COUNT:2097152,WARM_ITERS:40,DECAY:.88,Z_SCALE:.9,SHAPE_SCALE:1,
+    BAND_COUNT:32,BAND_BASE:.35,BAND_GAIN:1.6,PALETTE_TINT:.10,DEPTH_REF:3.2,EXPOSURE_BASE:2.5,EXPOSURE_FLOOR:.75,EXPOSURE_GAIN:.5,
+    TRANS_SECONDS:1.8,TRANS_STAGGER:.5,TRANS_FLIGHT:1.1,SWIRL:1.6,KICK_BREATH:.06,KICK_SECONDS:.18,
     GLINT_FRACTION:.004,GLINT_GAIN:10,GLINT_SECONDS:.25,WARM_FRAMES:90,CAMERA_EASE_SECONDS:4,ORBIT_LOUD_GAIN:.8,ORBIT_MIN:.5,ORBIT_MAX:1.6,
     BLOOM_THRESHOLD:.6,BLOOM_STRENGTH:.8};
   assert.deepEqual(C,expected);assert.ok(Object.isFrozen(C));
   for(const [w,h] of [[1280,720],[1920,1080],[720,720]]){
-    const gain=r.get('worldAttractorPointGain')(w,h);assert.equal(gain,(w*h*.08)/(2097152/(1-.82)));
+    const gain=r.get('worldAttractorPointGain')(w,h);assert.equal(gain,(w*h*.08)/(C.PARTICLE_COUNT/(1-C.DECAY)));
     assert.ok(Math.abs(gain*C.PARTICLE_COUNT/(1-C.DECAY)/(w*h*.08)-1)<1e-14);
   }
   assert.deepEqual(r.get('WORLD_ANALYZER_TYPES')[2],{id:'g-attractor',label:'ストレンジアトラクター',key:3,available:true});
-  console.log('UW-84 particles=2097152 constants='+Object.keys(C).length+' pointGain720='+r.get('worldAttractorPointGain')(1280,720)+' decay90='+C.DECAY**90);
+  console.log('UW-84 particles='+C.PARTICLE_COUNT+' constants='+Object.keys(C).length+' pointGain720='+r.get('worldAttractorPointGain')(1280,720)+' decayWarm='+C.DECAY**C.WARM_FRAMES);
 });
 test('UW-85 WORLD-31 固定7形・6kind×variation1〜5・有界Clifford写像',()=>{
   const shapes=r.get('WORLD_ATTRACTOR_SHAPES'),choose=r.get('worldAttractorShape');
@@ -99,17 +99,19 @@ test('UW-86 WORLD-31 粒子別変身の端点・単調性・遅延・GLSL式一�
   const flight=r.get('worldAttractorFlight');let cases=0,maxError=0;
   const shader=r.get('WORLD_ATTRACTOR_POINT_VERTEX');assert.match(shader,/SWIRL\*sin\(PI\*e\)/);
   assert.match(shader,/P=mix\(P,position\(b,shapeB\),e\);rgb=mix\(rgb,color\(b\),e\)/);
+  assert.match(shader,/\(music\.z-particleHash\(i,0u\)\*TRANS_STAGGER\)\/TRANS_FLIGHT/);
   for(const h of [0,.1,.5,.999999]){
-    const delay=h*1.2;assert.equal(flight(-1,h),0);assert.equal(flight(delay,h),0);assert.equal(flight(3,h),1);
-    assert.ok(Math.abs(flight(delay+.9,h)-.5)<1e-15);
+    const delay=h*C.TRANS_STAGGER;assert.equal(flight(-1,h),0);assert.equal(flight(delay,h),0);assert.equal(flight(C.TRANS_SECONDS,h),1);
+    assert.equal(flight(delay+C.TRANS_FLIGHT,h),1);
+    assert.ok(Math.abs(flight(delay+C.TRANS_FLIGHT/2,h)-.5)<1e-15);
     let prev=0;
     for(let i=0;i<=300;i++){
-      const age=i/100,v=flight(age,h),p=Math.max(0,Math.min(1,(age-delay)/1.8));
+      const age=i*C.TRANS_SECONDS/300,v=flight(age,h),p=Math.max(0,Math.min(1,(age-delay)/C.TRANS_FLIGHT));
       const error=Math.abs(v-smooth(p));maxError=Math.max(maxError,error);assert.equal(error,0);assert.ok(v>=prev);prev=v;cases++;
     }
   }
-  assert.ok(flight(1,0)>flight(1,.5));
-  console.log('UW-86 flightSamples='+cases+' maxError='+maxError+' staggerSec=1.2 flightSec=1.8');
+  assert.ok(flight(C.TRANS_FLIGHT/2,0)>flight(C.TRANS_FLIGHT/2,.5));
+  console.log('UW-86 flightSamples='+cases+' maxError='+maxError+' staggerSec='+C.TRANS_STAGGER+' flightSec='+C.TRANS_FLIGHT);
 });
 test('UW-87 WORLD-31 グリント部分集合とhashの決定性・seed/serial分離',()=>{
   const hash=r.get('worldAttractorHash');let selected=0,changedSerial=0,changedSeed=0;
@@ -127,11 +129,11 @@ test('UW-87 WORLD-31 グリント部分集合とhashの決定性・seed/serial�
   console.log('UW-87 particles='+n+' selected='+selected+' serialChanged='+changedSerial+' seedChanged='+changedSeed+' replayError=0');
 });
 test('UW-88 WORLD-31 カメラ表・区間内smoothstep・奇数反転・全項目4秒補間',()=>{
-  const expected={intro:[5.2,4,12,18,.05,.05,0,0,34,34],build:[3.8,2.8,28,6,.09,.09,0,-6,34,34],
-    drop:[2.5,2.3,10,14,.24,.24,8,8,38,38],break:[4.2,4.2,58,64,.03,.03,0,0,30,30],
-    main:[3.2,3.2,16,16,.11,.11,-4,-4,34,34],outro:[3.4,6.5,18,30,.04,.04,0,0,34,34]};
-  assert.deepEqual(r.get('WORLD_ATTRACTOR_CAMERA'),expected);let cases=0,maxError=0;
-  for(const [kind,row] of Object.entries(expected))for(const variation of [1,2,3])for(const p of [0,.25,.5,.75,1]){
+  const expected={intro:[5.2,4,12,18,.05,.05,0,0,34,34],build:[4.6,3.6,28,6,.09,.09,0,-6,34,34],
+    drop:[3.4,3.1,10,14,.24,.24,8,8,38,38],break:[4.8,4.8,58,64,.03,.03,0,0,30,30],
+    main:[3.9,3.9,16,16,.11,.11,-4,-4,34,34],outro:[4.2,6.5,18,30,.04,.04,0,0,34,34]};
+  const camera=r.get('WORLD_ATTRACTOR_CAMERA');assert.deepEqual(camera,expected);let cases=0,maxError=0;
+  for(const [kind,row] of Object.entries(camera))for(const variation of [1,2,3])for(const p of [0,.25,.5,.75,1]){
     const {analyzer,engine,input}=setup([kind]);engine.score.sections[0].variation=variation;input.tSec=p*10;analyzer.step(input);
     for(let i=0;i<5;i++){
       let want=row[2*i]+(row[2*i+1]-row[2*i])*smooth(p);
@@ -142,24 +144,46 @@ test('UW-88 WORLD-31 カメラ表・区間内smoothstep・奇数反転・全項�
   }
   const {analyzer,engine,input}=setup(['intro','drop']);analyzer.step(input);input.tSec=9;analyzer.step(input);
   const from=analyzer.cameraShot.slice();engine.sectionIndex=1;input.tSec=10;analyzer.step(input);assert.deepEqual(analyzer.cameraShot,from);
-  input.tSec=12;analyzer.step(input);for(let i=0;i<5;i++)assert.equal(analyzer.cameraShot[i],from[i]+(analyzer.cameraTarget[i]-from[i])*.5);
-  input.tSec=14;analyzer.step(input);assert.deepEqual(analyzer.cameraShot,analyzer.cameraTarget);
+  input.tSec=10+C.CAMERA_EASE_SECONDS/2;analyzer.step(input);for(let i=0;i<5;i++)assert.equal(analyzer.cameraShot[i],from[i]+(analyzer.cameraTarget[i]-from[i])*.5);
+  input.tSec=10+C.CAMERA_EASE_SECONDS;analyzer.step(input);assert.deepEqual(analyzer.cameraShot,analyzer.cameraTarget);
   console.log('UW-88 shotComponents='+cases+' transitionComponents=15 maxError='+maxError);
 });
-test('UW-89 WORLD-31 音量周回clamp・キック/高域イベント・同時刻二重消費防止・再演',()=>{
-  let maxError=0;
+test('UW-89 WORLD-31 音量周回clamp・キック呼吸/高域イベント・同時刻二重消費防止・再演',()=>{
+  const shader=r.get('WORLD_ATTRACTOR_POINT_VERTEX');
+  assert.match(shader,/P\*=1\.\+KICK_BREATH\*music\.x;/);
+  assert.doesNotMatch(shader,/KICK_SCATTER|P\s*\+=/);
+  const update=r.get('WORLD_ATTRACTOR_UPDATE_FRAGMENT');
+  assert.doesNotMatch(update.slice(update.indexOf('void main()')),/KICK_BREATH|music/);
+  // 実GLSLのスカラー倍率をCPUで評価し、全座標/粒子間距離が同じ比率で膨らむことを確認する。
+  const breath=new Function('KICK_BREATH','music','return '+shader.match(/P\*=([^;]+);/)[1]);
+  const points=[[0,0,0],[.2,-.7,.4],[-.6,.3,-.9]];
+  let maxError=0,maxBreathError=0,breathCases=0,peakScale=0,afterScale=0;
+  const checkBreath=env=>{
+    const scale=breath(C.KICK_BREATH,{x:env}),expected=1+C.KICK_BREATH*env;
+    assert.equal(scale,expected);
+    for(let i=0;i<points.length;i++)for(let j=i+1;j<points.length;j++){
+      const distance=Math.hypot(...points[i].map((v,k)=>v-points[j][k]));
+      const expanded=Math.hypot(...points[i].map((v,k)=>v*scale-points[j][k]*scale));
+      const error=Math.abs(expanded/distance-expected);maxBreathError=Math.max(maxBreathError,error);
+      assert.ok(error<1e-14);breathCases++;
+    }
+    return scale;
+  };
+  assert.equal(checkBreath(0),1);
   for(const loudness of [-2,0,.5,1,3]){
     const {analyzer,input,features}=setup();features.raw[L.LEVEL]=loudness;input.dt=.2;input.tSec=1;features.raw[L.ONSET_FLAGS]=5;
-    analyzer.step(input);const want=analyzer.cameraShot[2]*Math.max(.5,Math.min(1.6,1+.8*(loudness-.5)))*.2;
+    analyzer.step(input);const want=analyzer.cameraShot[2]*Math.max(C.ORBIT_MIN,Math.min(C.ORBIT_MAX,1+C.ORBIT_LOUD_GAIN*(loudness-.5)))*input.dt;
     assert.equal(analyzer.yaw,want);assert.equal(analyzer.glintSerial,1);assert.equal(analyzer.music[0],1);assert.equal(analyzer.music[1],1);
+    peakScale=checkBreath(analyzer.music[0]);assert.equal(peakScale,1+C.KICK_BREATH);
     input.dt=0;analyzer.step(input);assert.equal(analyzer.glintSerial,1);assert.equal(analyzer.yaw,want);
-    input.tSec=1.18;features.raw[L.ONSET_FLAGS]=0;analyzer.step(input);
-    const error=Math.abs(analyzer.music[0]-Math.exp(-.18/.18));maxError=Math.max(maxError,error);assert.ok(error<3e-8);
-    assert.ok(Math.abs(analyzer.music[1]-Math.exp(-.18/.25))<3e-8);
+    input.tSec=1+C.KICK_SECONDS;features.raw[L.ONSET_FLAGS]=0;analyzer.step(input);
+    const age=input.tSec-1,error=Math.abs(analyzer.music[0]-Math.exp(-age/C.KICK_SECONDS));maxError=Math.max(maxError,error);assert.ok(error<3e-8);
+    assert.ok(Math.abs(analyzer.music[1]-Math.exp(-age/C.GLINT_SECONDS))<3e-8);
+    afterScale=checkBreath(analyzer.music[0]);assert.ok(afterScale>1&&afterScale<peakScale);
     const snapshot=analyzer.music.slice();analyzer.reset();input.tSec=1;features.raw[L.ONSET_FLAGS]=5;analyzer.step(input);
-    input.tSec=1.18;features.raw[L.ONSET_FLAGS]=0;analyzer.step(input);assert.deepEqual(analyzer.music,snapshot);
+    input.tSec=1+C.KICK_SECONDS;features.raw[L.ONSET_FLAGS]=0;analyzer.step(input);assert.deepEqual(analyzer.music,snapshot);
   }
-  console.log('UW-89 loudnessCases=5 maxEnvelopeFloat32Error='+maxError+' eventReplayError=0');
+  console.log('UW-89 loudnessCases=5 maxEnvelopeFloat32Error='+maxError+' breathDistanceCases='+breathCases+' peakScale='+peakScale+' afterScale='+afterScale+' maxBreathError='+maxBreathError+' eventReplayError=0');
 });
 test('UW-90 WORLD-31 advanceTo暖機90枚・非同期renderAt・既存流体/ブラックホール回数',async()=>{
   const {engine,gl}=realEngine();const a=engine.type;let renders=0,warms=0,feedback=0;
@@ -207,18 +231,28 @@ test('UW-92 WORLD-31 同形境界は変身しない・CPUのみ変身完了後/�
   engine.dispose();console.log('UW-92 sameShapeTransitions=0 interruptedDestination=J finalShape=H');
 });
 test('UW-93 WORLD-31 変身中に暖機窓へ入りA/B再初期化・全CPU上演と状態一致',()=>{
-  const timeline=Array.from({length:721},(_,i)=>{const f=new Float32Array(104);f[L.LEVEL]=.7;f[L.ONSET_FLAGS]=i%30===0?5:0;return f;});
+  const fps=60,sectionStart=10,endFrame=Math.ceil((sectionStart+C.TRANS_SECONDS)*fps),targetFrame=endFrame-1;
+  const targetSec=targetFrame/fps,warmFrame=targetFrame+1-C.WARM_FRAMES;
+  const timeline=Array.from({length:endFrame+1},(_,i)=>{const f=new Float32Array(104);f[L.LEVEL]=.7;f[L.ONSET_FLAGS]=i%30===0?5:0;return f;});
   const optimized=realEngine(['intro','build','drop']),full=realEngine(['intro','build','drop']);
-  for(const item of [optimized,full])item.engine.setTimeline(timeline,60);
+  for(const item of [optimized,full])item.engine.setTimeline(timeline,fps);
   const e=optimized.engine,a=e.type;let warmTime=null;
-  const warm=a.warmStart.bind(a);a.warmStart=t=>{warmTime=t;warm(t);};e.advanceTo(12);
-  assert.equal(warmTime,631/60);assert.equal(a.shapeA,'L');assert.equal(a.shapeB,'J');
+  const warm=a.warmStart.bind(a);a.warmStart=t=>{warmTime=t;warm(t);};e.advanceTo(targetSec);
+  assert.ok(warmTime>sectionStart&&targetSec<sectionStart+C.TRANS_SECONDS);
+  assert.equal(warmTime,warmFrame/fps);assert.equal(a.shapeA,'L');assert.equal(a.shapeB,'J');
   const updatePasses=optimized.gl.calls.filter(c=>c.program===a.updateProgram).length;
-  assert.equal(updatePasses,82+90*2);
-  full.engine.type.render=()=>{};for(let i=0;i<=720;i++)full.engine._step(i/60,full.engine.frameFeatures(i),i?1/60:0);
+  assert.equal(updatePasses,2*(C.WARM_ITERS+1)+C.WARM_FRAMES*2);
+  full.engine.type.render=()=>{};for(let i=0;i<=targetFrame;i++)full.engine._step(i/fps,full.engine.frameFeatures(i),i?1/fps:0);
   const b=full.engine.type;
-  for(const name of ['camera','cameraShot','bandUniforms','music'])assert.deepEqual(a[name],b[name]);
-  for(const name of ['yaw','shapeA','shapeB','lastKick','lastHigh','glintSerial','transitionStart'])assert.equal(a[name],b[name]);
-  assert.equal(e.frame,full.engine.frame);assert.equal(a.glintSerial,25);assert.equal(a.gpuNeedsB,false);
-  e.dispose();full.engine.dispose();console.log('UW-93 CPUsteps=721 dualStateUpdatePasses='+updatePasses+' warmStartSec='+warmTime+' glintEvents=25 CPUstateError=0');
+  const compare=()=>{
+    for(const name of ['camera','cameraShot','bandUniforms','music'])assert.deepEqual(a[name],b[name]);
+    for(const name of ['yaw','shapeA','shapeB','lastKick','lastHigh','glintSerial','transitionStart'])assert.equal(a[name],b[name]);
+    assert.equal(e.frame,full.engine.frame);assert.equal(a.glintSerial,Math.floor((e.frame-1)/30)+1);assert.equal(a.gpuNeedsB,false);
+  };
+  compare();
+  // §10の完了境界ではBをAへ入れ替え、その後は1組だけ更新する。
+  e.advanceTo(endFrame/fps);full.engine._step(endFrame/fps,full.engine.frameFeatures(endFrame),1/fps);
+  assert.equal(a.shapeA,'J');assert.equal(a.shapeB,null);assert.equal(a.music[3],0);compare();
+  assert.equal(optimized.gl.calls.filter(c=>c.program===a.updateProgram).length-updatePasses,1);
+  e.dispose();full.engine.dispose();console.log('UW-93 CPUsteps='+(endFrame+1)+' dualStateUpdatePasses='+updatePasses+' warmStartSec='+warmTime+' targetSec='+targetSec+' completedSec='+endFrame/fps+' glintEvents='+a.glintSerial+' CPUstateError=0 completionUpdatePasses=1');
 });
