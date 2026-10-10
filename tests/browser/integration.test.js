@@ -98,7 +98,7 @@ avzTest('INT-01', 'INT-01 GPU の 3 タイプが GPU グループに並び、選
   } finally { await intCleanup(app); }
 });
 
-avzTest('INT-02', 'INT-02 曲の読み込み後に GPU タイプが描画され、再生で画素が動く', async function () {
+avzGpuTest('INT-02', 'INT-02 曲の読み込み後に GPU タイプが描画され、再生で画素が動く', async function () {
   const app = window.__app;
   try {
     await intLoadSong(app);
@@ -123,7 +123,7 @@ avzTest('INT-02', 'INT-02 曲の読み込み後に GPU タイプが描画され�
   } finally { await intCleanup(app); }
 }, { timeoutMs: 180000, slow: true });
 
-avzTest('INT-03', 'INT-03 準備前は黒＋「GPU 解析中…」を表示し、準備後に消える', async function () {
+avzGpuTest('INT-03', 'INT-03 準備前は黒＋「GPU 解析中…」を表示し、準備後に消える', async function () {
   const app = window.__app;
   try {
     await app.ui._loadMediaFile(intSong(), 0);
@@ -135,7 +135,7 @@ avzTest('INT-03', 'INT-03 準備前は黒＋「GPU 解析中…」を表示し�
   } finally { await intCleanup(app); }
 }, { timeoutMs: 180000, slow: true });
 
-avzTest('INT-04', 'INT-04 GPU タイプ選択中の書き出しで mp4（または webm）が作れる', async function () {
+avzGpuTest('INT-04', 'INT-04 GPU タイプ選択中の書き出しで mp4（または webm）が作れる', async function () {
   const app = window.__app;
   try {
     intSelectType('g-fluid');

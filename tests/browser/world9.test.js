@@ -18,7 +18,7 @@ async function world9Page(run) {
     return await run(child);
   } finally { const w=iframe.contentWindow.__world; w?.audio?.pause(); w?.audioEngine?.ctx?.close(); if(w?.app?.url)iframe.contentWindow.URL.revokeObjectURL(w.app.url); w?.engine?.dispose(); iframe.remove(); }
 }
-avzTest('BW-9-export', '6秒30fps・音声・180フレーム・t=3のrenderAt一致', async () => {
+avzGpuTest('BW-9-export', '6秒30fps・音声・180フレーム・t=3のrenderAt一致', async () => {
   await world9Page(async child => {
     const signal = sigSine(48000, 6, 180, .2);
     const melody = sigSine(48000, 6, 1300, .08);
@@ -60,7 +60,7 @@ avzTest('BW-9-export', '6秒30fps・音声・180フレーム・t=3のrenderAt一
     avzAssert.equal(await w.app.exporter.exportWorld(score,prepared),null);avzAssert.equal(w.app.exporter.blob,null);
   });
 }, {timeoutMs:180000,slow:true});
-avzTest('BW-9-spectrum', '32帯域サイン掃引: 円環の対応する噴出口の輝度が最大', async () => {
+avzGpuTest('BW-9-spectrum', '32帯域サイン掃引: 円環の対応する噴出口の輝度が最大', async () => {
   await world9Page(async child => {
     const bank=child.eval('new MfsMelBank(48000,2048)'),rate=48000,segment=.7;
     const signal={sampleRate:rate,channels:[new Float32Array(rate*segment*32),new Float32Array(rate*segment*32)]};

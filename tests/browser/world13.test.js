@@ -124,7 +124,7 @@ async function world13Shoot(typeId,tSec) {
     try {await app.start();return await completed;}finally {clearTimeout(timeout);}
   }finally {audio.pause();cancelAnimationFrame(app.raf);app.state='paused';e.onFrame=null;e.timeline=timeline;}
 }
-if(typeof avzTest==='function')avzTest('BW-13-render','h² shader実コンパイル・半解像度・直接像・32環・beat無反応・streak上限',async()=>{
+if(typeof avzGpuTest==='function')avzGpuTest('BW-13-render','h² shader実コンパイル・半解像度・直接像・32環・beat無反応・streak上限',async()=>{
   const iframe=document.createElement('iframe');iframe.src=new URL('../browser/harness/world.html',location.href).href;
   const ready=new Promise(resolve=>iframe.onload=resolve);document.body.appendChild(iframe);
   try {
@@ -146,7 +146,7 @@ if(typeof avzTest==='function')avzTest('BW-13-render','h² shader実コンパイ
   }finally {iframe.contentWindow.__world?.engine?.dispose();iframe.remove();}
 },{timeoutMs:60000});
 // §10.20: キックで影の測地線は変えず、view2の構図と高域増光を実GPUで検査する。
-if(typeof avzTest==='function')avzTest('BW-13-view2','固定重力のキック前後・片寄せ/ロールの影・高域の星空倍率2.5',async()=>{
+if(typeof avzGpuTest==='function')avzGpuTest('BW-13-view2','固定重力のキック前後・片寄せ/ロールの影・高域の星空倍率2.5',async()=>{
   const iframe=document.createElement('iframe');iframe.src=new URL('../browser/harness/world.html',location.href).href;
   const ready=new Promise(resolve=>iframe.onload=resolve);document.body.appendChild(iframe);
   try {
@@ -178,7 +178,7 @@ if(typeof avzTest==='function')avzTest('BW-13-view2','固定重力のキック�
     console.log('BW-13-view2 '+JSON.stringify(result));
   }finally {iframe.contentWindow.__world?.engine?.dispose();iframe.remove();}
 },{timeoutMs:60000});
-if(typeof avzTest==='function')avzTest('BW-13-kick-gpu','キック直後0.1秒の内側直接像≥40%・1080p GPU p95≤16ms',async()=>{
+if(typeof avzGpuTest==='function')avzGpuTest('BW-13-kick-gpu','キック直後0.1秒の内側直接像≥40%・1080p GPU p95≤16ms',async()=>{
   const iframe=document.createElement('iframe');iframe.src=new URL('../browser/harness/world.html',location.href).href;
   const ready=new Promise(resolve=>iframe.onload=resolve);document.body.appendChild(iframe);
   try {
@@ -189,7 +189,7 @@ if(typeof avzTest==='function')avzTest('BW-13-kick-gpu','キック直後0.1秒�
     console.log('BW-13-kick-gpu '+JSON.stringify({kick,gpu}));avzAssert.ok(kick.pass,'kick '+JSON.stringify(kick));avzAssert.ok(gpu.pass,'GPU '+JSON.stringify(gpu));
   }finally {iframe.contentWindow.__world?.engine?.dispose();iframe.remove();}
 },{timeoutMs:120000,slow:true});
-if(typeof avzTest==='function')avzTest('BW-13-formulas','実GLSLの黒体5端点・外側低域32環・100msキック式・星空上限',async()=>{
+if(typeof avzGpuTest==='function')avzGpuTest('BW-13-formulas','実GLSLの黒体5端点・外側低域32環・100msキック式・星空上限',async()=>{
   const iframe=document.createElement('iframe');iframe.src=new URL('../browser/harness/world.html',location.href).href;
   const ready=new Promise(resolve=>iframe.onload=resolve);document.body.appendChild(iframe);
   try {

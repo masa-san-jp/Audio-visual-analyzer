@@ -9,7 +9,7 @@ async function world38Page(run) {
 }
 // 7区間（intro/build/drop/break/main/outro＋drop）の短い曲。各区間 6 秒。
 const WORLD38_SECTIONS="[['intro',0],['build',6],['drop',12],['break',18],['main',24],['drop',30],['outro',36]].map(([kind,startSec],i)=>({kind,label:'S'+i,startSec,endSec:startSec+6}))";
-if(typeof avzTest==='function')avzTest('BW-38-jets','実GPU：帯域の噴出口だけが染料を出す・キックで円環から外向きの速度',async()=>{
+if(typeof avzGpuTest==='function')avzGpuTest('BW-38-jets','実GPU：帯域の噴出口だけが染料を出す・キックで円環から外向きの速度',async()=>{
   const result=await world38Page(child=>child.eval(`(()=>{
     const e=__world.engine,gl=e.gpu.gl;e.selectType('g-fluid',true);
     const score=compileWorldScore({bpm:120,durationSec:12,beats:[],downbeatIndices:[],sections:[{kind:'main',label:'J',startSec:0,endSec:12}]},11);
@@ -39,7 +39,7 @@ if(typeof avzTest==='function')avzTest('BW-38-jets','実GPU：帯域の噴出口
   avzAssert.ok(result.own>0&&result.own>result.maxOther*3,'対応する噴出口の染料が最大');
   avzAssert.ok(result.after-result.before>.2,'キック直後に円環から外向きの速度');
 });
-if(typeof avzTest==='function')avzTest('BW-38-sections','1280×720 7区間の撮影・白飛び上限・同時刻の再演一致・逆シーク一致',async()=>{
+if(typeof avzGpuTest==='function')avzGpuTest('BW-38-sections','1280×720 7区間の撮影・白飛び上限・同時刻の再演一致・逆シーク一致',async()=>{
   const result=await world38Page(child=>child.eval(`(async()=>{
     const e=__world.engine;e.resize(1280,720);e.selectType('g-fluid',true);
     const score=compileWorldScore({bpm:120,durationSec:42,beats:[],downbeatIndices:[],sections:${WORLD38_SECTIONS}},11);
@@ -57,7 +57,7 @@ if(typeof avzTest==='function')avzTest('BW-38-sections','1280×720 7区間の撮
   for(const s of result.shots){avzAssert.equal(s.glError,0);avzAssert.ok(Number.isFinite(s.hdrMax));avzAssert.ok(s.clipped<=.02,'白飛び '+JSON.stringify(s));}
   avzAssert.equal(result.replayDiff,0);
 },{timeoutMs:300000,slow:true});
-if(typeof avzTest==='function')avzTest('BW-38-gpu','w13sync: 1080p・GPU完了を同期して計測・p95≤16ms',async()=>{
+if(typeof avzGpuTest==='function')avzGpuTest('BW-38-gpu','w13sync: 1080p・GPU完了を同期して計測・p95≤16ms',async()=>{
   const result=await world38Page(child=>child.eval(`(async()=>{
     const e=__world.engine,gl=e.gpu.gl;e.resize(1920,1080);e.selectType('g-fluid',true);
     e.setScore(compileWorldScore({bpm:120,durationSec:8,beats:[],downbeatIndices:[],sections:[{kind:'drop',label:'H',startSec:0,endSec:8}]},11));
@@ -75,7 +75,7 @@ if(typeof avzTest==='function')avzTest('BW-38-gpu','w13sync: 1080p・GPU完了�
   avzAssert.ok(result.hardware);avzAssert.ok(result.timerAvailable);avzAssert.equal(result.disjoints,0);
   avzAssert.ok(result.samples>=120);avzAssert.ok(result.gpuP95Ms!==null&&result.gpuP95Ms<=16);
 },{timeoutMs:180000,slow:true});
-if(typeof avzTest==='function')avzTest('BW-38-export','typeId g-fluid で実WebCodecsの音声入り1080p・30枚の書き出し',async()=>{
+if(typeof avzGpuTest==='function')avzGpuTest('BW-38-export','typeId g-fluid で実WebCodecsの音声入り1080p・30枚の書き出し',async()=>{
   await world38Page(async child=>{
     for(const name of ['mp4-demuxer','webm-demuxer']){
       const script=child.document.createElement('script');script.src=new URL('../../js/'+name+'.js',location.href).href;

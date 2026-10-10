@@ -134,7 +134,7 @@ async function runWorldAnalyzerMeasurement(){
   }finally{engine.selectType(originalType,true);engine.setScore(originalScore);engine.setTimeline(originalTimeline,originalFps);engine.types.splice(engine.types.length-retained.length,retained.length);}
 }
 if(typeof avzTest==='function'){
-  avzTest('BW-11-types','タイプ選択・ブラックホールkey2・0.5秒crossfade・逆シークで選択維持',async()=>{
+  avzGpuTest('BW-11-types','タイプ選択・ブラックホールkey2・0.5秒crossfade・逆シークで選択維持',async()=>{
     const iframe=document.createElement('iframe');iframe.src=new URL('../browser/harness/world.html',location.href).href;
     const ready=new Promise(resolve=>iframe.onload=resolve);document.body.appendChild(iframe);
     try{await ready;const child=iframe.contentWindow,w=child.__world;avzAssert.ok(w?.engine,w?.error);
@@ -157,7 +157,7 @@ if(typeof avzTest==='function'){
 }
 if(typeof module!=='undefined'&&module.exports){module.exports={world11Correlation,world11Histogram,world11HistogramDistance,world11RegionSamples};}
 
-if(typeof avzTest==='function')avzTest('BW-11-export','選択fluid/gargantuaをUIから音声入りexport・live/renderAt・復号画像で検査',async()=>{
+if(typeof avzGpuTest==='function')avzGpuTest('BW-11-export','選択fluid/gargantuaをUIから音声入りexport・live/renderAt・復号画像で検査',async()=>{
   const iframe=document.createElement('iframe');iframe.src=new URL('../browser/harness/world.html',location.href).href;
   const ready=new Promise(resolve=>iframe.onload=resolve);document.body.appendChild(iframe);
   let decoded=null,decoder=null;

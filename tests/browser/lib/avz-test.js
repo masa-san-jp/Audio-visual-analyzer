@@ -14,8 +14,37 @@
       fn: fn,
       timeoutMs: options.timeoutMs === undefined ? 30000 : options.timeoutMs,
       slow: options.slow === true,
+      gpu: options.gpu === true,
       expectedFailure: options.expectedFailure === true
     });
+  }
+
+  // GPU タイプ（WebGL2 実機）を必要とするテストの登録。GPU のない環境（CI のヘッドレス等）ではスキップする。
+  function avzGpuTest(id, name, fn, options) {
+    options = options || {};
+    var merged = {};
+    for (var key in options) merged[key] = options[key];
+    merged.gpu = true;
+    avzTest(id, name, fn, merged);
+  }
+
+  // ハードウェアの WebGL2 と浮動小数点の描画先があるか。一度だけ判定して記憶する。
+  var gpuAvailableCache = null;
+  function avzGpuAvailable() {
+    if (gpuAvailableCache !== null) return gpuAvailableCache;
+    try {
+      var canvas = document.createElement('canvas');
+      var gl = canvas.getContext('webgl2');
+      var ok = !!gl && !!gl.getExtension('EXT_color_buffer_float');
+      if (ok) {
+        var info = gl.getExtension('WEBGL_debug_renderer_info');
+        var renderer = info ? gl.getParameter(info.UNMASKED_RENDERER_WEBGL) : gl.getParameter(gl.RENDERER);
+        ok = !/swiftshader|llvmpipe|software/i.test(String(renderer));
+      }
+      var lose = gl && gl.getExtension('WEBGL_lose_context'); if (lose) lose.loseContext();
+      gpuAvailableCache = ok;
+    } catch (_) { gpuAvailableCache = false; }
+    return gpuAvailableCache;
   }
 
   function assertionError(message) {
@@ -123,6 +152,10 @@
         results.push({ id: test.id, name: test.name, status: 'skip', ms: 0, error: null });
         continue;
       }
+      if (test.gpu && !avzGpuAvailable()) {
+        results.push({ id: test.id, name: `${test.name}（GPU なしのためスキップ）`, status: 'skip', ms: 0, error: null });
+        continue;
+      }
       var result = await runOne(test);
       // 通常実行では意図的な失敗ケースを反転判定する（失敗を検知できれば pass）
       if (test.expectedFailure && !global.__avzIncludeExpectedFailure) {
@@ -141,6 +174,8 @@
   }
 
   global.avzTest = avzTest;
+  global.avzGpuTest = avzGpuTest;
+  global.avzGpuAvailable = avzGpuAvailable;
   global.avzAssert = avzAssert;
   global.avzArtifact = function (name, dataUrl) {
     if (activeArtifacts) activeArtifacts.push({ name: name, dataUrl: dataUrl });

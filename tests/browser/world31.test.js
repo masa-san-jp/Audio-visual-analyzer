@@ -7,7 +7,7 @@ async function world31Page(run) {
   try {await ready;const child=iframe.contentWindow;avzAssert.ok(child.__world?.engine,child.__world?.error);return await run(child);}
   finally {const w=iframe.contentWindow.__world;w?.audio?.pause();w?.audioEngine?.ctx?.close();w?.engine?.dispose();iframe.remove();}
 }
-if(typeof avzTest==='function')avzTest('BW-31-state','実RGBA32Fのseed初期化・Clifford1反復・旧座標・有限な40反復',async()=>{
+if(typeof avzGpuTest==='function')avzGpuTest('BW-31-state','実RGBA32Fのseed初期化・Clifford1反復・旧座標・有限な40反復',async()=>{
   const result=await world31Page(child=>child.eval(`(()=>{
     const e=__world.engine;e.selectType('g-attractor',true);
     e.setScore(compileWorldScore({bpm:120,durationSec:10,beats:[],downbeatIndices:[],sections:[{startSec:0,endSec:10,kind:'intro',label:'L'}]},11));
@@ -29,7 +29,7 @@ if(typeof avzTest==='function')avzTest('BW-31-state','実RGBA32Fのseed初期化
   console.log('BW-31-state '+JSON.stringify(result));avzAssert.equal(result.glError,0);avzAssert.equal(result.nonfinite,0);
   avzAssert.ok(result.seedError<=1e-7);avzAssert.ok(result.oldError<=1e-7);avzAssert.ok(result.mapError<=1e-5);
 },{timeoutMs:60000});
-if(typeof avzTest==='function')avzTest('BW-31-render','1280×720全6区間・変身連続フレーム・キック/グリント・逆シーク再演',async()=>{
+if(typeof avzGpuTest==='function')avzGpuTest('BW-31-render','1280×720全6区間・変身連続フレーム・キック/グリント・逆シーク再演',async()=>{
   const result=await world31Page(child=>child.eval(`(async()=>{
     const e=__world.engine;e.resize(1280,720);e.selectType('g-attractor',true);
     const kinds=['intro','build','drop','break','main','outro'],score=compileWorldScore({bpm:120,durationSec:60,beats:[],downbeatIndices:[],
@@ -64,7 +64,7 @@ if(typeof avzTest==='function')avzTest('BW-31-render','1280×720全6区間・変
   avzAssert.equal(result.kickPeak,1);avzAssert.close(result.kickAfter,Math.exp(-1),3e-8);
   avzAssert.equal(result.glintPeak,1);avzAssert.close(result.glintAfter,Math.exp(-.18/.25),3e-8);avzAssert.equal(result.serial,1);
 },{timeoutMs:240000,slow:true});
-if(typeof avzTest==='function')avzTest('BW-31-gpu','w13sync: 1080p・GPU完了を同期して計測・p95≤16ms',async()=>{
+if(typeof avzGpuTest==='function')avzGpuTest('BW-31-gpu','w13sync: 1080p・GPU完了を同期して計測・p95≤16ms',async()=>{
   const result=await world31Page(child=>child.eval(`(async()=>{
     const e=__world.engine,gl=e.gpu.gl;e.resize(1920,1080);e.selectType('g-attractor',true);
     e.setScore(compileWorldScore({bpm:120,durationSec:8,beats:[],downbeatIndices:[],sections:[{kind:'drop',label:'H',startSec:0,endSec:8}]},11));
@@ -82,7 +82,7 @@ if(typeof avzTest==='function')avzTest('BW-31-gpu','w13sync: 1080p・GPU完了�
   avzAssert.equal(result.particles,result.expectedParticles);avzAssert.ok(result.hardware);avzAssert.ok(result.timerAvailable);avzAssert.equal(result.disjoints,0);
   avzAssert.ok(result.samples>=120);avzAssert.ok(result.gpuP95Ms!==null&&result.gpuP95Ms<=16);
 },{timeoutMs:180000,slow:true});
-if(typeof avzTest==='function')avzTest('BW-31-export','typeIdだけで実WebCodecsの音声入り1080p・30枚の書き出し',async()=>{
+if(typeof avzGpuTest==='function')avzGpuTest('BW-31-export','typeIdだけで実WebCodecsの音声入り1080p・30枚の書き出し',async()=>{
   await world31Page(async child=>{
     for(const name of ['mp4-demuxer','webm-demuxer']){
       const script=child.document.createElement('script');script.src=new URL('../../js/'+name+'.js',location.href).href;

@@ -1,3 +1,15 @@
+## 2026-10-11
+
+### 作業内容
+- [WORLD-41〜43] GPU タイプ（スペクトル流体・ブラックホール・ストレンジアトラクター）を本体 index.html に統合。world.html は利用者向けに廃止し tests/browser/harness/ へ移動
+- 録画モード: GPU タイプ選択中は #gpu-canvas を録る（Recorder.start(canvasOverride)）。録画中はタイプ選択を固定（自動演出のロックと合成）
+- 統合テストの画素読み取りを、engine._draw() 直後の readPixels に変更（preserveDrawingBuffer:false 対策）
+- ブラウザテストに avzGpuTest を追加。ハードウェア WebGL2 がない環境（CI ヘッドレス）では GPU テストをスキップし、実機 GPU では従来どおり実行
+
+### 備考
+- 実機 GPU で: ゴールデン 42 件一致（2D 不変）、統合テスト INT-01/04/05/06/07 合格。INT-02/03 は画面ロック中に再生待ちでタイムアウト（画面が使える状態での再確認が必要）
+- 単体テスト 228 件: 227 成功 / 1 スキップ（既存）
+
 ## 2026-10-10 — [WORLD-41] GPU タイプの本体統合
 
 ### 作業内容
