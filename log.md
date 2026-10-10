@@ -1,6 +1,12 @@
 ## 2026-10-11
 
 ### 作業内容
+- README を現行の実装に合わせて更新（使いかたに GPU グループを追記、動作環境に WebGL2、ブラックホール・ストレンジアトラクター・スペクトル流体の説明を最新化。廃止済みの演出の記述を削除）
+- GitHub リポジトリの説明（description）とトピック（タグ）を GPU タイプに合わせて更新
+
+## 2026-10-11
+
+### 作業内容
 - [WORLD-41〜43] GPU タイプ（スペクトル流体・ブラックホール・ストレンジアトラクター）を本体 index.html に統合。world.html は利用者向けに廃止し tests/browser/harness/ へ移動
 - 録画モード: GPU タイプ選択中は #gpu-canvas を録る（Recorder.start(canvasOverride)）。録画中はタイプ選択を固定（自動演出のロックと合成）
 - 統合テストの画素読み取りを、engine._draw() 直後の readPixels に変更（preserveDrawingBuffer:false 対策）
