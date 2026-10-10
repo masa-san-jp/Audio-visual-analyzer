@@ -1,3 +1,37 @@
+## 2026-10-10 — [WORLD-36/37] ブラウザテストの追従（曲長・粒子数）
+
+### 作業内容
+- `tests/browser/world31.test.js`（BW-31-gpu）: 粒子数の期待値を `2097152` の直書きから `WORLD_ATTRACTOR.PARTICLE_COUNT` の導出へ変更。iframe 内の `child.eval` の戻り値に `expectedParticles:WORLD_ATTRACTOR.PARTICLE_COUNT` を追加し、`avzAssert.equal(result.particles,result.expectedParticles)` で比較する（現在の値は 1572864）。
+- 同ファイルに `PARTICLE_H`・`DECAY` の直書きは無いため変更なし。
+
+### 検証
+- `node --check tests/browser/world31.test.js`: エラーなし。
+- `node tests/run.mjs --unit`: 216件／215成功／0失敗／1スキップ、30,660ms。
+- ブラウザテスト・Chrome 実行は未実行（作業指示どおり）。コミット・プッシュは未実施。
+
+### 備考
+- 曲長側（WORLD-36）の `tests/browser/world11.test.js`（BW-11-export の `SONG_CONST.MIN_DURATION_SEC+2` の曲）は、本チケット着手時点で作業ツリーに未コミットで存在しており、本チケットでは触れていない。`world31.test.js` の `durationSec` も据え置き。
+- 前エントリ（WORLD-35）の備考にあった `world31.test.js:82` の 2097152 との比較は、本エントリで解消。
+
+## 2026-10-10 — [WORLD-35] g-attractor 性能
+
+### 作業内容
+- `js/world/g-attractor.js`（設計 §11 の 1〜5）:
+  1. カメラ基底を CPU 化。`_updateCameraBasis()` が `step` 内で 1 回だけ位置・前・右・上（roll 適用済み）を事前確保の `Float32Array(3)`×4 に書く。頂点シェーダーは `uniform vec3 camPos,camForward,camRight,camUp` を受け取り、三角関数・normalize・cross を使わない。旧 `camera` uniform と `cameraLoc` は撤去。
+  2. 廃止した散乱の残骸（`z`・`phi`・`r` の hash 2 回と sqrt）を削除。
+  3. グリントの hash は `music.y > GLINT_EPS` のときだけ評価。`GLINT_EPS: .01` を `WORLD_ATTRACTOR` に追加（GLSL 定数へ自動展開）。
+  4. 色の重みを三角関数なしに変更（`n = L>1e-6 ? v/L : vec2(1,0)`、`w1=.5+.5n.x`、`w2/w3` は定数 `COS2`/`SIN2` との内積）。帯域番号 k のみ `atan`。
+  5. `PARTICLE_H` 768、`PARTICLE_COUNT` 1572864、`DECAY` .90。
+- `tests/unit/world-attractor.test.mjs`: UW-84・UW-91 を新定数に追従（個数は `PARTICLE_W*PARTICLE_H`、描画数・storage 寸法は `WORLD_ATTRACTOR` から導出）。UW-96 を新規追加（旧 cos 式との色重み一致 64 方向 <1e-6、CPU カメラ基底と旧 GLSL 式の一致 36 通り <1e-6、シェーダー整理の文字列検査、配列再利用）。
+
+### 検証
+- `node tests/run.mjs --unit`: 216件／215成功／0失敗／1スキップ。`node --check`: `g-attractor.js`・`world-attractor.test.mjs` エラーなし。
+- ブラウザテスト・Chrome 実行・BW-31-gpu は未実行（Opus が実施）。`tests/browser/world11.test.js` には触れていない。
+
+### 備考
+- `tests/browser/world31.test.js:82` は `result.particles` を 2097152 と比較している。新粒子数 1572864 に追従が必要（今回は未変更）。
+- 判断: `GLINT_EPS` は設計の指定どおり定数表へ追加したため、UW-84 の期待表にも加えた。右基底 `normalize(cross(forward,(0,1,0)))` は `(-fz,0,fx)` の正規化へ展開（等価）。
+
 ## 2026-10-10 — [WORLD-34] 数字キーのタイプ選択
 
 ### 作業内容

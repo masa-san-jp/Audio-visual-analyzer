@@ -166,8 +166,13 @@ if(typeof avzTest==='function')avzTest('BW-11-export','選択fluid/gargantuaをU
       const script=child.document.createElement('script');script.src=new URL('../../js/'+name+'.js',location.href).href;
       await new Promise((resolve,reject)=>{script.onload=resolve;script.onerror=reject;child.document.body.appendChild(script);});
     }
-    await w.app.load(new child.File([encodeWav16(world11SyntheticSong(120,0,3))],'types-export.wav',{type:'audio/wav',lastModified:1}));
+    // 最短曲長（SONG_CONST.MIN_DURATION_SEC）+2秒の曲。全曲を書き出すと660枚になるため、下で先頭6秒に制限する。
+    await w.app.load(new child.File([encodeWav16(world11SyntheticSong(120,0,3,SONG_CONST.MIN_DURATION_SEC+2))],'types-export.wav',{type:'audio/wav',lastModified:1}));
     await w.app.setFps(30);let downloads=0;if(typeof w.app.exporter.save!=="function")throw new Error("exporter.save missing");w.app.exporter.save=()=>downloads++;
+    // 他の書き出しテストと同じく、frameCountと音声バッファを6秒に揃えて先頭6秒の窓に制限する（180枚）。
+    const full=w.app.prepared,{sampleRate,numberOfChannels}=full.audioBuffer,windowSamples=6*sampleRate,windowed=new child.AudioBuffer({length:windowSamples,numberOfChannels,sampleRate});
+    for(let c=0;c<numberOfChannels;c++)windowed.copyToChannel(full.audioBuffer.getChannelData(c).subarray(0,windowSamples),c);
+    w.app.prepared={...full,audioBuffer:windowed,frameCount:6*full.fps};
     for(const typeId of ['g-fluid','g-gargantua']){
       w.app.selectType(typeId);await w.app.renderAt(3);const reference=w.engine.capture();
       w.engine.setScore(w.score);for(const t of [.12,.34,.72,1.5,2.2,3])w.engine.render(t,null,.017);

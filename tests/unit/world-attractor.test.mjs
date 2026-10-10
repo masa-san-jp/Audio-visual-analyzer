@@ -67,12 +67,13 @@ function realEngine(kinds=['main'],duration=10) {
   return {engine,gl,features:new Feature()};
 }
 test('UW-84 WORLD-31 定数表・POINT_GAIN正規化・登録',()=>{
-  const expected={PARTICLE_W:2048,PARTICLE_H:1024,PARTICLE_COUNT:2097152,WARM_ITERS:40,DECAY:.88,Z_SCALE:.9,SHAPE_SCALE:1,
+  // §11: 粒子数 768 行（1,572,864 個）、DECAY .90。個数は幅×高さから導出する。
+  const expected={PARTICLE_W:2048,PARTICLE_H:768,PARTICLE_COUNT:C.PARTICLE_W*C.PARTICLE_H,WARM_ITERS:40,DECAY:.90,Z_SCALE:.9,SHAPE_SCALE:1,
     BAND_COUNT:32,BAND_BASE:.35,BAND_GAIN:1.6,PALETTE_TINT:.10,DEPTH_REF:3.2,EXPOSURE_BASE:2.5,EXPOSURE_FLOOR:.75,EXPOSURE_GAIN:.5,
     TRANS_SECONDS:1.8,TRANS_STAGGER:.5,TRANS_FLIGHT:1.1,SWIRL:1.6,KICK_BREATH:.06,KICK_SECONDS:.18,
     GLINT_FRACTION:.004,GLINT_GAIN:10,GLINT_SECONDS:.25,WARM_FRAMES:90,CAMERA_EASE_SECONDS:4,ORBIT_LOUD_GAIN:.8,ORBIT_MIN:.5,ORBIT_MAX:1.6,
-    BLOOM_THRESHOLD:.6,BLOOM_STRENGTH:.8};
-  assert.deepEqual(C,expected);assert.ok(Object.isFrozen(C));
+    BLOOM_THRESHOLD:.6,BLOOM_STRENGTH:.8,GLINT_EPS:.01};
+  assert.deepEqual(C,expected);assert.equal(C.PARTICLE_COUNT,1572864);assert.ok(Object.isFrozen(C));
   for(const [w,h] of [[1280,720],[1920,1080],[720,720]]){
     const gain=r.get('worldAttractorPointGain')(w,h);assert.equal(gain,(w*h*.08)/(C.PARTICLE_COUNT/(1-C.DECAY)));
     assert.ok(Math.abs(gain*C.PARTICLE_COUNT/(1-C.DECAY)/(w*h*.08)-1)<1e-14);
@@ -204,11 +205,11 @@ test('UW-90 WORLD-31 advanceTo暖機90枚・非同期renderAt・既存流体/ブ
 });
 test('UW-91 WORLD-31 GPU命令: 32F二組・40反復・16F密度・変身・資源再利用・再描画不変',()=>{
   const {engine,gl,features}=realEngine(['intro','drop','outro'],10),a=engine.type,g=engine.gpu;
-  const storage=gl.calls.filter(c=>c.storage===gl.RGBA32F&&c.w===2048&&c.h===1024);assert.equal(storage.length,4);
+  const storage=gl.calls.filter(c=>c.storage===gl.RGBA32F&&c.w===C.PARTICLE_W&&c.h===C.PARTICLE_H);assert.equal(storage.length,4);
   const resources=[g.textures.length,g.fbos.length,g.programs.length];
   const count=p=>gl.calls.filter(c=>c.program===p).length;
   engine._step(0,features,0);assert.equal(count(a.updateProgram),42);assert.equal(count(a.program),1);assert.equal(count(a.decayProgram),1);
-  assert.equal(gl.calls.filter(c=>c.program===a.program)[0].count,2097152);
+  assert.equal(gl.calls.filter(c=>c.program===a.program)[0].count,C.PARTICLE_COUNT);
   assert.equal(gl.values.get(a.pointGainLoc),r.get('worldAttractorPointGain')(1280,720));
   const initial=count(a.updateProgram);a.render(engine.typeInput);assert.equal(count(a.updateProgram),initial);assert.equal(count(a.program),1);
   const oldA=a.stateA,oldB=a.stateB;
@@ -255,4 +256,42 @@ test('UW-93 WORLD-31 変身中に暖機窓へ入りA/B再初期化・全CPU上�
   assert.equal(a.shapeA,'J');assert.equal(a.shapeB,null);assert.equal(a.music[3],0);compare();
   assert.equal(optimized.gl.calls.filter(c=>c.program===a.updateProgram).length-updatePasses,1);
   e.dispose();full.engine.dispose();console.log('UW-93 CPUsteps='+(endFrame+1)+' dualStateUpdatePasses='+updatePasses+' warmStartSec='+warmTime+' targetSec='+targetSec+' completedSec='+endFrame/fps+' glintEvents='+a.glintSerial+' CPUstateError=0 completionUpdatePasses=1');
+});
+test('UW-96 WORLD-35 §11 三角関数なしの色重み・CPUカメラ基底・シェーダー整理',()=>{
+  const shader=r.get('WORLD_ATTRACTOR_POINT_VERTEX');
+  // 頂点シェーダーにカメラ基底の計算（normalize・cross）が残らず、uniformで受け取る。
+  assert.doesNotMatch(shader,/normalize|cross\(|camera\.|uniform vec4 camera/);
+  assert.match(shader,/uniform vec3 camPos,camForward,camRight,camUp;/);
+  // 廃止した散乱の残骸（z・phi・r のhash）が消えている。
+  assert.doesNotMatch(shader,/particleHash\(i,3u\)|particleHash\(i,4u\)|sqrt\(/);
+  // グリントのhashは music.y > GLINT_EPS のときだけ評価する。
+  assert.match(shader,/if\(music\.y>GLINT_EPS&&particleHash\(i,glintSerial\)<GLINT_FRACTION\)/);
+  assert.match(shader,new RegExp('const float GLINT_EPS = '+C.GLINT_EPS.toFixed(8).replace('.','\\.')+';'));
+  // 色の重み: 新式（正規化ベクトルn・定数cos/sin）が旧cos式と一致する（64方向）。
+  const c2=Math.cos(2.1),s2=Math.sin(2.1);let maxColor=0;
+  for(let i=0;i<64;i++){
+    const ang=(i+.5)/64*2*Math.PI-Math.PI,v=[Math.cos(ang)*(.3+i%5),Math.sin(ang)*(.3+i%5)],L=Math.hypot(...v),n=L>1e-6?[v[0]/L,v[1]/L]:[1,0];
+    const old=[.5+.5*Math.cos(ang),.5+.5*Math.cos(ang-2.1),.5+.5*Math.cos(ang+2.1)];
+    const now=[.5+.5*n[0],.5+.5*(n[0]*c2+n[1]*s2),.5+.5*(n[0]*c2-n[1]*s2)];
+    for(let k=0;k<3;k++){const e=Math.abs(old[k]-now[k]);maxColor=Math.max(maxColor,e);assert.ok(e<1e-6);}
+  }
+  // CPUカメラ基底 = 旧GLSL式（double評価）。roll・奇数variationの符号反転も含む。
+  const cross=(a,b)=>[a[1]*b[2]-a[2]*b[1],a[2]*b[0]-a[0]*b[2],a[0]*b[1]-a[1]*b[0]];
+  const norm=a=>{const l=Math.hypot(...a);return a.map(x=>x/l);};
+  let maxBasis=0,cases=0;
+  for(const kind of ['intro','build','drop','break','main','outro'])for(const variation of [1,2])for(const p of [0,.5,1]){
+    const {analyzer,engine,input}=setup([kind]);engine.score.sections[0].variation=variation;input.tSec=p*10;input.dt=.1;analyzer.step(input);
+    const [dist,pitch,yaw,roll]=analyzer.camera;
+    const cam=[dist*Math.cos(pitch)*Math.cos(yaw),dist*Math.sin(pitch),dist*Math.cos(pitch)*Math.sin(yaw)];
+    const forward=norm(cam.map(x=>-x)),right=norm(cross(forward,[0,1,0])),up=cross(right,forward);
+    const r2=right.map((x,k)=>Math.cos(roll)*x+Math.sin(roll)*up[k]),u2=right.map((x,k)=>-Math.sin(roll)*x+Math.cos(roll)*up[k]);
+    for(const [got,want] of [[analyzer.camPos,cam],[analyzer.camForward,forward],[analyzer.camRight,r2],[analyzer.camUp,u2]])
+      for(let k=0;k<3;k++){const e=Math.abs(got[k]-want[k]);maxBasis=Math.max(maxBasis,e);assert.ok(e<1e-6);}
+    cases++;
+  }
+  // 配列は再利用（stepで再確保しない）。
+  const {analyzer,input}=setup(),before=[analyzer.camPos,analyzer.camForward,analyzer.camRight,analyzer.camUp];
+  analyzer.step(input);input.tSec=1;analyzer.step(input);
+  assert.deepEqual([analyzer.camPos,analyzer.camForward,analyzer.camRight,analyzer.camUp].map((a,k)=>a===before[k]),[true,true,true,true]);
+  console.log('UW-96 colorDirections=64 maxColorError='+maxColor+' basisCases='+cases+' maxBasisError='+maxBasis);
 });
