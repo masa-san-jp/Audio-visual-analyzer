@@ -47,7 +47,8 @@ class Recorder {
   // MediaRecorder の start イベント発火を待って resolve する。
   // 呼び出し側は resolve（true）後に再生を開始することで、録画準備が整う前に
   // 音が鳴り始めて映像と音声の頭がずれることを防ぐ。
-  async start() {
+  // canvasOverride: GPU タイプ選択中は #gpu-canvas を録る。省略時は従来どおり 2D canvas。
+  async start(canvasOverride) {
     if (this.state !== 'idle' || this._starting) return false;
     this._starting = true;
 
@@ -61,7 +62,8 @@ class Recorder {
     }
 
     // Canvas 映像ストリーム
-    const canvasStream = this.canvas.captureStream(this.frameRate);
+    this.activeCanvas = canvasOverride || this.canvas;
+    const canvasStream = this.activeCanvas.captureStream(this.frameRate);
 
     // AudioContext からオーディオストリームを取得して合成
     const audioDest = this.audioEngine.createStreamDestination();
@@ -249,7 +251,8 @@ class Recorder {
   _videoBitrate() {
     const factor = RECORDER_QUALITY_FACTORS[this.quality] || RECORDER_BITS_PER_PIXEL;
     const scale = factor / RECORDER_BITS_PER_PIXEL;
-    const pixelsPerSecond = this.canvas.width * this.canvas.height * this.frameRate;
+    const source = this.activeCanvas || this.canvas;
+    const pixelsPerSecond = source.width * source.height * this.frameRate;
     const bps = Math.round(pixelsPerSecond * factor);
     return Math.min(RECORDER_MAX_VIDEO_BPS * scale, Math.max(RECORDER_MIN_VIDEO_BPS * scale, bps));
   }

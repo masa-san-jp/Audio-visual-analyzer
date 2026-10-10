@@ -36,6 +36,7 @@ body {
 /* ── Visualizer area ── */
 
 #visualizer-area {
+  position: relative; /* #gpu-canvas を #canvas に重ねる基準（デバッグ表示の位置は不変） */
   flex: 1;
   min-width: 0;
   display: flex;
@@ -91,6 +92,34 @@ body {
   display: block;
   background: #000;
 }
+
+/* GPU タイプ（統合設計 §1）: #canvas と同じ位置・大きさに重ねる。サイズ(px)は VisualizerCore.resize が設定する */
+#gpu-canvas {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  background: #000;
+}
+#gpu-canvas[hidden] { display: none; }
+#canvas.gpu-hidden { visibility: hidden; }
+#gpu-message {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  text-align: center;
+  color: #ccc;
+  pointer-events: none;
+}
+#gpu-message[hidden] { display: none; }
+#gpu-status[hidden] { display: none; }
+
+/* GPU タイプ選択中の設定表示（統合設計 §4）。隠した設定の値は保持し、2D へ戻すと元の表示に戻る */
+[data-gpu-only] { display: none; }
+body.gpu-type [data-gpu-only] { display: block; }
+body.gpu-type [data-gpu-hide] { display: none !important; }
 
 /* ── Controls panel ── */
 

@@ -135,7 +135,8 @@ test('U18-16 内蔵8シーンは §6.3 の値・空欄・系統と一致する',
   for (const [cls, count] of [['calm', 2], ['build', 3], ['drop', 3]]) {
     assert.equal(DIRECTOR_SCENES.filter(scene => scene.cls === cls).length, count);
   }
-  assert.deepEqual(Object.keys(registry).sort(), rows.map(row => row[0]).sort());
+  // GPU 項目はディレクターの対象外（統合設計 §3）。2D の 8 タイプだけが内蔵シーンと対応する
+  assert.deepEqual(Object.keys(registry).filter(key => !registry[key].gpu).sort(), rows.map(row => row[0]).sort());
 });
 
 test('U18-16 各 op の効果は累積し、末尾から先頭へ循環する', () => {
@@ -297,7 +298,7 @@ test('U18-19 内蔵シーンと全タイプのプリセットで保護キーを�
 });
 
 test('U18-19 パッチは適用後のタイプの capabilities に従う', () => {
-  for (const type of Object.keys(registry)) {
+  for (const type of Object.keys(registry).filter(key => !registry[key].gpu)) {
     const settings = createDefaultSettings();
     settings.analyzerType = type === 'bar' ? 'spectrogram' : 'bar';
     const cap = registry[type].capabilities;

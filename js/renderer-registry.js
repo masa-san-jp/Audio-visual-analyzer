@@ -79,10 +79,30 @@ const RENDERER_REGISTRY = {
     create: (canvas) => new LissajousRenderer(canvas),
     capabilities: { methods: ['line', 'dot'], layers: false, sliders: [] },
   },
+
+  // ── GPU（WebGL2・WorldBridge が描画する。FramePipeline は描画せず、create も持たない） ──
+  // 統合設計 doc/20261010-design-integration-v1.md §3。capabilities は gpu のみ（2D の項目は持たない）
+  'g-fluid': {
+    label: 'スペクトル流体', group: 'GPU', gpu: true, stateful: false,
+    capabilities: { gpu: true },
+  },
+  'g-gargantua': {
+    label: 'ブラックホール', group: 'GPU', gpu: true, stateful: false,
+    capabilities: { gpu: true },
+  },
+  'g-attractor': {
+    label: 'ストレンジアトラクター', group: 'GPU', gpu: true, stateful: false,
+    capabilities: { gpu: true },
+  },
 };
 
 // タイプ一覧を group 順で返す（UI の optgroup 構築用）
-const RENDERER_GROUP_ORDER = ['基本', '時間軸', '擬似3D', '幾何'];
+const RENDERER_GROUP_ORDER = ['基本', '時間軸', '擬似3D', '幾何', 'GPU'];
+
+// 2D タイプの ID 一覧（GPU 項目を除く。ランダム選択・ディレクターの母集団用）
+function listRenderer2DKeys() {
+  return Object.keys(RENDERER_REGISTRY).filter(key => !RENDERER_REGISTRY[key].gpu);
+}
 
 function getRendererEntry(type) {
   return RENDERER_REGISTRY[type] || RENDERER_REGISTRY.bar;

@@ -10,6 +10,9 @@
   <div id="app">
     <div id="visualizer-area">
       <canvas id="canvas"></canvas>
+      <!-- GPU タイプ用（WebGL2）。GPU タイプ選択中のみ表示し、#canvas と同じ位置・大きさに重ねる -->
+      <canvas id="gpu-canvas" hidden></canvas>
+      <div id="gpu-message" role="status" hidden></div>
     </div>
 
     <div id="controls">
@@ -59,7 +62,7 @@
         </div>
       </section>
 
-      <section class="control-group" id="video-composite-controls" style="display:none;">
+      <section class="control-group" id="video-composite-controls" data-gpu-hide style="display:none;">
         <h2>動画合成</h2>
         <label style="margin-bottom:8px;">
           <span class="toggle-row">
@@ -100,6 +103,7 @@
           <input type="range" id="seek-bar" min="0" max="1000" value="0" step="1" disabled style="width:100%;">
           <div id="section-strip" hidden aria-label="曲のセクション"></div>
           <div id="time-display" class="label-text">0:00 / 0:00</div>
+          <div id="gpu-status" class="label-text" role="status" hidden></div>
         </div>
         <label style="margin-top:4px;">
           音量
@@ -205,7 +209,7 @@
           <button id="btn-16-9" class="active">16:9</button>
           <button id="btn-1-1">1:1</button>
         </div>
-        <div class="label-row" style="margin-top:8px;">
+        <div class="label-row" data-gpu-hide style="margin-top:8px;">
           <span class="label-text">背景色</span>
           <div class="btn-row">
             <button id="btn-bg-black" class="active">黒</button>
@@ -226,7 +230,7 @@
             <option value="radial">円形放射</option>
           </select>
         </label>
-        <label id="group-expression">
+        <label id="group-expression" data-gpu-hide>
           表現方法
           <select id="expression-method">
             <option value="bar">棒</option>
@@ -234,7 +238,7 @@
             <option value="dot">点</option>
           </select>
         </label>
-        <label id="bar-mode-group">
+        <label id="bar-mode-group" data-gpu-hide>
           表示モード
           <select id="bar-display-mode">
             <option value="normal">通常</option>
@@ -245,7 +249,7 @@
         <div class="btn-row" style="margin-top:6px;">
           <button id="btn-analyzer-randomize">アナライザーランダム</button>
         </div>
-        <div class="label-row" style="margin-top:8px;" id="group-layers">
+        <div class="label-row" data-gpu-hide style="margin-top:8px;" id="group-layers">
           <span class="label-text">レイヤー数</span>
           <div class="btn-row">
             <button id="btn-layer-1" class="active layer-btn">1</button>
@@ -254,14 +258,15 @@
             <button id="btn-layer-4" class="layer-btn">4</button>
           </div>
         </div>
-        <label id="group-layer-split" style="display:none;">
+        <label id="group-layer-split" data-gpu-hide style="display:none;">
           レイヤー分割
           <select id="layer-split">
             <option value="linear">均等</option>
             <option value="mel">聴感</option>
           </select>
         </label>
-        <div id="layer-settings"></div>
+        <div id="layer-settings" data-gpu-hide></div>
+        <div id="gpu-color-note" class="label-text" data-gpu-only>色は曲のパレットから自動で決まります。</div>
         <h3 class="director-heading">自動演出</h3>
         <label><input type="checkbox" id="director-enabled"> 自動演出</label>
         <label>演出の強さ
@@ -280,9 +285,10 @@
         <label><input type="checkbox" id="director-flash" checked> ドロップ時のフラッシュ（点滅を含みます）</label>
         <div class="btn-row"><button id="director-shuffle">別の演出にする</button></div>
         <p id="director-status" role="status" aria-live="polite"></p>
+        <p id="director-gpu-note" class="label-text" data-gpu-only>GPU タイプでは自動演出を使いません（タイプ自身が曲の展開に追従します）</p>
       </section>
 
-      <section class="control-group">
+      <section class="control-group" data-gpu-hide>
         <h2>色調整</h2>
         <label>
           色相&ensp;<span id="val-hue">200</span>
@@ -315,7 +321,7 @@
         </label>
       </section>
 
-      <section class="control-group">
+      <section class="control-group" data-gpu-hide>
         <h2>感度・形状</h2>
         <label>
           <span class="toggle-row">
@@ -430,6 +436,17 @@
   <script src="js/mp4-demuxer.js"></script>
   <script src="js/analysis-worklet.js"></script>
   <script src="js/offline-exporter.js"></script>
+  <!-- GPU タイプ（WebGL2。統合設計 doc/20261010-design-integration-v1.md §2。world-bridge が本体との唯一の接点） -->
+  <script src="js/world/gl-util.js"></script>
+  <script src="js/world/score.js"></script>
+  <script src="js/world/analyzer-types.js"></script>
+  <script src="js/world/g-fluid2.js"></script>
+  <script src="js/world/g-gargantua.js"></script>
+  <script src="js/world/g-attractor.js"></script>
+  <script src="js/world/post.js"></script>
+  <script src="js/world/world-engine.js"></script>
+  <script src="js/world/world-exporter.js"></script>
+  <script src="js/world/world-bridge.js"></script>
   <script src="js/ui-controller.js"></script>
   <script src="js/app.js"></script>
 </body>

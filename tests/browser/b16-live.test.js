@@ -165,7 +165,8 @@ avzTest('B16-03', 'B16-03 __avzForceMfsFailure でフォールバック: feature
     await audio.play();
     avzAssert.equal(engine.mfsStatus, 'fallback', 'mfsStatus');
     avzAssert.ok(warnings.some((w) => w.includes('フォールバック')), 'フォールバック理由が console.warn に出ていません');
-    const types = Array.from(document.getElementById('analyzer-type').options).map((o) => o.value);
+    // 2D の描画タイプだけを数える（GPU タイプは別グループ。GPU テストは avzGpuTest 側で確認する）
+    const types = Array.from(document.getElementById('analyzer-type').options).map((o) => o.value).filter((v) => !getRendererEntry(v).gpu);
     avzAssert.equal(types.length, 8, 'アナライザータイプ数');
     let frames = 0;
     for (const type of types) {
