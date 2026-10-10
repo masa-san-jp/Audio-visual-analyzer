@@ -1,6 +1,7 @@
 # g-fluid v2（スペクトル流体・円環の噴出口）設計
 
 - 作成：2026-10-10。設計は Opus、実装は impl-sonnet。
+- 現行の値（2026-10-11）：§12（v2.1 の調整・帯域正規化・差動回転・12.3）が §2〜§9 の値を上書きする。最終値はコードの `WORLD_FLUID2`（js/world/g-fluid2.js）。
 - 状態：SSOT。
 - 現行の g-fluid（WorldFluidAnalyzer と、engine 側の世界流体・emitter・particles・feedback）を置き換える。id `g-fluid`、ラベル「スペクトル流体」、key 1 は引き継ぐ。
 
