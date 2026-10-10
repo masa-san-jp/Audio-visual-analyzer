@@ -1,3 +1,40 @@
+## 2026-10-10 — [WORLD-38] g-fluid v2（円環の噴出口）
+
+### 作業内容
+- 新規 `js/world/g-fluid2.js`（設計 `doc/20261010-design-fluid-v2.md` §2〜10）。`WorldFluid2Analyzer`（id `g-fluid`、ラベル「スペクトル流体」、`warmFrames=420`）と凍結定数 `WORLD_FLUID2`（設計の名前と値）。自己完結のソルバー：速度 384×216・圧力 384×216・染料 1152×648（すべて RGBA16F の ping-pong）。1 ステップ＝移流・減衰・背景流への緩和・噴出口の力・キック → 渦度閉じ込め → 発散 → Jacobi 24 回（前フレームの圧力を初期値）→ 勾配 → 染料の移流・減衰・噴出 → 吸収境界。dt は 1/60 固定。合成パス（染料・円環・32 個の光の粒・霞・瞬き）＋塵 12000 点（gl_VertexID の hash、加算ブレンド）。CPU 側は区間表の 2 秒 smoothstep 補間、キック／高域オンセットの検出（`t!==lastEventSec` の g-attractor と同じ方式）、瞬きのリング（最大 24、hash のみ）、カメラ、パレット色相を担当。毎フレーム経路で配列・オブジェクトを確保しない。
+- `js/world/world-engine.js`：型一覧の `g-fluid` を `WorldFluid2Analyzer` に差し替え。`WorldFluid`／`WorldParticles`／`WorldDepthParticles`／`WorldSpectrum` の生成・更新・描画、`post.stepFeedback`（`_step`・`redrawTransition`）、`_emitters`／`_emitterPosition`／`_globalFlow`／`_renderFluid`／従来計測口（`composite`・`dyeLoc`・`velocityLoc`）を撤去。`setScore` から旧流体・粒子の reset も除去。`metrics()` の粒子数・格子幅はアクティブなタイプの値（`particleCount`／`fluidWidth`／`dyeWidth` 等）を返し、`feedbackWidth`／`feedbackHeight` は廃止。`_draw` で `post.fluid2` を設定。
+- `js/world/post.js`：`fluid2Mode` 分岐（bloom 閾値 .7、強度 .6、feedback なし、露出メーターなし。アトラクター分岐と同じ ACES）を追加。`WORLD_FEEDBACK_FRAGMENT`・`feedbackProgram`・`stepFeedback` を撤去。
+- `world.html`：`g-fluid.js` のタグを `g-fluid2.js` に差し替え（post.js より前）。`js/world/g-fluid.js` は削除。README・`doc/spec.md` の流体の説明を更新。
+
+### 旧世界流体・粒子・feedback の撤去判断（grep の結果）
+- `engine.fluid`／`engine.particles`／`engine.depthParticles`／`stepFeedback`／`_renderFluid`／`_emitters` の呼び出し元は、旧 `g-fluid.js`（削除）と `g-rings.js` だけだった。`g-rings.js` は WORLD-13 で登録から外れており、`WORLD_ANALYZER_TYPES`・`selectType` のどちらからも到達できない（回帰計測 BW-11/BW-12 が `new WorldRingsAnalyzer()` を手で登録していた）。g-gargantua・g-attractor は一切使っていない。よって撤去した。
+- `js/world/fluid.js`・`js/world/particles.js`・`g-rings.js` のファイルと world.html のタグは残した（ticket は生成・更新・描画の停止だけを要求。g-rings.js が参照するため、ファイル削除は別判断）。engine からは到達不能のデッドコード。g-rings は旧 `engine.particles` が無いため実行すると失敗する（登録されないので影響なし）。
+- `post.feedback` の ping-pong 対（半解像度）は、レガシー分岐の history サンプラーと露出メーター寸法の都合で割り当てだけ残した。毎ステップの書き込み（`stepFeedback`）は止めている。
+- UBO（World ブロック）の emitters 領域は書かなくなった。std140 の配置は変更していない（UW-28 は無修正で合格）。
+- g-gargantua／g-attractor の挙動は変更なし（UW-67・UW-68〜70・UW-84〜96 すべて合格）。
+
+### テスト
+- 追加（単体 8）：`tests/unit/world-fluid2.test.mjs` UW-F2-01〜08（定数表・登録／噴出口の角度と位置／区間表と補間／キック 1 フレーム／瞬きの包絡と位置の決定性／塵の視差／暖機窓 420・GPU 命令回数（移流 1・渦度 1・発散 1・Jacobi 24・射影 1・染料 1・合成 1・塵 12000 点）／CPU 状態の再演）。
+- 追加（ブラウザ 4・未実行）：`tests/browser/world38.test.js` BW-38-jets（帯域 5 だけ染料が出る・キックで外向き速度）／BW-38-sections（1280×720・7 区間・白飛び ≤2%・同時刻の再演一致）／BW-38-gpu（1080p p95 ≤16ms）／BW-38-export（typeId `g-fluid` の書き出し）。
+- 修正した単体テスト：UW-06（Jacobi 24 回・塵 12000・格子 384×216）／UW-08／UW-11（CPU ステップ数は `type.step` を数える）／UW-14（feedback 寸法の検査を除去）／UW-25／UW-27／UW-33（emitters 領域→型の帯域レベル）／UW-39／UW-66（feedback の回数検査を除去）／UW-47（シェーダー総数 33、vertex 7、fragment 26）／UW-90（g-fluid の描画 601→420、feedback 検査を除去）／UW-91（`feedbackProgram` 不在を確認）。world-score のモック GL に `uniform2fv`・`uniform1ui` を追加、読み込み一覧を `g-fluid2.js` へ。
+- **削除した単体テスト ID**：UW-15（旧粒子 262144 点・WORLD_PARTICLE_VERTEX）／UW-21（feedback 履歴）／UW-29（1.5 倍領域の旧流体格子・旧 GLSL）／UW-37（旧独立深度層）／UW-38（旧 220 度円弧の噴出点と移流）／UW-45（g-rings の火花、旧 `engine.particles` に依存）。
+- **削除したブラウザテスト ID**：BW-10-focus-depth・BW-10-v8-times（`tests/browser/world10.test.js` ごと削除。旧粒子・feedback の汚染検査）／BW-9-depth-loop（旧粒子の 3 層・ループ端の画素一致）／BW-12-sparks-ramp（g-rings の火花と旧大域流の CPU/GPU 一致）。計測スクリプト側（`tests/browser/world.test.js`・`tests/world/measure.mjs`、runner 非登録）では BW-6-coverage・BW-3-hero を撤去し、W-3 を新流体の格子・塵数（384／1152／12000）の検査に置換、BW-2-matter は新流体の合成像の可視画素へ、BW-7-motion は粒子速度の代わりに新流体の速度場を使うよう変更。
+- 修正したブラウザテスト：BW-9-spectrum（噴出口の画素位置を円環＋カメラ・ズームから計算）／BW-11 の回帰計測（g-rings を対象外、g-fluid・g-galaxy）／BW-12-design（g-rings を除外）。ゴールデン（`tests/golden/frames.json`）は 2D アナライザー用で旧 g-fluid に依存しないため変更なし。`tests/world/output/` の過去の撮影物は未更新。
+
+### 検証
+- `node tests/run.mjs --unit`：218 件／217 成功／0 失敗／1 スキップ。`node --check`：変更した全 .js／.mjs で合格。ブラウザテスト・Chrome 実行は未実行（Opus が実施）。コミット・プッシュなし。
+
+### 判断（設計が曖昧／書かれていない点）
+- 速度・圧力の RG16F は `WorldGL.target()` が RGBA16F 固定のため RGBA16F で確保（.xy のみ使用）。
+- 格子の領域は canvas 比率ではなく固定の `SIM_ASPECT=16/9`（x∈[-16/9,16/9]）にして、セルを正方形・決定性を canvas 非依存にした。吸収境界もこの領域の端。合成は画面座標 q から流体面 p=q*zoom+cam を引く（canvas が 16:9 より広いと左右は暗い）。
+- ズームは設計どおり `p_screen /= zoom`（ズーム>1 で縮小＝引き）。流体面 p = q*zoom + cam。
+- 渦度閉じ込めは `dv = VORT * CELL * (N_y, -N_x) * ω * dt`（CELL は格子のワールド幅 2/216）。カールノイズは値ノイズの有限差分の回転で、`CURL_AMP` を直接掛けた（勾配の大きさは ≈1 のオーダー）。
+- 追加した設計外の定数（見た目の決定を避ける中立値のみ）：`BG_SIGMA=.7`（設計の式の .7）、`JET_FORCE_SIGMA=.035`・`JET_DYE_SIGMA=.022`・`KICK_WIDTH=.10`（設計の式の値）、`HUE_SAT=.75`・`HUE_SPAN=.85`、`DUST_SPREAD=1.25`（塵の配置範囲）、`DUST_FAR_DIM=.6`（遠い層の減光：設計の「遠いほど暗い」の具体値）、`GLINT_LIFE=3`（瞬きの枠の寿命、包絡はこの前に ≈0）、瞬きの明るさに追加ゲインなし（設計の包絡×形のまま）。
+- 噴出口の力・染料は最寄りの噴出口の左右 ±3 個（7 個）だけ評価（σ の 3 倍以上は無視できるため。全 32 個の和と数値的に同じ）。円環の線の色は最寄りの噴出口の色相。
+- 塵の位置は canvas のアスペクトに依存する（画面端まで届けるため）。それ以外は seed と画面比だけで決まる。
+- 時刻 0（dt=0）のステップ・端数時刻（dt=0）では流体を進めない（`simPending = dt>0`）。ライブでも 1 ステップ＝1/60 固定。キックの衝撃は `_simulate` が使い切ると 0 に戻る。
+- 暖機：`reset()` で次の描画前にクリア、CPU のみの区間から暖機窓へ入るときは engine の `warmStart(t)` でクリア。`warmStart` は描画前のクリアのみ。
+
 ## 2026-10-10 — [WORLD-36/37] ブラウザテストの追従（曲長・粒子数）
 
 ### 作業内容

@@ -32,36 +32,6 @@ void main(){ivec2 size=textureSize(source,0),base=ivec2(gl_FragCoord.xy)*4;
  }
  frag=vec4(sum,count,peak,1.);
 }`;
-const WORLD_FEEDBACK_FRAGMENT = `#version 300 es
-precision highp float;
-precision highp int;
-precision highp sampler2D;
-${WORLD_GLSL}
-uniform sampler2D source, history, flow;
-out vec4 frag;
-void main(){
- if(screen.w>.5||mood.x<=0.){frag=vec4(0);return;}
- vec2 q=(vUv-.5)*vec2(screen.x/screen.y,1.);
- float dt=clock.y,angle=(story.x==1.?.12:story.x==2.?-.2:story.x==3.?.025:.05)*dt;
- q=rot(angle)*q;
- q*=exp(-(story.x==1.?.38+clock.w*.7:story.x==2.?.22:-.03)*dt);
- if(story.x==2.){
-  float a=atan(q.y,q.x),n=story.y>1.5?8.:5.;
-  float folded=abs(mod(a+3.141593/n,6.283185/n)-3.141593/n);
-  // 境界の万華鏡を余韻の変形へ滑らかに戻す。
-  q=mix(q,vec2(cos(folded),sin(folded))*length(q),hit.w*.8);
- }
- vec2 uv=q/vec2(screen.x/screen.y,1.)+.5;
- uv+=texture(flow,worldUv(worldPosition(vUv))).xy*dt*.0002;
- uv+=vec2(sin(q.y*3.+sin(worldSlowPhase())),cos(q.x*3.-cos(worldSlowPhase())))*dt*.006;
- // 画面外へ出た残像は硬く切らず、端で滑らかに消す（縦の境目を出さない）
- float valid=smoothstep(0.,.06,uv.x)*(1.-smoothstep(.94,1.,uv.x))*smoothstep(0.,.06,uv.y)*(1.-smoothstep(.94,1.,uv.y));
- float decay=exp(-dt*(3.+worldKind(2.)*4.+worldKind(3.)*9.+worldKind(4.)*9.));
- vec3 current=texture(source,vUv).rgb;
- vec3 accumulated=current*.24*min(1.,dt*60.)+texture(history,uv).rgb*decay*valid;
- // bloomと露出用にも、build以外では現在の鋭い像だけを渡す。矩形残像を光へ再注入しない。
- frag=vec4(min(vec3(64),mix(current,accumulated,worldKind(1.))),1);
-}`;
 const WORLD_POST_FRAGMENT = `#version 300 es
 precision highp float;
 precision highp int;
@@ -70,7 +40,8 @@ ${WORLD_GLSL}
 uniform sampler2D scene, history, bloom0, bloom1, bloom2, bloom3, exposure;
 uniform float analyzerPulse;
 uniform float analyzerMode;
-uniform float gargantuaMode, attractorMode, exposureMultiplier, kick;
+uniform float gargantuaMode, attractorMode, fluid2Mode, exposureMultiplier, kick;
+const float FLUID2_BLOOM_STRENGTH = ${WORLD_FLUID2.BLOOM_STRENGTH.toFixed(8)};
 const float ATTRACTOR_BLOOM_STRENGTH = ${WORLD_ATTRACTOR.BLOOM_STRENGTH.toFixed(8)};
 const float GARGANTUA_BLOOM_STRENGTH = ${WORLD_GARGANTUA.BLOOM_STRENGTH.toFixed(8)};
 const float VEIL_GAIN = ${WORLD_GARGANTUA.VEIL_GAIN.toFixed(8)};
@@ -78,6 +49,12 @@ const float KICK_BLOOM = ${WORLD_GARGANTUA.KICK_BLOOM.toFixed(8)};
 out vec4 frag;
 vec3 aces(vec3 x){return clamp((x*(2.51*x+.03))/(x*(2.43*x+.59)+.14),0.,1.);}
 void main(){
+ if(fluid2Mode>.5){
+  vec3 bloom=texture(bloom0,vUv).rgb*.25+texture(bloom1,vUv).rgb*.25+texture(bloom2,vUv).rgb*.30+texture(bloom3,vUv).rgb*.45;
+  vec3 c=aces((texture(scene,vUv).rgb+bloom*FLUID2_BLOOM_STRENGTH)*.75);
+  c=mix(c*12.92,1.055*pow(c,vec3(1./2.4))-.055,step(vec3(.0031308),c));
+  frag=vec4(c,1.);return;
+ }
  if(attractorMode>.5){
   vec3 bloom=texture(bloom0,vUv).rgb*.25+texture(bloom1,vUv).rgb*.25+texture(bloom2,vUv).rgb*.30+texture(bloom3,vUv).rgb*.45;
   vec3 c=aces((texture(scene,vUv).rgb+bloom*ATTRACTOR_BLOOM_STRENGTH)*.75);
@@ -125,14 +102,12 @@ class WorldPost {
     this.exposureProgram = gpu.program(WORLD_EXPOSURE_FRAGMENT);
     this.meterSourceLoc = gpu.texture(this.exposureProgram, 'source'); this.firstLoc = gpu.texture(this.exposureProgram, 'firstPass');
     this.program = gpu.program(WORLD_POST_FRAGMENT); this.pulse = 0; this.analyzerMode = 0;
-    this.gargantua = false; this.attractor = false; this.exposureMultiplier = 1; this.kick = 0;
-    this.attractorLoc = gpu.texture(this.program, 'attractorMode');
+    this.gargantua = false; this.attractor = false; this.fluid2 = false; this.exposureMultiplier = 1; this.kick = 0;
+    this.attractorLoc = gpu.texture(this.program, 'attractorMode'); this.fluid2Loc = gpu.texture(this.program, 'fluid2Mode');
     this.gargantuaLoc = gpu.texture(this.program, 'gargantuaMode'); this.exposureMultiplierLoc = gpu.texture(this.program, 'exposureMultiplier');
     this.kickLoc = gpu.texture(this.program, 'kick');
     this.pulseLoc = gpu.texture(this.program, 'analyzerPulse'); this.modeLoc = gpu.texture(this.program, 'analyzerMode');
     this.samplers = ['scene', 'history', 'bloom0', 'bloom1', 'bloom2', 'bloom3', 'exposure'].map(n => gpu.texture(this.program, n));
-    this.feedbackProgram = gpu.program(WORLD_FEEDBACK_FRAGMENT);
-    this.feedbackSamplers = ['source', 'history', 'flow'].map(n => gpu.texture(this.feedbackProgram, n));
     this.resize(w, h);
   }
   resize(w, h) {
@@ -150,30 +125,24 @@ class WorldPost {
   reset() {
     this.gpu.clearTarget(this.feedback.read); this.gpu.clearTarget(this.feedback.write);
   }
-  stepFeedback(scene, fluid) {
-    const g = this.gpu;
-    g.bind(this.feedbackProgram, this.feedback.write);
-    g.sampler(this.feedbackSamplers[0], 0, scene); g.sampler(this.feedbackSamplers[1], 1, this.feedback.read);
-    g.sampler(this.feedbackSamplers[2], 2, fluid.velocity.read); g.draw(); g.swap(this.feedback);
-  }
   render(scene) {
     const g = this.gpu, gl = g.gl;
-    let source = this.gargantua || this.attractor || this.analyzerMode ? scene : this.feedback.read;
+    let source = this.gargantua || this.attractor || this.fluid2 || this.analyzerMode ? scene : this.feedback.read;
     for (let i = 0; i < 4; i++) {
       const b = this.bloom[i]; g.bind(this.bloomProgram, b.write); g.sampler(this.sourceLoc, 0, source);
-      gl.uniform2f(this.axisLoc, 1, 0); gl.uniform1f(this.thresholdLoc, i === 0 ? (this.gargantua ? WORLD_GARGANTUA.BLOOM_THRESHOLD : this.attractor ? WORLD_ATTRACTOR.BLOOM_THRESHOLD : .65) : 0); g.draw(); g.swap(b);
+      gl.uniform2f(this.axisLoc, 1, 0); gl.uniform1f(this.thresholdLoc, i === 0 ? (this.fluid2 ? WORLD_FLUID2.BLOOM_THRESHOLD : this.gargantua ? WORLD_GARGANTUA.BLOOM_THRESHOLD : this.attractor ? WORLD_ATTRACTOR.BLOOM_THRESHOLD : .65) : 0); g.draw(); g.swap(b);
       g.bind(this.bloomProgram, b.write); g.sampler(this.sourceLoc, 0, b.read);
       gl.uniform2f(this.axisLoc, 0, 1); gl.uniform1f(this.thresholdLoc, 0); g.draw(); g.swap(b); source = b.read;
     }
     // 縮約FBOは半解像度の入力用。露出は従来どおりfeedbackから全域を測る。
     source = this.feedback.read;
-    for (let i = 0; !this.gargantua && !this.attractor && i < this.meter.length; i++) {
+    for (let i = 0; !this.gargantua && !this.attractor && !this.fluid2 && i < this.meter.length; i++) {
       g.bind(this.exposureProgram, this.meter[i]); g.sampler(this.meterSourceLoc, 0, source);
       gl.uniform1i(this.firstLoc, i === 0 ? 1 : 0); g.draw(); source = this.meter[i];
     }
     g.bind(this.program, this.output);
     gl.uniform1f(this.gargantuaLoc, this.gargantua ? 1 : 0); gl.uniform1f(this.exposureMultiplierLoc, this.exposureMultiplier);
-    gl.uniform1f(this.attractorLoc, this.attractor ? 1 : 0);
+    gl.uniform1f(this.attractorLoc, this.attractor ? 1 : 0); gl.uniform1f(this.fluid2Loc, this.fluid2 ? 1 : 0);
     gl.uniform1f(this.kickLoc, this.kick);
     gl.uniform1f(this.pulseLoc, this.pulse); gl.uniform1f(this.modeLoc, this.analyzerMode);
     g.sampler(this.samplers[0], 0, scene); g.sampler(this.samplers[1], 1, this.feedback.read);

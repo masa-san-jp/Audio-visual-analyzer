@@ -72,14 +72,15 @@ function world11SyntheticSong(bpm,key,harmonics,duration=6){
 async function runWorldAnalyzerMeasurement(){
   const engine=window.__world.engine,originalScore=engine.score,originalTimeline=engine.timeline,originalFps=engine.fps,originalType=engine.type.id;
   // 選択肢から外したshaderも、従来G閾値を保った回帰として明示的に登録する。
-  const retained=[new WorldRingsAnalyzer(),new WorldGalaxyAnalyzer()];
+  // g-ringsは旧世界粒子（WORLD-38で撤去）に依存するため回帰対象から外した。
+  const retained=[new WorldGalaxyAnalyzer()];
   for(const analyzer of retained){analyzer.init(engine.gpu);engine.types.push(analyzer);}
-  const types=['g-fluid','g-rings','g-galaxy'],G1=[],G2=[],G3=[],G4=[];let glErrors=0;
+  const types=['g-fluid','g-galaxy'],G1=[],G2=[],G3=[],G4=[];let glErrors=0;
   const nextFrame=()=>new Promise(resolve=>requestAnimationFrame(resolve));
   const feature=new MfsFrameView(),score=compileWorldScore({bpm:120,durationSec:12,beats:[],downbeatIndices:[],sections:[{startSec:0,endSec:12,kind:'main',label:'G'}]},11);
   engine.timeline=null;
   try{
-    for(const typeId of ['g-rings','g-galaxy']){
+    for(const typeId of ['g-galaxy']){
       engine.selectType(typeId,true);engine.setScore(score);
       const levels=Array.from({length:32},()=>[]),regions=Array.from({length:32},()=>[]);
       for(let frame=0;frame<480;frame++){

@@ -12,17 +12,11 @@ void main(){frag=mix(texture(previous,vUv),texture(current,vUv),blend);}`;
 class WorldEngine {
   constructor(canvas, seed = 11) {
     this.canvas = canvas; this.seed = seed; this.gpu = new WorldGL(canvas);
-    this.fluid = new WorldFluid(this.gpu, canvas.width, canvas.height);
-    this.particles = new WorldParticles(this.gpu, seed);
-    this.depthParticles = new WorldDepthParticles(this.gpu, seed);
     this.post = new WorldPost(this.gpu, canvas.width, canvas.height);
     this.scene = this.gpu.target(canvas.width, canvas.height);
-    this.spectrum = new WorldSpectrum(this.gpu);
-    this.types = [new WorldFluidAnalyzer(), new WorldGargantuaAnalyzer(), new WorldAttractorAnalyzer()];
+    this.types = [new WorldFluid2Analyzer(), new WorldGargantuaAnalyzer(), new WorldAttractorAnalyzer()];
     for (let i = 0; i < this.types.length; i++) this.types[i].init(this.gpu);
     this.type = this.types[0]; this.fadeElapsed = .5; this.previousPostMode = 0;
-    // 従来計測の公開口は保持。shader/programの所有者はg-fluid。
-    this.composite = this.type.program; this.dyeLoc = this.type.dyeLoc; this.velocityLoc = this.type.velocityLoc;
     this.typeTarget = this.gpu.target(canvas.width, canvas.height); this.typeSnapshot = this.gpu.target(canvas.width, canvas.height);
     this.typeFade = this.gpu.program(WORLD_TYPE_FADE_FRAGMENT);
     this.previousLoc = this.gpu.texture(this.typeFade, 'previous'); this.currentLoc = this.gpu.texture(this.typeFade, 'current');
@@ -53,7 +47,7 @@ class WorldEngine {
     this.gpuTimes.fill(NaN); this.cpuTimes.fill(0); this.lastTimeSlot = -1;
     for (let i = 0; i < this.queries.length; i++) this.queries[i].slot = -1;
     // 再上演とpreviewは同じGPU状態から開始する。program/FBOを再作成しない。
-    const g = this.gpu; g.uniforms.fill(0); this.particles.reset(score.seed); this.depthParticles.reset(score.seed); this.fluid.reset(); this.post.reset();
+    const g = this.gpu; g.uniforms.fill(0); this.post.reset();
     this.latestSec = 0; this.previewStep = 0; this.preview = false; this.matterSkipped = false;
     this.fadeElapsed = .5; this.lastBeat = -100; this.pulse = 0;
     for (let i = 0; i < this.types.length; i++) if (this.types[i].reset) this.types[i].reset();
@@ -62,7 +56,7 @@ class WorldEngine {
   resize(w, h) {
     if (this.canvas.width === w && this.canvas.height === h) return;
     this.canvas.width = w; this.canvas.height = h;
-    this.fluid.resize(w, h); this.post.resize(w, h);
+    this.post.resize(w, h);
     for (let i = 0; i < this.types.length; i++) if (this.types[i].resize) this.types[i].resize(w, h);
     this.gpu.releaseTarget(this.scene); this.scene = this.gpu.target(w, h);
     this.gpu.releaseTarget(this.typeTarget); this.gpu.releaseTarget(this.typeSnapshot);
@@ -160,7 +154,6 @@ class WorldEngine {
     this._composition(s, tSec, boundaryNow, s.kind === 'drop' && !!(flags & 1));
     this._morph(s, tSec, p);
     this._camera(s, tSec, p, boundaryNow, cutNow);
-    this._emitters(f);
     // 衝撃環の中心はイベント時に固定。カメラ移動で殻を引きずらない。
     if (s.kind === 'drop' && (boundaryNow || (flags & 1))) {
       u[47] = u[40] + u[52] * 12 * s.worldScale;
@@ -188,7 +181,6 @@ class WorldEngine {
       if (this.matterSkipped && this.type.warmStart) this.type.warmStart(tSec);
       this._renderMatter();
       // 履歴は描画した固定simulationステップで更新。captureや再描画では進めない。
-      if (this.type.id !== 'g-gargantua' && this.type.id !== 'g-attractor' && (dt > 0 || this.frame === 1 || boundaryNow)) this.post.stepFeedback(this.scene, this.fluid);
     }
     this.matterSkipped = !drawMatter;
   }
@@ -255,56 +247,6 @@ class WorldEngine {
     u[82] = 1.08 + .08 * Math.sin(phase) ** 2 + .03 * (gain - 1);
     u[83] = .12 * Math.sin(phase); this._clampCamera();
   }
-  _globalFlow(x, y, out) {
-    // GLSL worldFlow/flowForの大域場をそのままCPUで評価。scratchは初期化時の2要素だけ。
-    const u = this.gpu.uniforms, ex = this.canvas.width / this.canvas.height * OVERSCAN, ey = OVERSCAN;
-    x = ((x / ex + .5) % 1 + 1) % 1 * ex - ex * .5;
-    y = ((y / ey + .5) % 1 + 1) % 1 * ey - ey * .5;
-    const tau = Math.PI * 2, t = u[0] * u[85];
-    const build = ((u[114] === 1 ? 1 : 0) * (1 - u[112]) + (u[115] === 1 ? 1 : 0) * u[112]) * (1 - u[113]);
-    const drop = ((u[114] === 2 ? 1 : 0) * (1 - u[112]) + (u[115] === 2 ? 1 : 0) * u[112]) * (1 - u[113]);
-    let resultX = 0, resultY = 0;
-    for (let pass = 0; pass < 3; pass++) {
-      const id = pass === 0 ? u[108] : pass === 1 ? u[84] : 3;
-      const count = pass === 0 ? u[110] : pass === 1 ? u[86] : 2;
-      const weight = pass === 0 ? (1 - u[112]) * (1 - u[113]) : pass === 1 ? u[112] * (1 - u[113]) : u[113];
-      let fx = 0, fy = 0;
-      for (let i = 0; i < 2; i++) {
-        const cx = u[88 + i * 4] + Math.cos(t + i * 2) * .07, cy = u[89 + i * 4] + Math.sin(t + i * 2) * .07;
-        const dx = Math.sin((x - cx) / ex * tau) * ex / tau, dy = Math.sin((y - cy) / ey * tau) * ey / tau;
-        const strength = u[90 + i * 4] * .075 / (dx * dx + dy * dy + .018) * (i === 0 ? 1 : count - 1);
-        fx -= dy * strength; fy += dx * strength;
-      }
-      const ax = x / ex * tau, ay = y / ey * tau;
-      fx += Math.sin(ay + Math.sin(t)) * .13; fy += Math.cos(ax + Math.cos(t)) * .13;
-      if (id === 1) { fx += .16; fy += .08; }
-      if (id === 2) { fx += .2; fy += .04; }
-      if (id === 4) { fx -= Math.sin(ax) * (.15 + .25 * build); fy -= Math.sin(ay) * (.15 + .25 * build); }
-      let axisX = u[92] - u[88] + .001, axisY = u[93] - u[89] + .001;
-      const length = Math.hypot(axisX, axisY); axisX /= length; axisY /= length;
-      const dx = Math.sin(ax) * ex / tau, dy = Math.sin(ay) * ey / tau;
-      const shear = Math.exp(-(((-dx * axisY + dy * axisX) / .08) ** 2));
-      fx += axisX * .45 * shear * drop; fy += axisY * .45 * shear * drop;
-      resultX += fx * weight; resultY += fy * weight;
-    }
-    const gain = 1 + u[4] * .35 + u[78] * .25;
-    out[0] = resultX * gain; out[1] = resultY * gain;
-  }
-  _emitterPosition(id, i, out, offset, phase = this.gpu.uniforms[0], analyzer = null) {
-    // s=i/31の220度円弧。向きが未指定なので±110度、中心は原点に置く。
-    const a = (i / 31 - .5) * WORLD_FLUID_ARC_DEGREES * Math.PI / 180;
-    const frame = Math.floor(this.latestSec * this.fps + 1e-9);
-    out[offset] = Math.cos(a) * WORLD_FLUID_ARC_RADIUS + (analyzer ? analyzer.driftX + (worldEmitterHash(i, frame, 17) * 2 - 1) * WORLD_FLUID_JITTER : 0);
-    out[offset + 1] = Math.sin(a) * WORLD_FLUID_ARC_RADIUS + (analyzer ? analyzer.driftY + (worldEmitterHash(i, frame, 29) * 2 - 1) * WORLD_FLUID_JITTER : 0);
-  }
-  _emitters(f, analyzer = null) {
-    const u = this.gpu.uniforms;
-    for (let i = 0; i < 32; i++) {
-      const offset = 116 + i * 4;
-      this._emitterPosition(u[84], i, u, offset, u[0], analyzer);
-      u[offset + 2] = analyzer ? analyzer.bandUniforms[i * 4] : f.bandsSmooth[i]; u[offset + 3] = f.bands[i];
-    }
-  }
   setTimeline(frames, fps) {
     if (fps !== 30 && fps !== 60) throw new RangeError('fpsは30/60です');
     this.timeline = frames; this.fps = fps;
@@ -324,7 +266,7 @@ class WorldEngine {
   }
   _drawMatterAt(i, steps) {
     const type = this.type;
-    // g-fluidは全ステップ、statelessRenderは末尾1枚、warmFramesは指定窓を描く。
+    // statelessRenderは末尾1枚、warmFrames（g-fluid／g-attractor）は指定窓を描く。
     // 時刻0だけの要求も従来どおり描画する。
     return steps === 0 || i > steps - (type.warmFrames || (type.statelessRender ? 1 : Infinity)) || this.fadeElapsed < .5;
   }
@@ -383,15 +325,7 @@ class WorldEngine {
     if (!this.score || this.fadeElapsed >= .5 || !this.frame) return;
     this.fadeElapsed = Math.min(.5, this.fadeElapsed + Math.max(0, dt));
     this.typeInput.dt = 0; this.typeInput.boundaryNow = false;
-    this._renderMatter(); if (this.type.id !== 'g-gargantua' && this.type.id !== 'g-attractor') this.post.stepFeedback(this.scene, this.fluid); this._draw();
-  }
-  _renderFluid(target) {
-    const g = this.gpu;
-    g.bind(this.composite, target);
-    g.sampler(this.dyeLoc, 0, this.fluid.dye.read); g.sampler(this.velocityLoc, 1, this.fluid.velocity.read); g.draw();
-    this.depthParticles.render(target);
-    this.spectrum.detail = this.score.song.detail;
-    this.particles.amount = this.score.song.particleAmount; this.particles.render(target);
+    this._renderMatter(); this._draw();
   }
   _draw() {
     const p = this.fadeElapsed / .5, blend = p * p * (3 - 2 * p);
@@ -400,6 +334,7 @@ class WorldEngine {
     this.post.analyzerMode = this.previousPostMode * (1 - blend) + (this.type.id === 'g-fluid' ? 0 : 1) * blend;
     this.post.gargantua = this.type.id === 'g-gargantua';
     this.post.attractor = this.type.id === 'g-attractor';
+    this.post.fluid2 = this.type.id === 'g-fluid';
     this.post.kick = this.post.gargantua ? this.type.music[0] : 0;
     this.post.exposureMultiplier = this.post.gargantua ? this.type.exposureMultiplier : 1;
     this.post.render(this.scene);
@@ -450,13 +385,13 @@ class WorldEngine {
     const duration = cpu.map((c, i) => Number.isFinite(this.gpuTimes[i]) ? Math.max(c, this.gpuTimes[i]) : NaN).filter(Number.isFinite);
     const intervals = Array.from(this.frameIntervals.subarray(0, this.timeCount));
     const p95 = a => { a.sort((x, y) => x - y); return a.length ? a[Math.ceil(a.length * .95) - 1] : null; };
-    return { width: this.canvas.width, height: this.canvas.height, particleCount: this.particles.count,
-      depthParticleCount: this.depthParticles.count, focusedFluid: this.type.id === 'g-fluid',
+    // 旧世界流体・粒子は撤去済み（WORLD-38）。粒子数・格子はアクティブなタイプの値を返す。
+    return { width: this.canvas.width, height: this.canvas.height, particleCount: this.type.particleCount || 0,
+      depthParticleCount: 0, focusedFluid: this.type.id === 'g-fluid',
       typeId: this.type.id, typeBlend: this.fadeElapsed / .5, analyzerParticleCount: this.type.particleCount || 0,
-      fluidWidth: this.fluid.velocity.read.width, fluidHeight: this.fluid.velocity.read.height,
+      fluidWidth: this.type.velocityWidth || 0, fluidHeight: this.type.velocityHeight || 0,
       overscan: OVERSCAN, domainMargin: WORLD_DOMAIN_MARGIN,
-      dyeWidth: this.fluid.dye.read.width, dyeHeight: this.fluid.dye.read.height,
-      feedbackWidth: this.post.feedback.read.width, feedbackHeight: this.post.feedback.read.height, hdrFormat: 'RGBA16F',
+      dyeWidth: this.type.dyeWidth || 0, dyeHeight: this.type.dyeHeight || 0, hdrFormat: 'RGBA16F',
       cpuP95Ms: p95(cpu), gpuP95Ms: p95(gpu), renderP95Ms: p95(duration), frameP95Ms: p95(intervals),
       timingSamples: duration.length, submittedFrames: this.timeCount, timerAvailable: !!this.timer,
       timerDisjoints: this.timerDisjoints, mfsFrames: this.mfsFrames, responseCount: this.responseCount,

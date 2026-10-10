@@ -60,7 +60,7 @@ avzTest('BW-9-export', '6秒30fps・音声・180フレーム・t=3のrenderAt一
     avzAssert.equal(await w.app.exporter.exportWorld(score,prepared),null);avzAssert.equal(w.app.exporter.blob,null);
   });
 }, {timeoutMs:180000,slow:true});
-avzTest('BW-9-spectrum', '32帯域サイン掃引: 対応する固定噴出点の輝度が最大', async () => {
+avzTest('BW-9-spectrum', '32帯域サイン掃引: 円環の対応する噴出口の輝度が最大', async () => {
   await world9Page(async child => {
     const bank=child.eval('new MfsMelBank(48000,2048)'),rate=48000,segment=.7;
     const signal={sampleRate:rate,channels:[new Float32Array(rate*segment*32),new Float32Array(rate*segment*32)]};
@@ -78,7 +78,9 @@ avzTest('BW-9-spectrum', '32帯域サイン掃引: 対応する固定噴出点�
         // 各測定は履歴をリセット。実MFS出力をそのまま使い、帯域を手で立てない。
         engine._step(0,f,1/30);engine._draw();const capture=engine.capture(),u=engine.gpu.uniforms,lum=[];
         for(let i=0;i<32;i++){
-          const x=Math.round((u[116+i*4]/(1920/1080)+.5)*1920),y=Math.round((u[117+i*4]+.5)*1080);
+          // 噴出口の位置（流体面）を画面ピクセルへ。q=(p-cam)/zoom（WORLD-38 g-fluid v2）。
+          const jet=[0,0];worldFluid2JetPosition(i,jet);const a=engine.type;
+          const x=Math.round((((jet[0]-a.cam[0])/a.zoom)/(1920/1080)*.5+.5)*1920),y=Math.round((((jet[1]-a.cam[1])/a.zoom)*.5+.5)*1080);
           let sum=0;for(let dy=-2;dy<=2;dy++)for(let dx=-2;dx<=2;dx++){
             const o=((y+dy)*1920+x+dx)*4;sum+=(.2126*capture.rgba[o]+.7152*capture.rgba[o+1]+.0722*capture.rgba[o+2])/255;
           }lum.push(sum/25);
@@ -90,31 +92,5 @@ avzTest('BW-9-spectrum', '32帯域サイン掃引: 対応する固定噴出点�
     avzAssert.equal(result.length,32);
     for(const row of result){avzAssert.equal(row.featureWinner,row.band,'MFS center band');avzAssert.equal(row.winner,row.band,'luminance winner '+JSON.stringify(row));avzAssert.equal(row.glError,0);}
     console.log('BW-9-spectrum '+JSON.stringify(result));
-  });
-}, {timeoutMs:180000,slow:true});
-avzTest('BW-9-depth-loop', '3D奥行き・3層・ループ両端の星雲・全境界の連続カメラ', async () => {
-  await world9Page(async child => {
-    const result=await child.eval(`(async()=>{
-      const engine=__world.engine,score=compileWorldScore({bpm:120,durationSec:6,beats:[0,1,2,3,4,5],downbeatIndices:[0,2,4],sections:[{startSec:0,endSec:1,kind:'intro',label:'A'},{startSec:1,endSec:2,kind:'build',label:'B'},{startSec:2,endSec:4,kind:'drop',label:'C'},{startSec:4,endSec:6,kind:'outro',label:'D'}]},11);
-      engine.setScore(score);await engine.renderAt(0);const first=engine.capture();await engine.renderAt(6);const last=engine.capture();
-      let maxDifference=0;for(let i=0;i<first.rgba.length;i++)maxDifference=Math.max(maxDifference,Math.abs(first.rgba[i]-last.rgba[i]));
-      await engine.renderAt(3);const gl=engine.gpu.gl,state=new Float32Array(512*512*4);gl.bindFramebuffer(gl.FRAMEBUFFER,engine.particles.state.read.fbo);gl.readPixels(0,0,512,512,gl.RGBA,gl.FLOAT,state);
-      const layers=[0,0,0];let min=Infinity,max=0;for(let i=2;i<state.length;i+=4){const z=state[i];min=Math.min(min,z);max=Math.max(max,z);layers[Math.min(2,Math.floor((z-1)/8*3))]++;}
-      let maxCameraDelta=0;for(const s of score.sections.slice(1)){engine.setScore(score);engine._step(s.startSec-.001,null,0);const before=engine.gpu.uniforms.slice(80,84);engine._step(s.startSec,null,0);for(let i=0;i<4;i++)maxCameraDelta=Math.max(maxCameraDelta,Math.abs(before[i]-engine.gpu.uniforms[80+i]));}
-      // 周期場の空間端と時間端を実GLSLで読む。
-      const g=engine.gpu,target=g.target(4,1,true),values=new Float32Array(16),end=new Float32Array(16);
-      const program=g.program('#version 300 es\\n'+WORLD_GLSL+'\\nout vec4 frag;void main(){int i=int(gl_FragCoord.x);vec2 p=i<2?vec2((i==0?-.5:.5)*worldExtent().x,0):vec2(0,(i==2?-.5:.5)*worldExtent().y);frag=vec4(worldFlow(p),worldFilament(p),1);}');
-      let periodicError=0,timeLoopError=0;
-      try{g.uniforms[0]=0;g.upload();g.bind(program,target);g.draw();gl.readPixels(0,0,4,1,gl.RGBA,gl.FLOAT,values);
-        g.uniforms[0]=Math.PI*2;g.upload();g.bind(program,target);g.draw();gl.readPixels(0,0,4,1,gl.RGBA,gl.FLOAT,end);
-        for(let c=0;c<3;c++){periodicError=Math.max(periodicError,Math.abs(values[c]-values[4+c]),Math.abs(values[8+c]-values[12+c]));}
-        for(let i=0;i<16;i++)timeLoopError=Math.max(timeLoopError,Math.abs(values[i]-end[i]));
-      }finally{g.releaseTarget(target);gl.deleteProgram(program);g.programs.splice(g.programs.indexOf(program),1);}
-      return {maxDifference,min,max,layers,maxCameraDelta,periodicError,timeLoopError,particles:engine.particles.count,glError:gl.getError()};
-    })()`);
-    avzAssert.ok(result.maxDifference<=1,'loop pixel difference '+result.maxDifference);
-    avzAssert.ok(result.min>=1&&result.max<=9&&result.max-result.min>6);avzAssert.ok(result.layers.every(n=>n>0));
-    avzAssert.ok(result.maxCameraDelta<.001);avzAssert.ok(result.periodicError<1e-4,'spatial wrap');avzAssert.ok(result.timeLoopError<1e-4,'time wrap');avzAssert.equal(result.particles,262144);avzAssert.equal(result.glError,0);
-    console.log('BW-9-depth-loop '+JSON.stringify(result));
   });
 }, {timeoutMs:180000,slow:true});

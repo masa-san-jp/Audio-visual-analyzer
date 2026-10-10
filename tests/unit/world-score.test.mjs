@@ -96,7 +96,7 @@ function worldCommandGl() {
   for (const name of ['createVertexArray', 'createBuffer', 'createShader', 'createProgram', 'createTexture', 'createFramebuffer']) gl[name] = () => ({ id: id++ });
   for (const name of ['bindVertexArray', 'bindBuffer', 'bufferData', 'bindBufferBase', 'shaderSource', 'compileShader',
     'deleteShader', 'attachShader', 'linkProgram', 'uniformBlockBinding', 'texStorage2D', 'texParameteri', 'viewport',
-    'clearColor', 'clear', 'uniform2f', 'uniform1f', 'uniform3fv', 'uniform4fv', 'blitFramebuffer', 'enable', 'blendFunc', 'disable',
+    'clearColor', 'clear', 'uniform2f', 'uniform1f', 'uniform3fv', 'uniform4fv', 'uniform2fv', 'uniform1ui', 'blitFramebuffer', 'enable', 'blendFunc', 'disable',
     'deleteTexture', 'deleteFramebuffer', 'deleteProgram', 'deleteBuffer', 'deleteVertexArray', 'texSubImage2D', 'drawBuffers']) gl[name] = () => {};
   gl.getExtension = name => name === 'EXT_disjoint_timer_query_webgl2' ? null : {};
   gl.getShaderParameter = gl.getProgramParameter = () => true;
@@ -124,23 +124,23 @@ function worldCommandGl() {
     for (const unit of (samplers.get(currentProgram) || new Map()).values()) {
       for (const tex of (attachments.get(currentFbo) || new Map()).values()) assert.notEqual(textures.get(unit), tex, '読み取りと描画先のtexture feedback禁止');
     }
-    calls.push({ type, count, mode: modes.get(currentProgram) });
+    calls.push({ type, count, mode: modes.get(currentProgram), program: currentProgram });
   };
   return gl;
 }
-test('UW-06 GPU命令: 流体射影20反復・全粒子・同時合成・MFS即時uniform・全境界', () => {
+test('UW-06 GPU命令: 流体射影24反復・円環・同時合成・MFS即時uniform・全境界', () => {
   const gl = worldCommandGl(), canvas = { width: 1920, height: 1080, getContext: () => gl };
   gl.canvas = canvas;
   const runtime = loadClassic(['js/vis-utils.js', 'js/mfs-const.js', 'js/mfs-view.js', 'js/world/gl-util.js',
-    'js/world/fluid.js', 'js/world/particles.js', 'js/world/score.js', 'js/world/analyzer-types.js', 'js/world/g-fluid.js', 'js/world/g-rings.js', 'js/world/g-galaxy.js', 'js/world/g-gargantua.js', 'js/world/g-attractor.js', 'js/world/post.js', 'js/world/world-engine.js']);
+    'js/world/fluid.js', 'js/world/particles.js', 'js/world/score.js', 'js/world/analyzer-types.js', 'js/world/g-fluid2.js', 'js/world/g-rings.js', 'js/world/g-galaxy.js', 'js/world/g-gargantua.js', 'js/world/g-attractor.js', 'js/world/post.js', 'js/world/world-engine.js']);
   const engine = new (runtime.get('WorldEngine'))(canvas), score = runtime.get('compileWorldScore')(fixture, 11);
   const features = new (runtime.get('MfsFrameView'))(), layout = runtime.get('MFS_LAYOUT');
   engine.setScore(score);
   const first = score.sections.find(s => s.kind === 'drop');
   features.raw[layout.ONSET_FLAGS] = 15; features.raw[layout.BEAT_FLAG] = 1;
   engine.render(first.startSec, features, 1 / 60);
-  assert.equal(gl.calls.filter(c => c.mode === 5).length, 20);
-  assert.equal(gl.calls.filter(c => c.type === gl.POINTS)[0].count, 262144);
+  assert.equal(gl.calls.filter(c => c.program === engine.type.jacobiProgram).length, 24);
+  assert.equal(gl.calls.filter(c => c.type === gl.POINTS)[0].count, 12000);
   assert.deepEqual(gl.lastUniforms.slice(8, 11), [1, 1, 1]); assert.equal(gl.lastUniforms[35], 31);
   assert.equal(engine.responses[6] - engine.responses[0], 0);
   assert.equal(gl.lastUniforms[11], 1); assert.ok(Math.abs(gl.lastUniforms[17]) === 0, '境界では中心力をモーフ開始');
@@ -152,8 +152,8 @@ test('UW-06 GPU命令: 流体射影20反復・全粒子・同時合成・MFS即�
   engine.render(score.durationSec, null, 0);
   assert.equal(engine.events.filter(e => e.type === 'boundary' && e.firedFrame >= 0).length, fixture.sections.length);
   assert.equal(engine.events.at(-1).type, 'end'); assert.ok(engine.events.at(-1).firedFrame >= 0);
-  assert.equal(engine.metrics().particleCount, 262144); assert.equal(engine.metrics().fluidWidth, 720);
-  console.log('UW-06 pressureIterations=20 particles=262144 fluid=720x405 boundaryCoverage=6/6 mockUniformLatencyFrames=0');
+  assert.equal(engine.metrics().particleCount, 12000); assert.equal(engine.metrics().fluidWidth, 384);
+  console.log('UW-06 pressureIterations=24 dust=12000 fluid=384x216 boundaryCoverage=6/6 mockUniformLatencyFrames=0');
 });
 
 test('UW-07 曲の三色だけで全抽象状態を配色・種別をまたぐラベルの独立変奏', () => {
@@ -172,7 +172,7 @@ test('UW-07 曲の三色だけで全抽象状態を配色・種別をまたぐ�
 function worldTestEngine() {
   const gl = worldCommandGl(), canvas = { width: 1920, height: 1080, getContext: () => gl }; gl.canvas = canvas;
   const runtime = loadClassic(['js/vis-utils.js', 'js/mfs-const.js', 'js/mfs-view.js', 'js/world/gl-util.js',
-    'js/world/fluid.js', 'js/world/particles.js', 'js/world/score.js', 'js/world/analyzer-types.js', 'js/world/g-fluid.js', 'js/world/g-rings.js', 'js/world/g-galaxy.js', 'js/world/g-gargantua.js', 'js/world/g-attractor.js', 'js/world/post.js', 'js/world/world-engine.js']);
+    'js/world/fluid.js', 'js/world/particles.js', 'js/world/score.js', 'js/world/analyzer-types.js', 'js/world/g-fluid2.js', 'js/world/g-rings.js', 'js/world/g-galaxy.js', 'js/world/g-gargantua.js', 'js/world/g-attractor.js', 'js/world/post.js', 'js/world/world-engine.js']);
   const engine = new (runtime.get('WorldEngine'))(canvas); engine.setScore(runtime.get('compileWorldScore')(fixture, 11));
   return { engine, gl };
 }
@@ -185,30 +185,28 @@ test('UW-08 renderAt: 0から固定60Hz・音声不要・逆向きと反復でun
   assert.deepEqual(Array.from(engine.gpu.uniforms), initial);
   await engine.renderAt(.105); assert.equal(engine.previewStep, 6); assert.equal(engine.latestSec, .105);
   await assert.rejects(engine.renderAt(-1), RangeError); await assert.rejects(engine.renderAt(NaN), RangeError);
-  assert.ok(gl.calls.some(c => c.type === gl.POINTS && c.count === 262144));
+  assert.ok(gl.calls.some(c => c.type === gl.POINTS && c.count === 12000));
   assert.equal(engine.post.meter.at(-1).width, 1); assert.equal(engine.post.meter.at(-1).height, 1);
   console.log('UW-08 fixedSteps=6 dt=1/60 repeatUniformDifference=0 meterLevels=' + engine.post.meter.length);
 });
 test('UW-66 WORLD-22 途中描画省略: statelessは1回・statefulは全N回・フェード中は毎ステップ描画', async () => {
   function mockEngine(statelessRender) {
     const { engine } = worldTestEngine();
-    const type = { id: 'mock-world22', statelessRender, steps: 0, renders: 0, feedback: 0, times: [],
-      reset() { this.steps = 0; this.renders = 0; this.feedback = 0; this.times.length = 0; },
+    const type = { id: 'mock-world22', statelessRender, steps: 0, renders: 0, times: [],
+      reset() { this.steps = 0; this.renders = 0; this.times.length = 0; },
       step() { this.steps++; },
       render(input) { this.renders++; this.times.push(input.tSec); } };
     engine.types.push(type); engine.selectType(type.id, true);
-    engine.post.stepFeedback = () => { type.feedback++; }; engine._draw = () => {};
+    engine._draw = () => {};
     return { engine, type };
   }
   const n = 7; // 時刻0の初期化と6固定ステップを合わせた全CPUステップ数。
   for (const flag of [true, false, undefined]) {
     const { engine, type } = mockEngine(flag);
     await engine.renderAt(.1);
-    assert.equal(type.steps, n); assert.equal(type.renders, flag ? 1 : n);
-    assert.equal(type.feedback, flag ? 1 : n); assert.equal(type.times.at(-1), .1);
+    assert.equal(type.steps, n); assert.equal(type.renders, flag ? 1 : n); assert.equal(type.times.at(-1), .1);
     engine.setScore(engine.score); engine.advanceTo(.1);
     assert.equal(type.steps, n); assert.equal(type.renders, flag ? 1 : n);
-    assert.equal(type.feedback, flag ? 1 : n);
     await engine.renderAt(0); assert.equal(type.steps, 1); assert.equal(type.renders, 1);
   }
   const { engine, type } = mockEngine(true);
@@ -217,18 +215,18 @@ test('UW-66 WORLD-22 途中描画省略: statelessは1回・statefulは全N回�
   engine.selectType('g-fluid', true); engine.selectType(type.id);
   assert.equal(engine.fadeElapsed, 0); type.reset();
   engine.advanceTo(.2);
-  assert.equal(type.steps, 6); assert.equal(type.renders, 6); assert.equal(type.feedback, 6);
+  assert.equal(type.steps, 6); assert.equal(type.renders, 6);
   assert.ok(engine.fadeElapsed < .5); type.reset();
   await engine.advancePreview(.3);
-  assert.equal(type.steps, 6); assert.equal(type.renders, 6); assert.equal(type.feedback, 6);
+  assert.equal(type.steps, 6); assert.equal(type.renders, 6);
   // 判定はCPU更新前。混合が完了するステップ自身も描き、その後の途中だけ省く。
   type.reset(); engine.fadeElapsed = .5 - 1 / 120; engine.advanceTo(.35);
-  assert.equal(type.steps, 3); assert.equal(type.renders, 2); assert.equal(type.feedback, 2);
+  assert.equal(type.steps, 3); assert.equal(type.renders, 2);
   assert.deepEqual(type.times, [19 / 60, .35]);
   type.reset(); engine._step(.4, null, 1 / 60);
-  assert.equal(type.renders, 1); assert.equal(type.feedback, 1);
+  assert.equal(type.renders, 1);
   type.reset(); engine._step(.5, null, 1 / 60, false);
-  assert.equal(type.steps, 1); assert.equal(type.renders, 0); assert.equal(type.feedback, 0);
+  assert.equal(type.steps, 1); assert.equal(type.renders, 0);
   assert.equal(engine.latestSec, .5); assert.equal(engine.gpu.uniforms[2], .5);
   // advanceToを使わないライブと、各出力につき1ステップのexportは毎回描く。
   engine.setScore(engine.score);
@@ -312,8 +310,9 @@ test('UW-10 start(false): resume待ち中にもplayを発行・全画面不要�
 test('UW-11 renderAt: 120秒7200固定ステップ・全境界・dt0の描画では積分しない', async () => {
   const { engine } = worldTestEngine(); let steps = 0, maxDt = 0;
   // GPU計算はUW-06の命令監査とブラウザ計測に任せ、ここでは全曲の時刻とイベントを検証する。
-  engine.fluid.step = () => { steps++; maxDt = Math.max(maxDt, engine.gpu.uniforms[1]); };
-  engine.particles.step = () => {}; engine._draw = () => {};
+  const type = engine.type, original = type.step.bind(type);
+  type.step = input => { if (input.dt > 0) { steps++; maxDt = Math.max(maxDt, engine.gpu.uniforms[1]); } original(input); };
+  type.render = () => {}; engine._draw = () => {};
   const m = await engine.renderAt(120);
   assert.equal(engine.previewStep, 7200); assert.equal(steps, 7200); assert.ok(maxDt <= 1 / 60 + 1e-9);
   assert.equal(m.boundaryCount, 6); assert.equal(engine.events.at(-1).type, 'end'); assert.ok(engine.events.at(-1).firedFrame >= 0);
@@ -363,23 +362,11 @@ test('UW-14 WORLD-9 第二drop: 空間スケール変奏・連続カメラ・レ
   engine._step(drops[1].startSec, null, 0);
   assert.equal(engine.metrics().formation, 'explosion'); assert.equal(engine.metrics().raymarchSteps, 0);
   assert.equal(engine.form, undefined);
-  assert.equal(engine.metrics().feedbackWidth, 960); assert.equal(engine.metrics().feedbackHeight, 540);
   assert.ok(drops[1].intensity > drops[0].intensity);
-  console.log('UW-14 worldScale='+drops[1].worldScale+' intensity='+drops[1].intensity+' raymarchSteps=0 feedback=960x540');
+  console.log('UW-14 worldScale='+drops[1].worldScale+' intensity='+drops[1].intensity+' raymarchSteps=0');
 });
 
 
-test('UW-15 WORLD-6 粒子: 262144全件を描画・seed再現・深度遮蔽と面積間引き撤去', () => {
-  const { engine, gl } = worldTestEngine(), initial = engine.particles.initial.slice();
-  engine.particles.reset(engine.score.seed); assert.deepEqual(engine.particles.initial, initial);
-  engine._step(45, null, 1 / 60);
-  const points = gl.calls.filter(c => c.type === gl.POINTS);
-  assert.ok(points.length > 0); assert.ok(points.every(c => c.count === 262144));
-  const runtime = loadClassic(['js/world/gl-util.js', 'js/world/particles.js']);
-  const vertex = runtime.get('WORLD_PARTICLE_VERTEX');
-  assert.ok(!/coverageBudget|activeCount|rank|depthField/.test(vertex));
-  console.log('UW-15 submittedParticles=262144 seedResetDifference=0 pointDrawCalls=' + points.length);
-});
 test('UW-16 WORLD-12 harmony: 指定12パレットの全108成分・同値は音名順', () => {
   const expected = [
     [[.10,.85,.75],[.45,.25,1],[1,.85,.60]], [[1,.55,.15],[.90,.12,.25],[1,.90,.75]],
@@ -453,19 +440,6 @@ test('UW-20 WORLD-6 被覆計測: 暗部丸めを除外・重複画素を一度�
   assert.ok(m.peakHdrContribution > .007); assert.equal(m.particleEnergyFraction, 1);
   console.log('UW-20 syntheticCoverage=10/100=10% excludedSubthresholdPixels=1');
 });
-test('UW-21 WORLD-6 履歴: 毎simulationステップで進む・再描画は不変・reset/resizeで破棄', () => {
-  const { engine } = worldTestEngine(); let updates = 0, resets = 0;
-  const step = engine.post.stepFeedback.bind(engine.post), reset = engine.post.reset.bind(engine.post);
-  engine.post.stepFeedback = (...args) => { updates++; step(...args); };
-  engine.post.reset = () => { resets++; reset(); };
-  engine._step(0, null, 0); const first = engine.post.feedback.read;
-  engine._draw(); engine._draw(); assert.equal(engine.post.feedback.read, first); assert.equal(updates, 1);
-  engine._step(1 / 60, null, 1 / 60); assert.notEqual(engine.post.feedback.read, first); assert.equal(updates, 2);
-  engine._step(.017, null, 0); assert.equal(updates, 2);
-  engine.setScore(engine.score); assert.equal(resets, 1);
-  engine.resize(1280, 720); assert.equal(engine.post.feedback.read.width, 640); assert.equal(engine.fluid.velocity.read.width, 480);
-  console.log('UW-21 historyUpdates=2 repeatedDrawUpdates=0 resetCalls=1 resizedFluid=480x270 feedback=640x360');
-});
 test('UW-22 WORLD-6 全画面は明示操作のみ・シーク後は位置を維持して再開', async () => {
   let requests = 0, exits = 0;
   const document = { fullscreenElement: null, documentElement: { requestFullscreen: async () => { requests++; } }, exitFullscreen: async () => { exits++; } };
@@ -538,8 +512,7 @@ test('UW-25 WORLD-9 2Dカメラ: 全境界と小節頭で連続・loop端一致�
   engine.setScore(engine.score);engine._step(0,null,0);const start=u.slice(80,84);
   engine._step(engine.score.durationSec,null,0);
   for(let i=0;i<4;i++)assert.ok(Math.abs(u[80+i]-start[i])<1e-6);
-  assert.equal(u.length,244);assert.equal(engine.fluid.velocity.read.width,720);assert.equal(engine.fluid.velocity.read.height,405);
-  assert.equal(engine.fluid.dye.read.width,1440);assert.equal(engine.fluid.dye.read.height,810);assert.equal(engine.particles.count,262144);
+  assert.equal(u.length,244);
   console.log('UW-25 continuityChecks='+checks+' maximumLensDelta='+maximum+' loopLensError<1e-6 uniformFloats=244');
 });
 
@@ -557,8 +530,7 @@ test('UW-26 WORLD-7 計測: RGB丸めを除外したmotion差・画面3×3占有
 
 test('UW-27 WORLD-7 preview: 拍格子でkickを生成・反復一致・ライブの空MFSでは生成しない', async () => {
   const { engine } = worldTestEngine(), section = engine.score.sections.find(s => s.kind === 'drop');
-  engine.fluid.step = () => {}; engine.particles.step = () => {}; engine._renderMatter = () => {};
-  engine.post.stepFeedback = () => {}; engine._draw = () => {};
+  engine._renderMatter = () => {}; engine._draw = () => {};
   const t = section.startSec + 1;
   await engine.renderAt(t); const count = engine.kickCount, state = engine.gpu.uniforms.slice(88, 108);
   assert.ok(count >= 2); assert.equal(engine.mfsFrames, 0);
@@ -594,26 +566,6 @@ test('UW-28 WORLD-7 std140契約: GLSLの各vec4配列とJSのcamera/渦/衝撃�
 });
 
 
-test('UW-29 WORLD-8 領域: 1.5倍の速度・圧力・染料・補助場、リサイズ後も世界単位の格子密度を維持', () => {
-  const { engine } = worldTestEngine();
-  for (const [w, h] of [[1920, 1080], [1080, 1080], [1281, 721]]) {
-    engine.resize(w, h);
-    const f = engine.fluid, fw = Math.ceil(w * 1.5 / 4), fh = Math.ceil(h * 1.5 / 4);
-    for (const target of [f.velocity.read, f.velocity.write, f.pressure.read, f.pressure.write, f.curl, f.divergence, f.base]) {
-      assert.equal(target.width, fw); assert.equal(target.height, fh);
-    }
-    assert.equal(f.dye.read.width, Math.ceil(w * 1.5 / 2)); assert.equal(f.dye.read.height, Math.ceil(h * 1.5 / 2));
-    assert.equal(engine.scene.width, w); assert.equal(engine.scene.height, h);
-  }
-  const runtime = loadClassic(['js/world/gl-util.js', 'js/world/fluid.js', 'js/world/particles.js', 'js/world/analyzer-types.js', 'js/world/g-gargantua.js', 'js/world/g-attractor.js', 'js/world/post.js']);
-  assert.equal(runtime.get('OVERSCAN'), 1.5);
-  assert.match(runtime.get('WORLD_FLUID_FRAGMENT'), /worldDomainPosition\(uv\)/);
-  assert.match(runtime.get('WORLD_PARTICLE_UPDATE'), /extent=worldExtent\(\)\*p.z\/3/);
-  assert.match(runtime.get('WORLD_PARTICLE_VERTEX'), /plane=s.xy\*3.\/depth/);
-  assert.match(runtime.get('WORLD_PARTICLE_VERTEX'), /worldScreenUv\(view\)/);
-  assert.match(runtime.get('WORLD_FEEDBACK_FRAGMENT'), /worldUv\(worldPosition\(vUv\)\)/);
-  console.log('UW-29 overscan=1.5 velocity/pressure=720x405 dye=1440x810 targetsAreaRatio=2.25 screenResolutionUnchanged=true');
-});
 test('UW-30 WORLD-9 camera: 全60Hz時刻・任意の旧cut通番・16:9/1:1で四隅に3%以上の余白', () => {
   const { engine } = worldTestEngine(), u = engine.gpu.uniforms;
   const marginOf = loadClassic(['js/world/gl-util.js', 'tests/browser/world.test.js']).get('worldCameraMargin');
@@ -675,77 +627,40 @@ test('UW-32 WORLD-9 固定timeline: rAF間隔に依存せずrenderAtと同じス
   assert.throws(()=>engine.setTimeline(frames,25),RangeError);
   console.log('UW-32 fps=30 fixedSteps=6 live/renderAtUniformError=0 features=7');
 });
-test('UW-33 WORLD-12 帯域と構図: 整形レベル・32供給点・同時刻のモーフ連続性・再演', async()=>{
+test('UW-33 WORLD-12 帯域と構図: 整形レベル・同時刻のモーフ連続性・再演', async()=>{
   const {engine}=worldTestEngine(),u=engine.gpu.uniforms;
   const r=loadClassic(['js/mfs-const.js','js/mfs-view.js']),f=new(r.get('MfsFrameView'))();
-  f.bandsSmooth[17]=.8;engine._step(7,f,1/60);const before=u.slice(116);
+  f.bandsSmooth[17]=.8;engine._step(7,f,1/60);const before=engine.type.bandUniforms.slice();
   engine._step(7.1,f,1/60);
   const expected=Math.pow((Math.fround(.8)-.12)/.70,.8);
-  assert.ok(Math.abs(u[116+17*4+2]-expected)<1e-6);
-  for(let i=0;i<32;i++)assert.equal(u[118+i*4],before[2+i*4]);
-  const positions=new Set();for(let i=0;i<32;i++)positions.add(u[116+i*4]+':'+u[117+i*4]);assert.equal(positions.size,32);
+  assert.ok(Math.abs(engine.type.bandUniforms[17*4]-expected)<1e-6);
+  for(let i=0;i<32;i++)assert.equal(engine.type.bandUniforms[i*4],before[i*4]);
   const boundary=engine.score.sections[1].startSec;engine.setScore(engine.score);engine._step(boundary,f,0);
-  const start=u.slice(116);engine._step(boundary,f,0);assert.deepEqual(u.slice(116),start);
+  const start=u.slice(24,36);engine._step(boundary,f,0);assert.deepEqual(u.slice(24,36),start);
   await engine.renderAt(.2);const replay=u.slice();await engine.renderAt(.1);await engine.renderAt(.2);assert.deepEqual(u,replay);
   engine.setScore(engine.score);engine._step(0,null,0);const palette=u.slice(24,27);
   engine._step(engine.score.durationSec,null,0);assert.deepEqual(u.slice(24,27),palette);assert.equal(u[79],0);
-  console.log('UW-33 emitters=32 shapedBand17='+expected+' repeatedTimeError=0 replayError=0 loopPaletteError=0');
-});
-
-test('UW-37 WORLD-10 独立深度層: 焦点面262144粒・星塵4108粒・同じGPU資源を再利用',()=>{
-  const {engine,gl}=worldTestEngine();
-  const resourceCounts=[engine.gpu.textures.length,engine.gpu.fbos.length,engine.gpu.programs.length];
-  engine._step(45,null,1/60);
-  assert.equal(engine.depthParticles.count,4108);assert.equal(engine.particles.count,262144);
-  assert.ok(gl.calls.some(c=>c.type===gl.TRIANGLES&&c.count===4108*6));
-  assert.ok(gl.calls.some(c=>c.type===gl.POINTS&&c.count===262144));
-  engine.depthParticles.reset(17);assert.equal(engine.depthParticles.seed,17);
-  engine.setScore(engine.score);assert.equal(engine.depthParticles.seed,engine.score.seed);
-  assert.deepEqual([engine.gpu.textures.length,engine.gpu.fbos.length,engine.gpu.programs.length],resourceCounts);
-  assert.equal(engine.metrics().focusedFluid,true);assert.equal(engine.metrics().depthParticleCount,4108);
-  console.log('UW-37 focusedParticles=262144 depthParticles=4108 nearParticles=12 extraSimulationTargets=0 resourceGrowth=0');
-});
-
-test('UW-38 WORLD-12 帯域曲線: 半径.32・220度円弧・ジッター・流れによる最大.02/s移流',()=>{
-  const {engine}=worldTestEngine(),u=engine.gpu.uniforms,analyzer=engine.type;
-  const a=new Float32Array(128);let minSpacing=Infinity,radiusError=0;
-  for(let i=0;i<32;i++){
-    engine._emitterPosition(0,i,a,i*4);
-    radiusError=Math.max(radiusError,Math.abs(Math.hypot(a[i*4],a[i*4+1])-.32));
-    const angle=(i/31-.5)*220*Math.PI/180;assert.ok(Math.abs(a[i*4]-.32*Math.cos(angle))<1e-7);
-    if(i)minSpacing=Math.min(minSpacing,Math.hypot(a[i*4]-a[(i-1)*4],a[i*4+1]-a[(i-1)*4+1]));
-  }
-  assert.ok(minSpacing>.012);assert.ok(radiusError<1e-7);
-  const y=Array.from({length:32},(_,i)=>a[i*4+1]);assert.ok(Math.max(...y)-Math.min(...y)>.15);
-  engine._step(0,null,0);const start=u.slice(116);let maxDriftSpeed=0,maxJitter=0;
-  for(let frame=1;frame<=120;frame++){
-    const x=analyzer.driftX,y=analyzer.driftY;engine._step(frame/60,null,1/60);
-    maxDriftSpeed=Math.max(maxDriftSpeed,Math.hypot(analyzer.driftX-x,analyzer.driftY-y)*60);
-    for(let i=0;i<32;i++)maxJitter=Math.max(maxJitter,Math.abs(u[116+i*4]-a[i*4]-analyzer.driftX),Math.abs(u[117+i*4]-a[i*4+1]-analyzer.driftY));
-  }
-  assert.ok(maxDriftSpeed<=.02+1e-12);assert.ok(maxJitter<=.006+1e-7);assert.ok(Math.hypot(analyzer.driftX,analyzer.driftY)>.03);
-  engine.setScore(engine.score);engine._step(0,null,0);assert.deepEqual(u.slice(116),start);
-  console.log('UW-38 radiusError='+radiusError+' arcDegrees=220 minBandSpacing='+minSpacing+' maxDriftSpeed='+maxDriftSpeed+' maxJitter='+maxJitter+' resetError=0');
+  console.log('UW-33 shapedBand17='+expected+' repeatedTimeError=0 replayError=0 loopPaletteError=0');
 });
 
 test('UW-39 WORLD-13 タイプ契約: ブラックホールkey2・32帯域・半解像度・0.5秒切替',()=>{
   const {engine}=worldTestEngine(),r=loadClassic(['js/mfs-const.js','js/mfs-view.js']),f=new(r.get('MfsFrameView'))(),L=r.get('MFS_LAYOUT');
   f.bandsSmooth[17]=.8;f.raw[L.LEVEL]=.7;f.raw[L.BEAT_FLAG]=1;
-  let fluidSteps=0,feedbackSteps=0;engine.fluid.step=()=>fluidSteps++;engine.post.stepFeedback=()=>feedbackSteps++;
-  engine._step(2,f,0);feedbackSteps=0;engine.selectType('g-gargantua');assert.equal(engine.fadeElapsed,0);
+  let fluidSteps=0;const fluid=engine.type,fluidStep=fluid.step.bind(fluid);fluid.step=input=>{if(input.dt>0)fluidSteps++;fluidStep(input);};
+  engine._step(2,f,0);engine.selectType('g-gargantua');assert.equal(engine.fadeElapsed,0);
   const resources=[engine.gpu.textures.length,engine.gpu.fbos.length,engine.gpu.programs.length];
   engine._step(2.25,f,.25);assert.equal(engine.fadeElapsed,.25);
   assert.ok(Math.abs(engine.type.bandUniforms[17*4]-Math.pow((Math.fround(.8)-.12)/.7,.8))<1e-6);
   engine._step(2.5,f,.25);assert.equal(engine.fadeElapsed,.5);
   assert.equal(engine.type.half.width,960);assert.equal(engine.type.half.height,540);
-  assert.equal(fluidSteps,0);assert.equal(feedbackSteps,0);engine._draw();
+  assert.equal(fluidSteps,0);engine._draw();
   assert.equal(engine.post.analyzerMode,1);assert.equal(engine.post.pulse,0);assert.equal(engine.post.gargantua,true);
   assert.deepEqual([engine.gpu.textures.length,engine.gpu.fbos.length,engine.gpu.programs.length],resources);
   for(const id of ['g-terrain','g-rings','g-galaxy'])assert.throws(()=>engine.selectType(id),RangeError);
   const types=loadClassic(['js/world/gl-util.js','js/world/analyzer-types.js']).get('WORLD_ANALYZER_TYPES');
   assert.deepEqual(Array.from(types,t=>t.id),['g-fluid','g-gargantua','g-attractor']);
   assert.equal(types[1].key,2);assert.equal(types[1].label,'ブラックホール');
-  console.log(`UW-39 availableTypes=${types.filter(t=>t.available).length} annuli=32 internal=960x540 latencyFrames=0 fadeSec=.5 inactiveFluidSteps=0 feedbackSteps=0 GPUResourceGrowth=0`);
+  console.log(`UW-39 availableTypes=${types.filter(t=>t.available).length} annuli=32 internal=960x540 latencyFrames=0 fadeSec=.5 inactiveFluidSteps=0 GPUResourceGrowth=0`);
 });
 test('UW-40 WORLD-11 曲固有値: クロマ上位・BPM比例・重心/オンセット密度・入力不変',()=>{
   const r=loadClassic(['js/vis-utils.js','js/world/score.js']),variation=r.get('worldSongVariation');
@@ -801,25 +716,6 @@ test('UW-44 WORLD-12 共通整形: 下限/上限・残光exp(-6dt)・4/13/8帯�
   const glow=analyzer.bandUniforms[1],phase=analyzer.bandUniforms[2];input.dt=0;analyzer.update(input);
   assert.equal(analyzer.bandUniforms[1],glow);assert.equal(analyzer.bandUniforms[2],phase);
   console.log('UW-44 Llow=1 Lhigh=0 mid='+mid+' G100ms='+glow+' beat100ms='+analyzer.pulseUniforms[0]+' bar100ms='+analyzer.pulseUniforms[1]+' phaseError<1e-7 dt0StateError=0');
-});
-test('UW-45 WORLD-12 火花: onset閾値・8個×鏡像2光線・時刻/先端固定・既存GPUパス/資源',()=>{
-  const {engine,gl}=worldTestEngine(),r=loadClassic(['js/mfs-const.js','js/mfs-view.js']),f=new(r.get('MfsFrameView'))();
-  const legacy=loadClassic(['js/world/gl-util.js','js/world/analyzer-types.js','js/world/g-rings.js']);
-  const retained=new(legacy.get('WorldRingsAnalyzer'))();retained.init(engine.gpu);engine.types.push(retained);
-  engine.selectType('g-rings',true);const rings=engine.type;
-  const resources=[engine.gpu.textures.length,engine.gpu.fbos.length,engine.gpu.programs.length];
-  f.bandsSmooth.fill(.82);f.onset.env[1]=.59;engine._step(2.1,f,1/60);assert.equal(rings.sparkEvents[17*4],-100);
-  f.onset.env[1]=.9;engine._step(2.2,f,1/60);
-  const event=rings.sparkEvents.slice(17*4,18*4);
-  assert.equal(event[1],1);assert.ok(Math.abs(event[0]-2.2)<1e-6);
-  assert.ok(Math.abs(event[2]-(.075+.035+.06+.40+.05))<1e-7);
-  engine._step(2.2,f,0);assert.deepEqual(rings.sparkEvents.slice(17*4,18*4),event);
-  engine._step(2.3,f,1/60);assert.deepEqual(rings.sparkEvents.slice(17*4,18*4),event);
-  f.onset.env[1]=0;engine._step(2.4,f,1/60);f.onset.env[1]=.9;engine._step(2.5,f,1/60);assert.equal(rings.sparkEvents[17*4+1],2);
-  assert.ok(gl.calls.some(c=>c.type===gl.POINTS&&c.count===262144));
-  assert.deepEqual([engine.gpu.textures.length,engine.gpu.fbos.length,engine.gpu.programs.length],resources);
-  engine.selectType('g-fluid',true);assert.equal(engine.type.particleReset,false);assert.equal(engine.particles.needsReset,false);
-  console.log('UW-45 sparksPerRay=8 mirroredRaysPerBand=2 onsetEvents=2 tipRadius='+event[2]+' repeatedTimestampSpawnError=0 GPUResourceGrowth=0');
 });
 test('UW-46 WORLD-12 実音G-1計測: 32帯域の中央値・定数拒否・閾値.6保持',()=>{
   const r=loadClassic(['tests/browser/world11.test.js','tests/browser/world12.test.js']);

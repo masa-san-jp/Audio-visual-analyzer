@@ -69,13 +69,17 @@ function worldParticleCoverage(before, after) {
   return { visiblePixels: pixels, fraction: pixels / n, peakHdrContribution: peak, meanHdrContribution: total / n,
     particleEnergyFraction: total / Math.max(1e-12, fluidEnergy + total) };
 }
+// WORLD-38: 旧流体・粒子の分離描画は撤去。新流体の合成像（円環・塵・染料）の可視画素を数える。
 function worldMatterProbe(engine) {
-  const g = engine.gpu;
-  g.bind(engine.composite, engine.scene);
-  g.sampler(engine.dyeLoc, 0, engine.fluid.dye.read); g.sampler(engine.velocityLoc, 1, engine.fluid.velocity.read); g.draw();
-  const before = worldReadHdr(engine); engine.particles.render(engine.scene);
-  const result = worldParticleCoverage(before, worldReadHdr(engine));
-  engine._draw(); return result;
+  const input = engine.typeInput; input.target = engine.scene; engine.type.render(input);
+  const hdr = worldReadHdr(engine); let pixels = 0, peak = 0, total = 0;
+  for (let i = 0; i < hdr.length; i += 4) {
+    const y = .2126 * hdr[i] + .7152 * hdr[i + 1] + .0722 * hdr[i + 2];
+    if (y > .0001) pixels++; peak = Math.max(peak, y); total += y;
+  }
+  const n = hdr.length / 4;
+  engine._draw();
+  return { visiblePixels: pixels, fraction: pixels / n, peakHdrContribution: peak, meanHdrContribution: total / n };
 }
 // 暖色の可視面積: RGB最大値>16/255かつR>B*1.15、R>G*1.05の画素。
 // 黒の量子化誤差を色面積へ数えず、ブルーム/トーンマップ後の画面で判定する。
@@ -262,9 +266,6 @@ async function runWorldVisualMeasurement() {
     kicks.push({ tSec: t, immediateAge, advancedAge: u[31], changedPixels: changed, anchorDrift,
       pass: immediateAge === 0 && Math.abs(u[31] - .12) < 1e-6 && changed > 0 && anchorDrift === 0 && engine.gpu.gl.getError() === 0 });
   }
-  const coverage = matter.concat(referenceMatter), drops = coverage.filter(m => m.kind === 'drop');
-  // 被覆は合成前後HDR差>0の画素（ブルーム前）。元のBW-2可視寄与基準も保持する。
-  const meanCoverage = coverage.reduce((sum, m) => sum + m.fraction, 0) / coverage.length;
   // BW-2再現性: 時間を戻して同じ0.1秒を描いた画素差を実GPUで確認。
   await w.renderAt(.1); const first = engine.capture();
   await w.renderAt(.2); await w.renderAt(.1); const second = engine.capture();
@@ -280,8 +281,6 @@ async function runWorldVisualMeasurement() {
     'BW-2-exposure': { pass: exposure.every(e => e.clippedFraction <= .02), maximum: Math.max(...exposure.map(e => e.clippedFraction)), frames: exposure },
     'BW-2-preview': preview,
     'BW-2-matter': { pass: matter.every(m => m.visiblePixels > 0 && m.peakHdrContribution > 0), sections: matter },
-    'BW-6-coverage': { pass: meanCoverage >= .05 && meanCoverage <= .25, meanCoverage, sections: coverage },
-    'BW-3-hero': { pass: drops.length > 0 && drops.every(m => m.visiblePixels > 0 && m.particleEnergyFraction > 0), drops },
     'BW-3-kick': { pass: kicks.length > 0 && kicks.every(k => k.pass), kicks },
     'BW-2-environments': { pass: new Set(sections.map(s => s.environment)).size >= 4 && sections.every(s => ['mist','convergence','explosion','drift','dissipation','galaxy'].includes(s.environment)), formations: sections.map(s => s.environment) },
     references: references.map(r => ({ tSec: r.tSec, environment: r.environment, mean: r.capture.mean, clippedFraction: r.capture.clippedFraction }))
@@ -366,7 +365,7 @@ async function worldV7Probe(w) {
       for (let step = 1; step <= 9; step++) { engine._step(t + step / 60, null, 1 / 60); engine._draw(); }
     } finally { engine._camera = originalCamera; }
     const moved = worldFrameDifference(before.rgba, engine.capture().rgba);
-    const velocity = worldReadHdr(engine, engine.particles.velocity.read); let speed = 0;
+    const velocity = worldReadHdr(engine, engine.type.velocity.read); let speed = 0;
     for (let i = 0; i < velocity.length; i += 4) speed += Math.hypot(velocity[i], velocity[i + 1]);
     speed /= velocity.length / 4;
     motion.push({ tSec: t, meanParticleSpeed: speed, kickCountBefore: kickCount, kickCountAfter: engine.kickCount,
@@ -442,7 +441,7 @@ async function runWorldMeasurement(visual = null) {
       }
       const result = {
         ...visual,
-        'W-3': { pass: metrics.particleCount >= 262144 && metrics.fluidWidth > 0 && metrics.feedbackWidth > 0 && metrics.raymarchSteps === 0, ...metrics },
+        'W-3': { pass: metrics.particleCount >= 12000 && metrics.fluidWidth === 384 && metrics.dyeWidth === 1152 && metrics.raymarchSteps === 0, ...metrics },
         'W-4': { pass: checked > 0 && maxDelay <= 1 && uniformFailures === 0 && !!engine.timeline, checked, maxDelayFrames: maxDelay, uniformFailures },
         'W-6': { pass: metrics.boundaryCount === sections.length, fired: metrics.boundaryCount, expected: sections.length, events: w.events },
         'W-7': { pass: motifPass, sections: sections.map(s => ({ kind: s.kind, label: s.label, environment: s.environment, formId: s.formId, variation: s.variation })) },

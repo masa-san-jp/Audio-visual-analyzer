@@ -186,22 +186,21 @@ test('UW-89 WORLD-31 音量周回clamp・キック呼吸/高域イベント・�
   }
   console.log('UW-89 loudnessCases=5 maxEnvelopeFloat32Error='+maxError+' breathDistanceCases='+breathCases+' peakScale='+peakScale+' afterScale='+afterScale+' maxBreathError='+maxBreathError+' eventReplayError=0');
 });
-test('UW-90 WORLD-31 advanceTo暖機90枚・非同期renderAt・既存流体/ブラックホール回数',async()=>{
-  const {engine,gl}=realEngine();const a=engine.type;let renders=0,warms=0,feedback=0;
-  a.render=()=>renders++;a.warmStart=t=>{warms++;assert.equal(t,511/60);};engine.post.stepFeedback=()=>feedback++;
-  engine.advanceTo(10);assert.equal(engine.frame,601);assert.equal(renders,90);assert.equal(warms,1);assert.equal(feedback,0);
+test('UW-90 WORLD-31 advanceTo暖機90枚・非同期renderAt・新流体/ブラックホール回数',async()=>{
+  const {engine,gl}=realEngine();const a=engine.type;let renders=0,warms=0;
+  a.render=()=>renders++;a.warmStart=t=>{warms++;assert.equal(t,511/60);};assert.equal(engine.post.stepFeedback,undefined);
+  engine.advanceTo(10);assert.equal(engine.frame,601);assert.equal(renders,90);assert.equal(warms,1);
   assert.equal(engine.latestSec,10);engine.advanceTo(10+1/60);assert.equal(renders,91);assert.equal(warms,1);
   renders=warms=0;await engine.renderAt(10);assert.equal(renders,90);assert.equal(warms,1);
   renders=warms=0;await engine.renderAt(0);assert.equal(renders,1);assert.equal(warms,0);
-  for(const [id,expected] of [['g-fluid',601],['g-gargantua',1]]){
+  for(const [id,expected] of [['g-fluid',420],['g-gargantua',1]]){
     engine.selectType(id,true);engine.setScore(engine.score);let count=0;engine.type.render=()=>count++;engine.advanceTo(10);assert.equal(count,expected);
   }
   engine.selectType('g-attractor',true);engine.setScore(engine.score);renders=warms=0;engine.fadeElapsed=0;
   a.warmStart=()=>warms++;engine.advanceTo(10);assert.equal(renders,122);assert.equal(warms,1);
   // 1/60の累積丸めで0.5秒に届くまで32枚、末尾の暖機窓90枚。
-  assert.equal(feedback,601); // g-fluidは時刻0と600正dtを更新する。
   engine.dispose();
-  console.log('UW-90 CPUsteps=601 GPUdraws=90 warmStarts=1 fluidDraws=601 gargantuaDraws=1 fadeDraws='+renders+' mockCommands='+gl.calls.length);
+  console.log('UW-90 CPUsteps=601 GPUdraws=90 warmStarts=1 fluidDraws=420 gargantuaDraws=1 fadeDraws='+renders+' mockCommands='+gl.calls.length);
 });
 test('UW-91 WORLD-31 GPU命令: 32F二組・40反復・16F密度・変身・資源再利用・再描画不変',()=>{
   const {engine,gl,features}=realEngine(['intro','drop','outro'],10),a=engine.type,g=engine.gpu;
@@ -218,7 +217,7 @@ test('UW-91 WORLD-31 GPU命令: 32F二組・40反復・16F密度・変身・資�
   assert.equal(a.shapeA,'H');assert.equal(a.shapeB,null);assert.equal(a.stateA,oldB);assert.equal(a.stateB,oldA);assert.equal(count(a.updateProgram)-before,1);
   engine._step(20,features,1/60);assert.equal(a.shapeB,'L');assert.deepEqual([g.textures.length,g.fbos.length,g.programs.length],resources);
   engine._draw();assert.equal(engine.post.attractor,true);assert.equal(engine.post.gargantua,false);
-  assert.equal(gl.values.get(engine.post.thresholdLoc),0);assert.equal(count(engine.post.feedbackProgram),0);assert.equal(count(engine.post.exposureProgram),0);
+  assert.equal(gl.values.get(engine.post.thresholdLoc),0);assert.equal(engine.post.feedbackProgram,undefined);assert.equal(count(engine.post.exposureProgram),0);
   assert.ok(gl.calls.some(c=>c.uniform===engine.post.thresholdLoc&&c.value===.6));
   const bInit=count(a.updateProgram);a.warmStart(20);assert.equal(count(a.updateProgram)-bInit,82);
   assert.equal(a.gpuNeedsB,false);assert.equal(a.gpuNeedsInit,false);

@@ -84,7 +84,7 @@ child.on('close',code=>process.exit(code ?? 0));\n`);
   const analyzer = await chrome.evaluate('runWorldAnalyzerMeasurement()', { timeoutMs: 900000 });
   Object.assign(result, analyzer);
   // §2.8: W/BWはg-fluidの回帰として保持。旧SDF併描／全タイプ26万粒という解釈のみ撤回。
-  result.applicability = { legacy: 'W/BWはg-fluidへ適用（閾値維持）', obsolete: ['W-3のSDF併描: §2.6で撤回', 'W-3/BW-6-coverageを全タイプへ強制: §2.8で独立形態へ置換'], replacement: '新形態はG-1〜G-4。W-3はfluid/particles/HDR/feedbackの検査を保持' };
+  result.applicability = { legacy: 'W/BWはg-fluidへ適用（閾値維持）', obsolete: ['W-3のSDF併描: §2.6で撤回', 'W-3/BW-6-coverageを全タイプへ強制: §2.8で独立形態へ置換'], replacement: '新形態はG-1〜G-4。W-3はWORLD-38でg-fluid v2の格子・塵・HDRの検査へ置換（BW-3-hero/BW-6-coverageは撤去）' };
   result.environment = hardware; result.consoleErrors = chrome.errors;
   if (!hardware.hardware) {
     result['G-4'].pass = false; result['G-4'].reason = '実GPUを確認できません';
@@ -94,11 +94,11 @@ child.on('close',code=>process.exit(code ?? 0));\n`);
   }
   result.runtimePass = !(result.glError || result.analyzerGlErrors || result.consoleErrors.length || result.debugErrors);
   await fs.writeFile(path.join(output, 'report.json'), JSON.stringify(result, null, 2) + '\n');
-  for (const id of ['BW-2-exposure', 'BW-2-preview', 'BW-2-environments', 'BW-2-matter', 'BW-3-hero', 'BW-3-kick', 'BW-4-shell', 'BW-4-intro', 'BW-5-light', 'BW-5-palette', 'BW-6-coverage', 'BW-6-ui', 'BW-6-layers', 'BW-7-composition', 'BW-7-camera', 'BW-7-motion', 'BW-7-intro', 'BW-7-performance', 'BW-8-edges']) console.log((result[id].pass ? 'PASS ' : 'FAIL ') + id + ' ' + JSON.stringify(result[id]));
+  for (const id of ['BW-2-exposure', 'BW-2-preview', 'BW-2-environments', 'BW-2-matter', 'BW-3-kick', 'BW-4-shell', 'BW-4-intro', 'BW-5-light', 'BW-5-palette', 'BW-6-ui', 'BW-6-layers', 'BW-7-composition', 'BW-7-camera', 'BW-7-motion', 'BW-7-intro', 'BW-7-performance', 'BW-8-edges']) console.log((result[id].pass ? 'PASS ' : 'FAIL ') + id + ' ' + JSON.stringify(result[id]));
   for (let i = 1; i <= 8; i++) console.log((result['W-' + i].pass ? 'PASS ' : 'FAIL ') + 'W-' + i + ' ' + JSON.stringify(result['W-' + i]));
   for (const id of ['G-1','G-2','G-3','G-4']) console.log((result[id].pass ? 'PASS ' : 'FAIL ') + id + ' ' + JSON.stringify(result[id]));
   console.log('Report/images: ' + output);
-  if (!result.runtimePass || ['G-1','G-2','G-3','G-4'].some(id => !result[id].pass) || ['BW-2-exposure', 'BW-2-preview', 'BW-2-environments', 'BW-2-matter', 'BW-3-hero', 'BW-3-kick', 'BW-4-shell', 'BW-4-intro', 'BW-5-light', 'BW-5-palette', 'BW-6-coverage', 'BW-6-ui', 'BW-6-layers', 'BW-7-composition', 'BW-7-camera', 'BW-7-motion', 'BW-7-intro', 'BW-7-performance', 'BW-8-edges'].some(id => !result[id].pass) || Array.from({ length: 8 }, (_, i) => result['W-' + (i + 1)].pass).some(v => !v)) process.exitCode = 1;
+  if (!result.runtimePass || ['G-1','G-2','G-3','G-4'].some(id => !result[id].pass) || ['BW-2-exposure', 'BW-2-preview', 'BW-2-environments', 'BW-2-matter', 'BW-3-kick', 'BW-4-shell', 'BW-4-intro', 'BW-5-light', 'BW-5-palette', 'BW-6-ui', 'BW-6-layers', 'BW-7-composition', 'BW-7-camera', 'BW-7-motion', 'BW-7-intro', 'BW-7-performance', 'BW-8-edges'].some(id => !result[id].pass) || Array.from({ length: 8 }, (_, i) => result['W-' + (i + 1)].pass).some(v => !v)) process.exitCode = 1;
 } catch (error) {
   const state = chrome ? await chrome.evaluate('({ error: window.__world?.error, state: window.__world?.app?.state, tSec: window.__world?.engine?.latestSec, previewSteps: window.__world?.engine?.previewStep, audioTime: window.__world?.audio?.currentTime, audioPaused: window.__world?.audio?.paused, audioReadyState: window.__world?.audio?.readyState, audioContextState: window.__world?.audioEngine?.ctx?.state, mfsStatus: window.__world?.audioEngine?.mfsStatus })').catch(() => null) : null;
   await fs.writeFile(path.join(output, 'report.json'), JSON.stringify({ ...visual, runtimePass: false, setupError: error.message, state, consoleErrors: chrome ? chrome.errors : [] }, null, 2) + '\n');
