@@ -119,7 +119,7 @@ function world14Seam(engine) {
   }finally {a.camera[2]=azim;engine._draw();}
 }
 if(typeof avzTest==='function')avzTest('BW-14-screen','v1.1の継ぎ目4画素・白飛び輝度.97・星400個・画面キック35%・GPU16ms',async()=>{
-  const iframe=document.createElement('iframe');iframe.src=new URL('../../world.html',location.href).href;
+  const iframe=document.createElement('iframe');iframe.src=new URL('../browser/harness/world.html',location.href).href;
   const ready=new Promise(resolve=>iframe.onload=resolve);document.body.appendChild(iframe);
   try {
     await ready;const child=iframe.contentWindow,e=child.__world?.engine;avzAssert.ok(e,child.__world?.error);
@@ -145,7 +145,7 @@ if(typeof avzTest==='function')avzTest('BW-14-screen','v1.1の継ぎ目4画素�
 },{timeoutMs:180000,slow:true});
 if(typeof module!=='undefined'&&module.exports){module.exports={world14ExposureReport,world14KickReport,world14SeamReport,world14StarReport,world14AcceptanceReport};}
 if(typeof avzTest==='function')avzTest('BW-14-periodic','実GLSLの両層・6時刻のφ周期性と有限な出力',async()=>{
-  const iframe=document.createElement('iframe');iframe.src=new URL('../../world.html',location.href).href;
+  const iframe=document.createElement('iframe');iframe.src=new URL('../browser/harness/world.html',location.href).href;
   const ready=new Promise(resolve=>iframe.onload=resolve);document.body.appendChild(iframe);
   try {
     await ready;const child=iframe.contentWindow;avzAssert.ok(child.__world?.engine,child.__world?.error);

@@ -6,7 +6,12 @@ class UIController {
     this.audioEngine = audioEngine;
     this.songMapService = new SongMapService({
       isAvailable: () => audioEngine.mfsStatus !== 'fallback' && typeof AudioWorkletNode !== 'undefined',
+      // GPU タイプ用に平均クロマ（worldChroma）を SongMap へ付与する（統合設計 §2）
+      augment: typeof worldAugmentSongMap === 'function' ? worldAugmentSongMap : null,
     });
+    // GPU タイプの橋渡し（app.js が設定する。2D だけなら null のまま）と、GPU を選ぶ前の 2D タイプ
+    this.worldBridge = null;
+    this._last2DType = 'bar';
     this._songMapStates = new Map();
     this.songMapService.onProgress = (key, ratio) => {
       const entry = this._songMapStates.get(key);
@@ -116,6 +121,8 @@ class UIController {
         this._setVideoElement(null); // マイク入力中は動画合成の対象がない
         this.visualizer.mediaElement = null;
         this.visualizer.director.setAnalysisState('mic');
+        // GPU タイプは曲ファイル全体の解析が必要なため、マイク中は 2D タイプへ戻して選べなくする
+        this._leaveGpuForMic();
         this._updateDirectorUI();
         this.visualizer.start();
       } catch (err) {
@@ -184,6 +191,7 @@ class UIController {
     this._restoreDirectorAnalysis();
     this._updateRecButtons();
     this._updateSlotUI();
+    this._prepareGpuForActiveFile();
   }
 
   // ── ソングマップの非同期状態 — Phase 18 計画書 §6.8 ──
@@ -306,18 +314,22 @@ class UIController {
       text = '解析できませんでした（' + (reasons[detail.code] || detail.code) + '）';
     }
     document.getElementById('director-status').textContent = text;
-    const locked = status === 'ready';
+    const gpu = this._isGpuType(this.visualizer.settings.analyzerType);
+    // GPU タイプではディレクターを使わない（タイプ自身が曲の展開に追従する）。操作を無効にして注記を出す
+    document.querySelectorAll('#director-enabled, #director-intensity, #director-pool, #director-flash, #director-shuffle')
+      .forEach((el) => { el.disabled = gpu; });
+    const locked = status === 'ready' && !gpu;
     // 色相はずらし量だけが管理対象なので、色の操作は有効のまま。
     document.querySelectorAll('#analyzer-type, #expression-method, #bar-display-mode, .layer-btn, '
       + '#slider-motion, #slider-afterimage, '
       + '#btn-analyzer-randomize, #btn-shape-randomize').forEach((el) => {
-      el.disabled = locked;
+      el.disabled = locked || (!!this._recTypeLock && (el.id === 'analyzer-type' || el.id === 'btn-analyzer-randomize'));
       if (locked) el.title = '自動演出中';
       else el.removeAttribute('title');
     });
     const strip = document.getElementById('section-strip');
     const map = director.songMap;
-    strip.hidden = !this.visualizer.settings.directorEnabled || status !== 'ready';
+    strip.hidden = !this.visualizer.settings.directorEnabled || status !== 'ready' || gpu;
     // 進捗イベントごとに帯を作り直さず、ソングマップの変更時だけ構築する。
     if (this._stripSongMap !== map) {
       this._stripSongMap = map;
@@ -415,6 +427,7 @@ class UIController {
     this._restoreDirectorAnalysis();
     this._setPlaybackEnabled(this.mediaManager.isLoaded);
     this._updateRecButtons();
+    this._updateGpuOptions();
   }
 
   // 動画合成の対象を切り替える
@@ -556,7 +569,10 @@ class UIController {
       this.visualizer.start();
       let started = false;
       try {
-        started = await this.recorder.start();
+        // GPU タイプ選択中で準備済みなら、表示中の GPU canvas を録る
+        const type = this.visualizer.settings.analyzerType;
+        const gpuSource = getRendererEntry(type).gpu && this.worldBridge && this.worldBridge.ready ? document.getElementById('gpu-canvas') : undefined;
+        started = await this.recorder.start(gpuSource);
       } catch (_) {
         started = false;
       }
@@ -611,6 +627,9 @@ class UIController {
     btnStop.disabled  = state !== 'recording';
     btnSave.disabled  = state !== 'recorded';
     btnReset.disabled = state === 'idle';
+    // 録画中は録る canvas が途中で変わらないよう、タイプ選択を固定する（自動演出のロックと合成）
+    const recLock = state === 'recording';
+    if (recLock !== !!this._recTypeLock) { this._recTypeLock = recLock; this._updateDirectorUI(); }
 
     if (state === 'recording') {
       statusEl.textContent = '録画中…';
@@ -665,8 +684,14 @@ class UIController {
       if (supported) statusEl.textContent = '書き出し待機中';
     });
 
+    // 進行中・完了済みの書き出しを担当するエクスポーター（2D は offlineExporter、GPU は WorldBridge の WorldExporter）
+    let active = this.offlineExporter;
+    let gpuAbort = null;
+    const isBusy = (e) => e.state === 'analyzing' || e.state === 'rendering';
+
     btnStart.addEventListener('click', async () => {
-      const busy = this.offlineExporter.state === 'analyzing' || this.offlineExporter.state === 'rendering';
+      const gpuBridge = this.worldBridge;
+      const busy = isBusy(this.offlineExporter) || (gpuBridge && isBusy(gpuBridge.exporter));
       if (!this._offlineFile || busy) return;
 
       btnStart.disabled = true;
@@ -686,14 +711,27 @@ class UIController {
       };
 
       try {
-        await this.offlineExporter.export(this._offlineFile, settingsSnapshot, { fps, quality,
-          songMapService: this.songMapService, presets: this._directorPresets() });
+        if (this._isGpuType(settingsSnapshot.analyzerType) && gpuBridge) {
+          // GPU タイプ: WorldExporter で書き出す。進捗・状態・エラー表示は本体のものを共通で使う（統合設計 §5）
+          gpuBridge.exporter.onStateChange = this.offlineExporter.onStateChange;
+          gpuBridge.exporter.onError = this.offlineExporter.onError;
+          active = gpuBridge.exporter;
+          gpuAbort = new AbortController();
+          await gpuBridge.exportVideo({ file: this._offlineFile, fps, aspect: settingsSnapshot.aspectRatio,
+            quality, typeId: settingsSnapshot.analyzerType, onProgress: this.offlineExporter.onProgress,
+            signal: gpuAbort.signal });
+        } else {
+          active = this.offlineExporter;
+          await this.offlineExporter.export(this._offlineFile, settingsSnapshot, { fps, quality,
+            songMapService: this.songMapService, presets: this._directorPresets() });
+        }
       } catch (_) {
         // エラー内容は onError 経由で表示済み
       } finally {
         btnFile.disabled = false;
         btnCancel.disabled = true;
-        if (this.offlineExporter.state === 'done') {
+        gpuAbort = null;
+        if (active.state === 'done') {
           btnStart.disabled = false;
           btnSave.disabled = false;
         } else {
@@ -703,11 +741,12 @@ class UIController {
     });
 
     btnCancel.addEventListener('click', () => {
-      this.offlineExporter.cancel();
+      if (gpuAbort) gpuAbort.abort();
+      active.cancel();
     });
 
     btnSave.addEventListener('click', () => {
-      this.offlineExporter.save();
+      active.save();
     });
 
     this.offlineExporter.onStateChange = (state) => {
@@ -715,6 +754,7 @@ class UIController {
         statusEl.textContent = '解析中…';
       } else if (state === 'rendering') {
         statusEl.textContent = '描画・エンコード中…';
+        progressWrap.style.display = ''; // GPU 書き出しは解析後に一度 idle を経由するため再表示する
       } else if (state === 'done') {
         statusEl.textContent = '書き出し完了 — 保存できます';
         progressEl.value = 100;
@@ -1061,7 +1101,8 @@ class UIController {
       const pick = (arr) => arr[Math.floor(Math.random() * arr.length)];
 
       // 全タイプから選び、ケイパビリティに従って表現方法・表示モード・レイヤー数を決める
-      const types = Object.keys(RENDERER_REGISTRY);
+      // GPU タイプは対象外（2D の項目だけから選ぶ）
+      const types = listRenderer2DKeys();
       const newType = pick(types);
       const caps = getRendererEntry(newType).capabilities || {};
 
@@ -1116,10 +1157,84 @@ class UIController {
       });
       select.appendChild(og);
     });
+    this._updateGpuOptions();
+  }
+
+  // ── GPU タイプ（統合設計 §3・§4） ──
+
+  _isGpuType(type) {
+    return !!getRendererEntry(type).gpu;
+  }
+
+  // マイク入力中・WebGL 不可のとき GPU 項目の option を disabled にして理由を title に出す
+  _updateGpuOptions() {
+    const select = document.getElementById('analyzer-type');
+    if (!select || !select.options) return;
+    const mic = !!(this.micInput && this.micInput.active);
+    const unavailable = !!(this.worldBridge && this.worldBridge.available === false);
+    const reason = mic ? 'マイク入力中は選べません（曲ファイル全体の解析が必要です）'
+      : unavailable ? 'この環境では GPU タイプを利用できません' : '';
+    Array.from(select.options).forEach((opt) => {
+      if (!this._isGpuType(opt.value)) return;
+      opt.disabled = !!reason;
+      if (reason) opt.title = reason; else opt.removeAttribute('title');
+    });
+  }
+
+  // GPU タイプの選択状態をバッファ・canvas・設定表示へ反映する。GPU を使えない場合は直前の 2D タイプへ戻す
+  _syncGpuType(type) {
+    const gpu = this._isGpuType(type);
+    const bridge = this.worldBridge;
+    if (gpu && (this.micInput.active || !bridge || !bridge.selectType(type))) {
+      const unavailable = !!bridge && bridge.available === false;
+      this._revertTo2D();
+      this._updateGpuOptions();
+      if (unavailable && bridge.statusEl) bridge._setText(bridge.statusEl, 'この環境では GPU タイプを利用できません');
+      return false;
+    }
+    document.body.classList.toggle('gpu-type', gpu);
+    if (gpu) {
+      bridge.setActive(true);
+      this._prepareGpuForActiveFile();
+    } else {
+      this._last2DType = type;
+      if (bridge) bridge.setActive(false);
+    }
+    // ディレクター表示は GPU 状態が変わったときだけ更新する（2D のみの利用では従来どおり）
+    if (gpu !== !!this._gpuShown) { this._gpuShown = gpu; this._updateDirectorUI(); }
+    return gpu;
+  }
+
+  // 直前の 2D タイプへ戻す（設定・セレクト・表示を揃える）
+  _revertTo2D() {
+    const back = this._last2DType || 'bar';
+    this.visualizer.settings.analyzerType = back;
+    const select = document.getElementById('analyzer-type');
+    if (select) select.value = back;
+    this._applyCapabilities(back);
+  }
+
+  _leaveGpuForMic() {
+    if (this._isGpuType(this.visualizer.settings.analyzerType)) this._revertTo2D();
+    this._updateGpuOptions();
+  }
+
+  // GPU タイプ選択中なら、再生中の曲の事前解析を始める（同じファイルは WorldBridge が使い回す）
+  _prepareGpuForActiveFile() {
+    const bridge = this.worldBridge;
+    if (!bridge || !this._isGpuType(this.visualizer.settings.analyzerType) || this.micInput.active) return;
+    const file = this.mediaManager.slots[this.mediaManager.activeIndex]?.file;
+    if (!file) { bridge.invalidate(); return; }
+    bridge.prepare(file).catch(() => {});
   }
 
   // 選択タイプのケイパビリティに応じて非対応コントロールを表示/非表示する
   _applyCapabilities(type) {
+    // GPU タイプ: 形状・残像・動画合成・背景色・色・感度は CSS(body.gpu-type) で隠すだけで、設定値は変更しない（統合設計 §4）
+    const isGpu = this._isGpuType(type);
+    this._syncGpuType(type);
+    // GPU を使えた場合はここで終了。使えず戻した場合は _revertTo2D が 2D 側の表示を適用済み
+    if (isGpu) return;
     const caps = getRendererEntry(type).capabilities || {};
     const show = (id, visible) => {
       const el = document.getElementById(id);

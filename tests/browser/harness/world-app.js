@@ -1,15 +1,7 @@
 // 目的 — ドロップ・先行解析・常設操作と評価用の公開口 — doc/20261004-concept-world-mode.md §2.8・§5
+// 目的 — 本体の SongMapService に平均クロマ付与（worldAugmentSongMap, js/world/score.js）を差し込んだ試験用サービス
 class WorldSongMapService extends SongMapService {
-  async _collectRows(job, buffer) {
-    const rows = await super._collectRows(job, buffer);
-    // 既存SongMap v1は平均クロマを公開しない。行の寿命内で分布だけ保持し、既存APIは変更しない。
-    const chroma = new Float64Array(12), R = SONGMAP_ROW;
-    for (let h = 0; h < rows.length; h += R.LENGTH) for (let k = 0; k < 12; k++) chroma[k] += rows[h + R.CHROMA + k];
-    this.worldChroma = chroma; return rows;
-  }
-  async _run(job) {
-    const map = await super._run(job); map.worldChroma = Array.from(this.worldChroma); return map;
-  }
+  constructor() { super({ augment: (map, rows) => worldAugmentSongMap(map, rows) }); }
 }
 class WorldApp {
   constructor() {

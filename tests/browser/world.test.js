@@ -1,6 +1,6 @@
 // 目的 — WORLD-7 の決定的静止画・実再生同期・GPU読出し計測 — 構想 §1.3・§2.6
 // @page harness
-// tests/world/measure.mjs が world.html に注入する。既存runnerのharnessでは登録／実行しない。
+// tests/world/measure.mjs が tests/browser/harness/world.html に注入する。既存runnerのharnessでは登録／実行しない。
 function worldReflectIndex(i, n) {
   // 端画素を反復する対称折り返し: -1→0、n→n-1。
   while (i < 0 || i >= n) i = i < 0 ? -i - 1 : 2 * n - i - 1;

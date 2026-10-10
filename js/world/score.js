@@ -26,6 +26,14 @@ const WORLD_PALETTES = [
   { primary: [.95,.50,.25], secondary: [.10,.60,.60], accent: [1.00,.92,.80] }, // Copper
   { primary: [.55,.30,1.00], secondary: [1.00,.40,.55], accent: [.50,.80,1.00] } // Twilight
 ];
+// 目的 — 本体のSongMapへWORLD用の平均クロマ分布を足す純粋関数（旧WorldSongMapServiceの追加処理）— 統合設計 §2
+// rows は SONGMAP_ROW 配置の行列。map へ worldChroma（12要素）を書き込んで返す。rows が無ければ何もしない。
+function worldAugmentSongMap(map, rows) {
+  if (!map || !rows) return map;
+  const chroma = new Float64Array(12), R = SONGMAP_ROW;
+  for (let h = 0; h < rows.length; h += R.LENGTH) for (let k = 0; k < 12; k++) chroma[k] += rows[h + R.CHROMA + k];
+  map.worldChroma = Array.from(chroma); return map;
+}
 // 全曲特徴は読込時だけ集計。ゼロ分布のtieは音名順、入力配列は変更しない。
 function worldSongVariation(songMap, featureFrames = null) {
   const chroma = new Float64Array(12); let centroid = 0, active = 0, onsets = 0;
@@ -88,5 +96,5 @@ function compileWorldScore(songMap, seed, featureFrames = null) {
     palette: { primary: palette[0], secondary: palette[1], accent: palette[2] } };
 }
 if (typeof module !== 'undefined' && module.exports) {
-  module.exports = { worldSongVariation, compileWorldScore, worldHash, WORLD_PALETTES, WORLD_KINDS, WORLD_ENVIRONMENTS, WORLD_KIND_ENVIRONMENT, WORLD_COMPOSITIONS };
+  module.exports = { worldAugmentSongMap, worldSongVariation, compileWorldScore, worldHash, WORLD_PALETTES, WORLD_KINDS, WORLD_ENVIRONMENTS, WORLD_KIND_ENVIRONMENT, WORLD_COMPOSITIONS };
 }

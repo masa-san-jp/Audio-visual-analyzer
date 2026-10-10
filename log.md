@@ -1,3 +1,37 @@
+## 2026-10-10 — [WORLD-41] GPU タイプの本体統合
+
+### 作業内容
+- 設計 `doc/20261010-design-integration-v1.md` §1〜§7 を実装。GPU の 3 タイプ（g-fluid／g-gargantua／g-attractor）を index.html に 1 本化した。
+- 新規 `js/world/world-bridge.js`（`WorldBridge`）：遅延初期化（最初に GPU タイプが選ばれたとき `new WorldEngine`、失敗で `available=false`）、`prepare(file)`（本体の songMapService＋`WorldExporter.prepare`＋`compileWorldScore`、同一ファイルは使い回し）、`selectType`、`frame`（逆シーク・ループで `setScore` 巻き戻し、停止中は描画しない）、`resize`（内部解像度＝表示サイズ×dpr、長辺 1920）、`exportVideo`、`dispose`。純粋関数 `worldBridgeInternalSize`。
+- `js/world/score.js`：旧 `WorldSongMapService` の追加処理を純粋関数 `worldAugmentSongMap(map, rows)` に移した。`js/songmap-service.js` に任意の `augment(map, rows)` フック（既定 null）を追加。UIController が `worldAugmentSongMap` を渡す。
+- `js/renderer-registry.js`：`gpu: true` の 3 項目（グループ「GPU」、`capabilities: { gpu: true }`、`create` なし）。`RENDERER_GROUP_ORDER` の最後に追加。`listRenderer2DKeys()` を追加。`director-scenes.js` と `director-timeline.js` は GPU 項目を除外し、`capabilities.methods` が無くても例外にならないようにした。
+- `js/visualizer-core.js`：`worldBridge` を持ち、GPU タイプ選択中は `pipeline.render` とディレクターを呼ばず `worldBridge.frame()` だけを呼ぶ（`captureFrame` と SongMap テンポ補正は従来どおり）。`resize()` で gpu-canvas の表示サイズも揃える。2D の経路は変更なし。
+- `js/ui-controller.js`：`_syncGpuType`／`_updateGpuOptions`／`_revertTo2D`／`_leaveGpuForMic`／`_prepareGpuForActiveFile` を追加。`_applyCapabilities` は GPU タイプなら `body.gpu-type` を付けて 2D の処理をしない（設定値は保持）。ランダムは 2D のみ。マイク開始で GPU を選んでいれば直前の 2D へ戻し、option を disabled＋ツールチップ。`_updateDirectorUI` は GPU 中にディレクターの操作を無効化。書き出しの開始処理は GPU タイプなら `worldBridge.exportVideo` を使い、進捗・中止・保存は本体のものを共通で使う。
+- `index.html`／`style.css`／`js/app.js`：`#gpu-canvas`・`#gpu-message`・`#gpu-status`・注記を追加し、設定の各ブロックに `data-gpu-hide`／`data-gpu-only` を付与（CSS `body.gpu-type`）。world 系 script を offline-exporter の後に追加。`#visualizer-area` を `position: relative` にした。
+- `world.html` と `world-app.js` を `tests/browser/harness/` へ移動（script パス更新、`world-bridge.js` を追加、`WorldSongMapService` は `worldAugmentSongMap` を使う形に）。単体・ブラウザ・撮影スクリプトの参照を更新。`tests/lib/world-harness.mjs` を追加。
+- README・`doc/spec.md` を更新（GPU タイプは index.html、world.html は利用者向けに廃止）。
+
+### テスト
+- 追加（単体 8）：`tests/unit/integration.test.mjs` UI-01〜08（レジストリ、ランダム／ディレクター除外、`worldAugmentSongMap` が旧処理と一致、内部解像度、`_applyCapabilities` の GPU 表示切替、WebGL 不可・マイク中の戻し、option の disabled、`WorldBridge.frame`）。
+- 修正：`tests/unit/director-timeline.test.mjs`（U18-16／U18-19 は 2D の 8 タイプだけを対象にした）。
+- 追加（ブラウザ 7・未実行）：`tests/browser/integration.test.js` INT-01〜07（@page app）。
+
+### 備考
+- 判断：書き出し FPS は 25／29.97 の選択肢しかないため、WorldExporter が受ける 30／60 に丸める（59 以上→60、それ以外→30）。ライブ用の事前解析は 60fps 固定。
+- 判断：`exportVideo` は設計の引数に `file`・`quality`・`typeId` を足した。
+- 判断：録画モードは gpu-canvas を録画しない（2D canvas が対象。設計の範囲外）。
+
+## 2026-10-10 — [WORLD-39] g-fluid v2.1（帯域正規化・差動回転）
+
+### 作業内容
+- `js/world/g-fluid2.js`：設計 §12.1・§12.2 を実装。定数 `NORM_TAU=4`・`NORM_FLOOR=.08`・`NORM_GAIN=1.8`（と初期値 `NORM_INIT=.2`）を `WORLD_FLUID2` に追加。帯域ごとの EMA を事前確保の `Float32Array(32)`（`normMean`）で持ち、`reset()`・`warmStart()` で .2 に戻す。`n = clamp(L/max(FLOOR, m*GAIN), 0, 1)`（純関数 `worldFluid2Norm`）を `step()` で `jetLevels`（`Float32Array(32)`）へ書き、`uniform float jetLevels[32]` として移流・染料・合成の 3 パスへ送る。噴出の力・染料・円環の光の粒は `bands[i].x` の代わりに `jetLevels[i]` を使う（瞬きの帯域選びは生の帯域のまま）。
+- 背景の回転を差動回転に置換：`vθ(r)=Ωeff*(r<R0 ? r : R0*sqrt(R0/r))`、`smoothstep(2.2,1.4,r)` を掛ける。`BG_SIGMA` と使用箇所を削除。JS 側の同式を `worldFluid2Tangential` として公開（検査用）。
+- テスト：`tests/unit/world-fluid2.test.mjs` に UW-F2-09（EMA・正規化・床・clamp・初期値・BG_SIGMA 撤去）と UW-F2-10（vθ の R0 連続・角速度が外側ほど小さい）を追加。UW-F2-01/02 は v2.1 の定数（BG_RELAX 1.5、OMEGA_BASE .55、CURL_AMP .03、SWIRL_ANGLE 50、JET_FORCE 6、JET_DYE 3.5）に追従。他テストの GL モックに `uniform1fv` を追加（world-score、world-attractor）。
+- `node tests/run.mjs --unit`：220 件 / 219 成功 / 0 失敗 / 1 スキップ。ブラウザ撮影は未実施（architect の担当）。
+
+### 備考
+- 初期値 .2 は定数 `NORM_INIT` として追加した（設計の定数表に名前がなかったため）。
+
 ## 2026-10-10 — [WORLD-38] g-fluid v2（円環の噴出口）
 
 ### 作業内容

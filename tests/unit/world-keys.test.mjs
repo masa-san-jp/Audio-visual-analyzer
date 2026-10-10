@@ -23,7 +23,7 @@ function setup() {
     clear() {}
     selectType(id) { this.type = types.find(t => t.id === id); this.fadeElapsed = 0; }
   }
-  loadClassic(['js/world/world-app.js'], {
+  loadClassic(['tests/browser/harness/world-app.js'], {
     WORLD_ANALYZER_TYPES: types, SongMapService: class {}, WorldEngine: Engine, WorldExporter: class {}, AudioEngine: class {},
     window, document, location: { search: '' }, requestAnimationFrame: () => 0, cancelAnimationFrame() {}
   });

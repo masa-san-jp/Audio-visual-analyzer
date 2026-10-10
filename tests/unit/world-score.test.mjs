@@ -96,7 +96,7 @@ function worldCommandGl() {
   for (const name of ['createVertexArray', 'createBuffer', 'createShader', 'createProgram', 'createTexture', 'createFramebuffer']) gl[name] = () => ({ id: id++ });
   for (const name of ['bindVertexArray', 'bindBuffer', 'bufferData', 'bindBufferBase', 'shaderSource', 'compileShader',
     'deleteShader', 'attachShader', 'linkProgram', 'uniformBlockBinding', 'texStorage2D', 'texParameteri', 'viewport',
-    'clearColor', 'clear', 'uniform2f', 'uniform1f', 'uniform3fv', 'uniform4fv', 'uniform2fv', 'uniform1ui', 'blitFramebuffer', 'enable', 'blendFunc', 'disable',
+    'clearColor', 'clear', 'uniform2f', 'uniform1f', 'uniform3fv', 'uniform4fv', 'uniform1fv', 'uniform2fv', 'uniform1ui', 'blitFramebuffer', 'enable', 'blendFunc', 'disable',
     'deleteTexture', 'deleteFramebuffer', 'deleteProgram', 'deleteBuffer', 'deleteVertexArray', 'texSubImage2D', 'drawBuffers']) gl[name] = () => {};
   gl.getExtension = name => name === 'EXT_disjoint_timer_query_webgl2' ? null : {};
   gl.getShaderParameter = gl.getProgramParameter = () => true;
@@ -279,7 +279,7 @@ test('UW-09 WORLD-9 連続カメラ: 正規直交基底・ゆっくり前進・�
 
 function worldStartApp(resume, play, timers = {}) {
   const calls = [], document = { fullscreenElement: null, body: { classList: { add: () => {} } } };
-  const runtime = loadClassic(['js/world/world-app.js'], { SongMapService: class {}, document,
+  const runtime = loadClassic(['tests/browser/harness/world-app.js'], { SongMapService: class {}, document,
     requestAnimationFrame: () => 1, cancelAnimationFrame: () => {},
     setTimeout: timers.setTimeout || setTimeout, clearTimeout: timers.clearTimeout || clearTimeout });
   const app = Object.create(runtime.get('WorldApp').prototype);
@@ -443,7 +443,7 @@ test('UW-20 WORLD-6 被覆計測: 暗部丸めを除外・重複画素を一度�
 test('UW-22 WORLD-6 全画面は明示操作のみ・シーク後は位置を維持して再開', async () => {
   let requests = 0, exits = 0;
   const document = { fullscreenElement: null, documentElement: { requestFullscreen: async () => { requests++; } }, exitFullscreen: async () => { exits++; } };
-  const runtime = loadClassic(['js/world/world-app.js'], { SongMapService: class {}, document });
+  const runtime = loadClassic(['tests/browser/harness/world-app.js'], { SongMapService: class {}, document });
   const app = Object.create(runtime.get('WorldApp').prototype);
   Object.assign(app, { _fitCanvas: () => {}, _updateControls: () => {}, public: {}, score: { durationSec: 120 },
     state: 'playing', engine: { preview: true }, audio: { currentTime: 0 }, audioEngine: { resetAnalysis: () => {} },

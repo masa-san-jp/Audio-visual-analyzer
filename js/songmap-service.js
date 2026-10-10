@@ -1,7 +1,9 @@
 // ソングマップの解析キュー・LRU キャッシュ・進捗・中止 — doc/20260928-plan-phase18-song-map-and-auto-director.md §5
 class SongMapService {
-  constructor({ isAvailable = () => typeof AudioWorkletNode !== 'undefined' } = {}) {
+  constructor({ isAvailable = () => typeof AudioWorkletNode !== 'undefined', augment = null } = {}) {
     this._isAvailable = isAvailable;
+    // 任意の追加処理 augment(map, rows)。GPU タイプ用の平均クロマ付与に使う（既定は無効）
+    this._augment = augment;
     this._cache = new Map();
     this._pending = new Map();
     this._queue = [];
@@ -108,6 +110,7 @@ class SongMapService {
     const rows = await this._collectRows(job, buffer);
     this._check(job);
     const map = buildSongMap(rows, { sampleRate: buffer.sampleRate, durationSec });
+    if (this._augment) this._augment(map, rows);
     this.onProgress(job.key, 1);
     this._check(job);
     return map;

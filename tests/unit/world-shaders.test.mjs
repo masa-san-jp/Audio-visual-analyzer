@@ -3,10 +3,10 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { loadClassic } from '../lib/load-classic.mjs';
+import { worldHarnessScripts } from '../lib/world-harness.mjs';
 
 const root = new URL('../../', import.meta.url);
-const html = fs.readFileSync(new URL('world.html', root), 'utf8');
-const scripts = [...html.matchAll(/<script\s+src="([^"]+)"/g)].map(match => match[1]);
+const scripts = worldHarnessScripts();
 const worldFiles = scripts.filter(file => file.startsWith('js/world/'));
 const { get } = loadClassic(scripts);
 const header = /^#version 300 es\nprecision highp float;\nprecision highp int;\nprecision highp sampler2D;\n/;

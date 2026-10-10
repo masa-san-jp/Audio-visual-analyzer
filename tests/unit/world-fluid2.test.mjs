@@ -3,9 +3,9 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { loadClassic } from '../lib/load-classic.mjs';
+import { worldHarnessScripts } from '../lib/world-harness.mjs';
 
-const html = fs.readFileSync(new URL('../../world.html', import.meta.url), 'utf8');
-const scripts = [...html.matchAll(/<script\s+src="([^"]+)"/g)].map(m => m[1]);
+const scripts = worldHarnessScripts();
 const r = loadClassic(scripts), C = r.get('WORLD_FLUID2'), Analyzer = r.get('WorldFluid2Analyzer');
 const Feature = r.get('MfsFrameView'), L = r.get('MFS_LAYOUT'), compile = r.get('compileWorldScore');
 const close = (actual, expected, eps = 1e-12) => assert.ok(Math.abs(actual - expected) <= eps, `${actual} != ${expected}`);
@@ -21,10 +21,10 @@ function setup(kinds = ['main'], duration = 10) {
 }
 
 test('UW-F2-01 WORLD-38 定数表・登録・凍結', () => {
-  const expected = { VEL_W: 384, VEL_H: 216, DYE_W: 1152, DYE_H: 648, VEL_DAMP: .6, BG_RELAX: .8, VORT: 14, PRESSURE_ITERS: 24, DYE_DECAY: .35,
-    EDGE: .06, OMEGA_BASE: .22, OMEGA_FLOOR: .6, OMEGA_LOUD: .8, CURL_SCALE: 1.2, CURL_FREQ: .03, CURL_AMP: .06, JET_COUNT: 32, R0: .27,
-    SWIRL_ANGLE: 28, JET_FORCE: 9, JET_DYE: 6, KICK_PUSH: 1.4, CAM_AMP: .05, CAM_PERIOD: 40, DUST1_COUNT: 3000, DUST1_DEPTH: 3,
-    DUST2_COUNT: 9000, DUST2_DEPTH: 8, GLINT_MAX: 24, GLINT_RISE: .06, GLINT_DECAY: .5, EXPOSURE: 1.6, TRANS_SECONDS: 2,
+  const expected = { VEL_W: 384, VEL_H: 216, DYE_W: 1152, DYE_H: 648, VEL_DAMP: .6, BG_RELAX: 1.5, VORT: 14, PRESSURE_ITERS: 24, DYE_DECAY: C.DYE_DECAY,
+    EDGE: .06, OMEGA_BASE: .55, OMEGA_FLOOR: .6, OMEGA_LOUD: .8, CURL_SCALE: 1.2, CURL_FREQ: .03, CURL_AMP: .03, JET_COUNT: 32, R0: .27,
+    SWIRL_ANGLE: 50, JET_FORCE: 6, JET_DYE: C.JET_DYE, HUE_SAT: .9, NORM_TAU: 4, NORM_FLOOR: .08, NORM_GAIN: 1.8, KICK_PUSH: 1.4, CAM_AMP: .05, CAM_PERIOD: 40, DUST1_COUNT: 3000, DUST1_DEPTH: 3,
+    DUST2_COUNT: 9000, DUST2_DEPTH: 8, GLINT_MAX: 24, GLINT_RISE: .06, GLINT_DECAY: .5, EXPOSURE: C.EXPOSURE, TRANS_SECONDS: 2,
     WARM_FRAMES: 420, BLOOM_THRESHOLD: .7, BLOOM_STRENGTH: .6 };
   for (const [name, value] of Object.entries(expected)) assert.equal(C[name], value, name);
   assert.equal(C.DT, 1 / 60); assert.equal(C.SIM_ASPECT, 16 / 9); assert.ok(Object.isFrozen(C));
@@ -53,7 +53,7 @@ test('UW-F2-02 WORLD-38 噴出口：帯域0が真下・反時計回り・半径R
     // n_i = 放射方向を +28度 回した単位ベクトル
     normal(i, n); close(Math.hypot(n[0], n[1]), 1);
     const radial = Math.atan2(p[1], p[0]), direction = Math.atan2(n[1], n[0]);
-    close(Math.atan2(Math.sin(direction - radial), Math.cos(direction - radial)), 28 * Math.PI / 180);
+    close(Math.atan2(Math.sin(direction - radial), Math.cos(direction - radial)), C.SWIRL_ANGLE * Math.PI / 180);
   }
   // 帯域16は真上の少し反時計回り側（x<0、y>0）。
   pos(16, p); assert.ok(p[1] > 0 && p[0] < 0);
@@ -153,7 +153,7 @@ function commandGl() {
   for (const name of ['bindVertexArray', 'bindBuffer', 'bufferData', 'bindBufferBase', 'shaderSource', 'compileShader', 'deleteShader', 'attachShader',
     'linkProgram', 'uniformBlockBinding', 'texParameteri', 'viewport', 'clearColor', 'blitFramebuffer', 'enable', 'blendFunc', 'disable', 'deleteTexture',
     'deleteFramebuffer', 'deleteProgram', 'deleteBuffer', 'deleteVertexArray', 'bufferSubData', 'uniform1f', 'uniform2f', 'uniform2fv', 'uniform3fv',
-    'uniform4fv', 'uniform1ui', 'uniform1i']) gl[name] = () => {};
+    'uniform4fv', 'uniform1fv', 'uniform1ui', 'uniform1i']) gl[name] = () => {};
   gl.texStorage2D = (target, levels, format, w, h) => calls.push({ storage: format, w, h });
   gl.getExtension = name => name === 'EXT_disjoint_timer_query_webgl2' ? null : {};
   gl.getShaderParameter = gl.getProgramParameter = () => true; gl.getUniformBlockIndex = () => 0;
@@ -216,4 +216,46 @@ test('UW-F2-08 WORLD-38 同じ入力列から同じCPU状態（再演・逆シ�
     return [analyzer.omega, analyzer.sectionJet, analyzer.zoom, analyzer.paletteShift, analyzer.glintSerial, ...analyzer.glints, ...analyzer.cam];
   };
   assert.deepEqual(run(), run());
+});
+
+test('UW-F2-09 WORLD-39 帯域ごとのEMA・正規化（床・上限clamp）・初期値・BG_SIGMA撤去', () => {
+  const norm = r.get('worldFluid2Norm'), { analyzer, features, input } = setup();
+  assert.equal(analyzer.normMean.length, 32); assert.ok(analyzer.normMean.every(v => Math.abs(v - C.NORM_INIT) < 1e-6));
+  assert.equal(C.NORM_INIT, .2);
+  // 正規化式：n = clamp(L / max(FLOOR, m*GAIN), 0, 1)
+  const m = .3, l = .25; close(norm(l, m), l / (m * C.NORM_GAIN));
+  assert.equal(norm(.01, 0), .01 / C.NORM_FLOOR);   // 平均0でも床で割る
+  assert.equal(norm(5, .1), 1); assert.equal(norm(-1, .1), 0);
+  // EMA：1ステップ後 m = m0 + (L - m0)*(1 - exp(-dt/TAU))、出力は更新後の平均で正規化
+  features.bandsSmooth.fill(0); features.bandsSmooth[3] = .6; analyzer.step(input);
+  const a = 1 - Math.exp(-input.dt / C.NORM_TAU), b = analyzer.bandUniforms;
+  const m3 = C.NORM_INIT + (b[12] - C.NORM_INIT) * a, m0 = C.NORM_INIT + (b[0] - C.NORM_INIT) * a;
+  close(analyzer.normMean[3], m3, 1e-6); close(analyzer.normMean[0], m0, 1e-6);
+  close(analyzer.jetLevels[3], norm(analyzer.bandUniforms[12], analyzer.normMean[3]), 1e-6); assert.equal(analyzer.jetLevels[0], norm(b[0], analyzer.normMean[0]));
+  // 定常入力 L では m→L、n→min(1, 1/GAIN)。割り当てなし（同じ配列のまま）
+  const mean = analyzer.normMean, lv = analyzer.jetLevels;
+  features.bandsSmooth.fill(.4);
+  for (let i = 0; i < 60 * 40; i++) { input.tSec = i / 60; analyzer.step(input); }
+  assert.equal(analyzer.normMean, mean); assert.equal(analyzer.jetLevels, lv);
+  const L = analyzer.bandUniforms[0]; assert.ok(Math.abs(mean[0] - L) < 1e-3); close(lv[0], Math.min(1, 1 / C.NORM_GAIN), 1e-2);
+  // reset / warmStart で .2 に戻る
+  analyzer.reset(); assert.ok(mean.every(v => Math.abs(v - C.NORM_INIT) < 1e-6));
+  mean.fill(.9); analyzer._clear = () => {}; analyzer.warmStart(0); assert.ok(mean.every(v => Math.abs(v - C.NORM_INIT) < 1e-6));
+  // BG_SIGMA 撤去
+  assert.ok(!('BG_SIGMA' in C)); assert.ok(!r.get('WORLD_FLUID2_ADVECT_FRAGMENT').includes('BG_SIGMA'));
+  assert.ok(r.get('WORLD_FLUID2_ADVECT_FRAGMENT').includes('uniform float jetLevels[32];'));
+  console.log('UW-F2-09 normTau=' + C.NORM_TAU + ' floor=' + C.NORM_FLOOR + ' gain=' + C.NORM_GAIN);
+});
+
+test('UW-F2-10 WORLD-39 差動回転vθ(r)：R0で連続・角速度は外側ほど遅い', () => {
+  const vt = r.get('worldFluid2Tangential'), w = 1.3, R0 = C.R0, e = 1e-9;
+  close(vt(R0 - e, w), vt(R0 + e, w), 1e-7); close(vt(R0, w), w * R0);
+  close(vt(.1, w), w * .1);                                  // 内側は剛体回転
+  close(vt(2 * R0, w), w * R0 * Math.sqrt(.5));              // 外側は R0*sqrt(R0/r)
+  let prev = Infinity;
+  for (let r1 = .05; r1 < 2.2; r1 += .05) { const om = vt(r1, w) / r1; assert.ok(om <= prev + 1e-12); prev = om; }
+  assert.ok(vt(1, w) / 1 < vt(R0, w) / R0);
+  const shader = r.get('WORLD_FLUID2_ADVECT_FRAGMENT');
+  assert.ok(shader.includes('R0 * sqrt(R0 / rr)') && shader.includes('smoothstep(2.2, 1.4, rr)'));
+  console.log('UW-F2-10 vθ(R0)=' + vt(R0, w).toFixed(4));
 });

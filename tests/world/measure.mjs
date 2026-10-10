@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// 目的 — ヘッド付きmacOS Chromeで独立したworld.htmlを実再生しW/BWとG-1〜G-4を報告する — SSOT §1.3・§2.8
+// 目的 — ヘッド付きmacOS Chromeでテスト専用の tests/browser/harness/world.htmlを実再生しW/BWとG-1〜G-4を報告する — SSOT §1.3・§2.8
 // 実行: node tests/world/measure.mjs（CHROME_PATHも使用可）。Chromeを起動できるレビュアー専用。
 // 計測上の判断（閾値はSSOTのまま）:
 // W-1: セクション中央のHDR全画素のmin/max。ゼロ除算だけ1e-6で保護し、生min/maxも記録。
@@ -56,7 +56,7 @@ child.on('close',code=>process.exit(code ?? 0));\n`);
   }
   chrome = await launchChrome({ headed: true, executablePath: executable });
   await chrome.send('Emulation.setDeviceMetricsOverride', { width: 1920, height: 1080, deviceScaleFactor: 1, mobile: false });
-  await chrome.navigate(pathToFileURL(path.join(root, 'world.html')).href + '?debug=1');
+  await chrome.navigate(pathToFileURL(path.join(root, 'tests/browser/harness/world.html')).href + '?debug=1');
   for (const file of ['tests/shared/song-synth.js', 'tests/shared/wav.js', 'tests/browser/world.test.js', 'tests/browser/world11.test.js']) {
     const source = await fs.readFile(path.join(root, file), 'utf8');
     await chrome.evaluate(source + '\n//# sourceURL=' + pathToFileURL(path.join(root, file)).href);

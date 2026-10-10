@@ -125,7 +125,7 @@ async function world13Shoot(typeId,tSec) {
   }finally {audio.pause();cancelAnimationFrame(app.raf);app.state='paused';e.onFrame=null;e.timeline=timeline;}
 }
 if(typeof avzTest==='function')avzTest('BW-13-render','h² shader実コンパイル・半解像度・直接像・32環・beat無反応・streak上限',async()=>{
-  const iframe=document.createElement('iframe');iframe.src=new URL('../../world.html',location.href).href;
+  const iframe=document.createElement('iframe');iframe.src=new URL('../browser/harness/world.html',location.href).href;
   const ready=new Promise(resolve=>iframe.onload=resolve);document.body.appendChild(iframe);
   try {
     await ready;const child=iframe.contentWindow,e=child.__world?.engine;avzAssert.ok(e,child.__world?.error);
@@ -147,7 +147,7 @@ if(typeof avzTest==='function')avzTest('BW-13-render','h² shader実コンパイ
 },{timeoutMs:60000});
 // §10.20: キックで影の測地線は変えず、view2の構図と高域増光を実GPUで検査する。
 if(typeof avzTest==='function')avzTest('BW-13-view2','固定重力のキック前後・片寄せ/ロールの影・高域の星空倍率2.5',async()=>{
-  const iframe=document.createElement('iframe');iframe.src=new URL('../../world.html',location.href).href;
+  const iframe=document.createElement('iframe');iframe.src=new URL('../browser/harness/world.html',location.href).href;
   const ready=new Promise(resolve=>iframe.onload=resolve);document.body.appendChild(iframe);
   try {
     await ready;const child=iframe.contentWindow;avzAssert.ok(child.__world?.engine,child.__world?.error);
@@ -179,7 +179,7 @@ if(typeof avzTest==='function')avzTest('BW-13-view2','固定重力のキック�
   }finally {iframe.contentWindow.__world?.engine?.dispose();iframe.remove();}
 },{timeoutMs:60000});
 if(typeof avzTest==='function')avzTest('BW-13-kick-gpu','キック直後0.1秒の内側直接像≥40%・1080p GPU p95≤16ms',async()=>{
-  const iframe=document.createElement('iframe');iframe.src=new URL('../../world.html',location.href).href;
+  const iframe=document.createElement('iframe');iframe.src=new URL('../browser/harness/world.html',location.href).href;
   const ready=new Promise(resolve=>iframe.onload=resolve);document.body.appendChild(iframe);
   try {
     await ready;const child=iframe.contentWindow,e=child.__world?.engine;avzAssert.ok(e,child.__world?.error);
@@ -190,7 +190,7 @@ if(typeof avzTest==='function')avzTest('BW-13-kick-gpu','キック直後0.1秒�
   }finally {iframe.contentWindow.__world?.engine?.dispose();iframe.remove();}
 },{timeoutMs:120000,slow:true});
 if(typeof avzTest==='function')avzTest('BW-13-formulas','実GLSLの黒体5端点・外側低域32環・100msキック式・星空上限',async()=>{
-  const iframe=document.createElement('iframe');iframe.src=new URL('../../world.html',location.href).href;
+  const iframe=document.createElement('iframe');iframe.src=new URL('../browser/harness/world.html',location.href).href;
   const ready=new Promise(resolve=>iframe.onload=resolve);document.body.appendChild(iframe);
   try {
     await ready;const child=iframe.contentWindow;avzAssert.ok(child.__world?.engine,child.__world?.error);

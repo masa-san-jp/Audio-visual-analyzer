@@ -1,7 +1,7 @@
 // 目的 — 実GLSLの状態・6ショット/変身/反応・再演・1080p同期GPU計測・書き出しを検査する — doc/20261008-design-attractor-v1.md §9
 // @page harness
 async function world31Page(run) {
-  const iframe=document.createElement('iframe');iframe.src=new URL('../../world.html',location.href).href;
+  const iframe=document.createElement('iframe');iframe.src=new URL('../browser/harness/world.html',location.href).href;
   const ready=new Promise((resolve,reject)=>{iframe.onload=resolve;iframe.onerror=()=>reject(new Error('world.html load failed'));});
   document.body.appendChild(iframe);
   try {await ready;const child=iframe.contentWindow;avzAssert.ok(child.__world?.engine,child.__world?.error);return await run(child);}

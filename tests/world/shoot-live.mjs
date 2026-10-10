@@ -343,7 +343,7 @@ async function main(){
   try {
     chrome=await launchChrome({headed:true,executablePath:process.env.WORLD_CHROME_WRAPPER});
     await chrome.send('Emulation.setDeviceMetricsOverride',{width:1920,height:1080,deviceScaleFactor:1,mobile:false});
-    await chrome.navigate(pathToFileURL(path.join(root,'world.html')).href);
+    await chrome.navigate(pathToFileURL(path.join(root,'tests/browser/harness/world.html')).href);
     for(const file of ['tests/shared/song-synth.js','tests/shared/wav.js','tests/browser/world11.test.js','tests/browser/world12.test.js','tests/browser/world13.test.js'])await chrome.evaluate(await fs.readFile(path.join(root,file),'utf8'));
     await chrome.evaluate(world17BrowserSource);
     const hardware=await chrome.evaluate(`(()=>{const gl=__world.engine?.gpu.gl;if(!gl)throw new Error(__world.error);const ext=gl.getExtension('WEBGL_debug_renderer_info');const renderer=ext?gl.getParameter(ext.UNMASKED_RENDERER_WEBGL):gl.getParameter(gl.RENDERER);return {renderer,hardware:!!ext&&!/swiftshader|llvmpipe|software/i.test(renderer)};})()`);

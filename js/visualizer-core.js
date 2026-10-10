@@ -17,6 +17,8 @@ class VisualizerCore {
     // 音声・動画共通の再生時計と自動演出 — Phase 18 計画書 §4.4・§6.8
     this.mediaElement = null;
     this.director = new DirectorController(canvas, this.ctx);
+    // GPU タイプの描画橋渡し（WorldBridge。app.js が設定する。2D だけの利用では null のまま）— 統合設計 §7
+    this.worldBridge = null;
     this._prevSongTSec = null;
     this._songTempoMap = null;
     this._songTempoElement = null;
@@ -56,6 +58,8 @@ class VisualizerCore {
       this.canvas.width = size;
       this.canvas.height = size;
     }
+    // GPU タイプの canvas も同じ表示サイズに揃える（内部解像度は WorldBridge が決める）
+    if (this.worldBridge) this.worldBridge.resize(this.canvas.width, this.canvas.height);
 
     this.pipeline.resize();
     this.director.resize();
@@ -153,6 +157,12 @@ class VisualizerCore {
     if (map && media) {
       songMapTempoAt(map, media.currentTime, this._prevSongTSec, input.features);
       this._prevSongTSec = media.currentTime;
+    }
+    // GPU タイプ: pipeline とディレクターは呼ばず、WorldBridge だけを駆動する（captureFrame は上で呼び済み）
+    const bridge = this.worldBridge;
+    if (bridge && bridge.active) {
+      bridge.frame(now, dtMs / 1000);
+      return;
     }
     const overlay = this.debugOverlay;
     if (overlay) {

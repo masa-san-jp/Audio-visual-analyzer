@@ -59,7 +59,7 @@ async function world12Shoot(typeId,tSec) {
   finally {clearTimeout(timeout);audio.pause();cancelAnimationFrame(app.raf);app.state='paused';e.onFrame=null;e.timeline=timeline;}
 }
 if(typeof avzTest==='function')avzTest('BW-12-design','指定GLSLを実コンパイル・無音/強入力・32×1024点・旧post pulseなし・白飛び上限',async()=>{
-  const iframe=document.createElement('iframe');iframe.src=new URL('../../world.html',location.href).href;
+  const iframe=document.createElement('iframe');iframe.src=new URL('../browser/harness/world.html',location.href).href;
   const ready=new Promise(resolve=>iframe.onload=resolve);document.body.appendChild(iframe);
   try {
     await ready;const child=iframe.contentWindow;avzAssert.ok(child.__world?.engine,child.__world?.error);

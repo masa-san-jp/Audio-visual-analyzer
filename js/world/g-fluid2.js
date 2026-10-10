@@ -2,11 +2,13 @@
 const WORLD_FLUID2 = Object.freeze({
   // 格子（§2）。座標は画面中心が原点、yは[-1,1]、xは[-SIM_ASPECT,SIM_ASPECT]。
   VEL_W: 384, VEL_H: 216, DYE_W: 1152, DYE_H: 648, SIM_ASPECT: 16 / 9,
-  DT: 1 / 60, VEL_DAMP: .6, BG_RELAX: 1.5, VORT: 14, PRESSURE_ITERS: 24, DYE_DECAY: .35, EDGE: .06,
+  DT: 1 / 60, VEL_DAMP: .6, BG_RELAX: 1.5, VORT: 14, PRESSURE_ITERS: 24, DYE_DECAY: .9, EDGE: .06,
   // 背景の流れ（§3）
-  OMEGA_BASE: .55, OMEGA_FLOOR: .6, OMEGA_LOUD: .8, BG_SIGMA: 1.1, CURL_SCALE: 1.2, CURL_FREQ: .03, CURL_AMP: .03,
+  OMEGA_BASE: .55, OMEGA_FLOOR: .6, OMEGA_LOUD: .8, CURL_SCALE: 1.2, CURL_FREQ: .03, CURL_AMP: .03,
+  // 帯域ごとの正規化（§12.1）
+  NORM_TAU: 4, NORM_FLOOR: .08, NORM_GAIN: 1.8, NORM_INIT: .2,
   // 円環の噴出口（§4）
-  JET_COUNT: 32, R0: .27, SWIRL_ANGLE: 50, JET_FORCE: 6, JET_FORCE_SIGMA: .035, JET_DYE: 3.5, JET_DYE_SIGMA: .022,
+  JET_COUNT: 32, R0: .27, SWIRL_ANGLE: 50, JET_FORCE: 6, JET_FORCE_SIGMA: .035, JET_DYE: 2.4, JET_DYE_SIGMA: .022,
   JET_POWER: 1.5, HUE_SPAN: .85, HUE_SAT: .9, JET_WINDOW: 3,
   RING_WIDTH: .0035, RING_LIGHT: .35, NUB_SIGMA: .008, NUB_BASE: .15, NUB_GAIN: 1.6,
   // キック（§5）
@@ -20,7 +22,7 @@ const WORLD_FLUID2 = Object.freeze({
   GLINT_CORE: 1.5, GLINT_LINE_W: 1, GLINT_LINE_L: 14, GLINT_BAND_FIRST: 16,
   GLINT_RADIAL_MIN: .1, GLINT_RADIAL_SPAN: .5, GLINT_JITTER: .03,
   // 合成・区間・暖機（§7〜9）
-  EXPOSURE: 1.6, EXPOSURE_FLOOR: .8, EXPOSURE_GAIN: .4,
+  EXPOSURE: 1.25, EXPOSURE_FLOOR: .8, EXPOSURE_GAIN: .4,
   TRANS_SECONDS: 2, WARM_FRAMES: 420, BLOOM_THRESHOLD: .7, BLOOM_STRENGTH: .6
 });
 const WORLD_FLUID2_INT_NAMES = ['VEL_W', 'VEL_H', 'DYE_W', 'DYE_H', 'PRESSURE_ITERS', 'JET_COUNT', 'JET_WINDOW',
@@ -38,6 +40,15 @@ const WORLD_FLUID2_TABLE = Object.freeze({
   main: Object.freeze([1, 1, 1, 1, 1, 1, 1, 1, 1.02, 1.02]),
   outro: Object.freeze([1, 0, .5, .5, .8, .8, .6, .6, 1, .92])
 });
+// 正規化レベル n = clamp(L / max(NORM_FLOOR, m*NORM_GAIN), 0, 1)（§12.1）
+function worldFluid2Norm(level, mean) {
+  const c = WORLD_FLUID2, n = level / Math.max(c.NORM_FLOOR, mean * c.NORM_GAIN);
+  return n < 0 ? 0 : n > 1 ? 1 : n;
+}
+// 接線速度の大きさ vθ(r)（§12.2）。GLSL の bgFlow と同じ式。
+function worldFluid2Tangential(r, omega) {
+  const R0 = WORLD_FLUID2.R0; return omega * (r < R0 ? r : R0 * Math.sqrt(R0 / r));
+}
 const WORLD_FLUID2_PARAM = Object.freeze({ JET: 0, KICK: 1, OMEGA: 2, DECAY: 3, ZOOM: 4 });
 const WORLD_FLUID2_SCRATCH = new Float64Array(5);
 const WORLD_FLUID2_GLSL = Object.entries(WORLD_FLUID2).map(([name, value]) =>
@@ -67,7 +78,7 @@ out vec4 frag;
 // 速度：移流・減衰・背景流への緩和・噴出口の力・キックの衝撃（§2 手順1〜3、§3〜5）
 const WORLD_FLUID2_ADVECT_FRAGMENT = `${WORLD_FLUID2_HEAD}
 uniform sampler2D vel;
-uniform vec4 bands[32];
+uniform float jetLevels[32];
 uniform float time, omega, sectionJet, kickPush;
 uniform vec2 seedOff;
 float vh(vec3 p) { p = fract(p * .1031); p += dot(p, p.yzx + 33.33); return fract((p.x + p.y) * p.z); }
@@ -77,7 +88,9 @@ float vnoise(vec3 p) {
   mix(mix(vh(i + vec3(0, 0, 1)), vh(i + vec3(1, 0, 1)), f.x), mix(vh(i + vec3(0, 1, 1)), vh(i + vec3(1, 1, 1)), f.x), f.y), f.z);
 }
 vec2 bgFlow(vec2 p) {
- vec2 rotation = omega * vec2(-p.y, p.x) * exp(-dot(p, p) / (2. * BG_SIGMA * BG_SIGMA));
+ // 差動回転（§12.2）：r<R0 は剛体、外側は vθ=R0*sqrt(R0/r) で角速度が減る
+ float rr = max(length(p), 1e-4), vt = omega * (rr < R0 ? rr : R0 * sqrt(R0 / rr));
+ vec2 rotation = vt * vec2(-p.y, p.x) / rr * smoothstep(2.2, 1.4, rr);
  vec3 q = vec3(p * CURL_SCALE + seedOff, time * CURL_FREQ);
  const float e = .01;
  float dx = vnoise(q + vec3(e, 0, 0)) - vnoise(q - vec3(e, 0, 0)), dy = vnoise(q + vec3(0, e, 0)) - vnoise(q - vec3(0, e, 0));
@@ -90,7 +103,7 @@ void main() {
  int k = jetNearest(p);
  for (int j = -JET_WINDOW; j <= JET_WINDOW; j++) {
   int i = jetWrap(k, j); vec2 d = p - R0 * jetDir(i);
-  float l = bands[i].x, s = l * sqrt(l);
+  float l = jetLevels[i], s = l * sqrt(l);
   v += jetNormal(i) * JET_FORCE * s * sectionJet * exp(-dot(d, d) / (2. * JET_FORCE_SIGMA * JET_FORCE_SIGMA)) * DT;
  }
  float r = length(p);
@@ -137,7 +150,7 @@ void main() {
 // 染料：移流・減衰・噴出口の染料・吸収境界（§2 手順6・7、§4）
 const WORLD_FLUID2_DYE_FRAGMENT = `${WORLD_FLUID2_HEAD}
 uniform sampler2D dye, vel;
-uniform vec4 bands[32];
+uniform float jetLevels[32];
 uniform float sectionJet, decayMul;
 void main() {
  vec2 p = uvToP(vUv), v = texture(vel, vUv).xy;
@@ -145,7 +158,7 @@ void main() {
  int k = jetNearest(p);
  for (int j = -JET_WINDOW; j <= JET_WINDOW; j++) {
   int i = jetWrap(k, j); vec2 q = p - R0 * jetDir(i);
-  float l = bands[i].x, s = l * sqrt(l);
+  float l = jetLevels[i], s = l * sqrt(l);
   d += hsv(jetHue(i), HUE_SAT, 1.) * JET_DYE * s * sectionJet * exp(-dot(q, q) / (2. * JET_DYE_SIGMA * JET_DYE_SIGMA)) * DT;
  }
  frag = vec4(d * edgeFade(p), 1.);
@@ -153,7 +166,8 @@ void main() {
 // 合成（§4 円環、§6 霞・瞬き、§8）。塵は別パスの点で足す。
 const WORLD_FLUID2_COMPOSITE_FRAGMENT = `${WORLD_FLUID2_HEAD}
 uniform sampler2D dye;
-uniform vec4 bands[32], glint[24]; // glint: x,y（流体面）、経過秒（負なら無効）、色相
+uniform float jetLevels[32];
+uniform vec4 glint[24]; // glint: x,y（流体面）、経過秒（負なら無効）、色相
 uniform vec3 primary;
 uniform vec2 cam;
 uniform float aspect, zoom, exposure, kickEnv, height;
@@ -167,7 +181,7 @@ void main() {
  c += hsv(jetHue(k), HUE_SAT, 1.) * exp(-rw * rw) * RING_LIGHT * glow;
  for (int j = -2; j <= 2; j++) {
   int i = jetWrap(k, j); vec2 d = p - R0 * jetDir(i);
-  c += hsv(jetHue(i), HUE_SAT, 1.) * exp(-dot(d, d) / (2. * NUB_SIGMA * NUB_SIGMA)) * (NUB_BASE + NUB_GAIN * bands[i].x) * glow;
+  c += hsv(jetHue(i), HUE_SAT, 1.) * exp(-dot(d, d) / (2. * NUB_SIGMA * NUB_SIGMA)) * (NUB_BASE + NUB_GAIN * jetLevels[i]) * glow;
  }
  c += primary * HAZE_LIGHT * exp(-dot(p, p) / (2. * HAZE_SIGMA * HAZE_SIGMA));
  for (int n = 0; n < GLINT_MAX; n++) {
@@ -284,12 +298,14 @@ class WorldFluid2Analyzer extends WorldBandAnalyzer {
     this.params = new Float64Array(5); this.cam = new Float32Array(2); this.seedOff = new Float32Array(2);
     // 瞬き：x、y、経過秒（負は無効）、色相。誕生時刻は別配列。
     this.glints = new Float32Array(WORLD_FLUID2.GLINT_MAX * 4); this.glintBirth = new Float64Array(WORLD_FLUID2.GLINT_MAX);
-    this.glintPos = new Float64Array(2); this.reset();
+    this.glintPos = new Float64Array(2);
+    this.normMean = new Float32Array(WORLD_FLUID2.JET_COUNT); this.jetLevels = new Float32Array(WORLD_FLUID2.JET_COUNT); this.reset();
   }
   reset() {
     super.reset(); if (!this.params) return;
     this.params.fill(0); this.cam.fill(0); this.seedOff.fill(0); this.glints.fill(0); this.glintBirth.fill(-1e9);
     for (let i = 0; i < WORLD_FLUID2.GLINT_MAX; i++) this.glints[i * 4 + 2] = -1;
+    this.normMean.fill(WORLD_FLUID2.NORM_INIT); this.jetLevels.fill(0);
     this.lastKick = -100; this.lastEventSec = -1; this.glintSerial = 0; this.kickPush = 0; this.kickEnv = 0;
     this.omega = 0; this.sectionJet = 0; this.decayMul = 1; this.zoom = 1; this.exposure = WORLD_FLUID2.EXPOSURE;
     this.paletteShift = 0; this.seed = 0; this.time = 0; this.simPending = false; this.needsClear = true;
@@ -300,15 +316,15 @@ class WorldFluid2Analyzer extends WorldBandAnalyzer {
     this.divergence = gpu.target(c.VEL_W, c.VEL_H); this.dye = gpu.pair(c.DYE_W, c.DYE_H);
     const loc = (program, names) => names.map(n => gpu.texture(program, n));
     this.advectProgram = gpu.program(WORLD_FLUID2_ADVECT_FRAGMENT);
-    this.advectLoc = loc(this.advectProgram, ['vel', 'bands[0]', 'time', 'omega', 'sectionJet', 'kickPush', 'seedOff', 'paletteShift']);
+    this.advectLoc = loc(this.advectProgram, ['vel', 'jetLevels[0]', 'time', 'omega', 'sectionJet', 'kickPush', 'seedOff', 'paletteShift']);
     this.vorticityProgram = gpu.program(WORLD_FLUID2_VORTICITY_FRAGMENT); this.vorticityLoc = loc(this.vorticityProgram, ['vel']);
     this.divergenceProgram = gpu.program(WORLD_FLUID2_DIVERGENCE_FRAGMENT); this.divergenceLoc = loc(this.divergenceProgram, ['vel']);
     this.jacobiProgram = gpu.program(WORLD_FLUID2_JACOBI_FRAGMENT); this.jacobiLoc = loc(this.jacobiProgram, ['pressure', 'divergence']);
     this.projectProgram = gpu.program(WORLD_FLUID2_PROJECT_FRAGMENT); this.projectLoc = loc(this.projectProgram, ['vel', 'pressure']);
     this.dyeProgram = gpu.program(WORLD_FLUID2_DYE_FRAGMENT);
-    this.dyeLoc = loc(this.dyeProgram, ['dye', 'vel', 'bands[0]', 'sectionJet', 'decayMul', 'paletteShift']);
+    this.dyeLoc = loc(this.dyeProgram, ['dye', 'vel', 'jetLevels[0]', 'sectionJet', 'decayMul', 'paletteShift']);
     this.compositeProgram = gpu.program(WORLD_FLUID2_COMPOSITE_FRAGMENT);
-    this.compositeLoc = loc(this.compositeProgram, ['dye', 'bands[0]', 'glint[0]', 'primary', 'cam', 'aspect', 'zoom', 'exposure', 'kickEnv', 'height', 'paletteShift']);
+    this.compositeLoc = loc(this.compositeProgram, ['dye', 'jetLevels[0]', 'glint[0]', 'primary', 'cam', 'aspect', 'zoom', 'exposure', 'kickEnv', 'height', 'paletteShift']);
     this.dustProgram = gpu.program(WORLD_FLUID2_DUST_FRAGMENT, WORLD_FLUID2_DUST_VERTEX);
     this.dustLoc = loc(this.dustProgram, ['seed', 'cam', 'aspect', 'zoom']);
   }
@@ -319,7 +335,7 @@ class WorldFluid2Analyzer extends WorldBandAnalyzer {
     g.clearTarget(this.dye.read); g.clearTarget(this.dye.write); g.clearTarget(this.divergence);
     this.needsClear = false;
   }
-  warmStart(tSec) { this._clear(); this.simPending = false; }
+  warmStart(tSec) { this.normMean.fill(WORLD_FLUID2.NORM_INIT); this._clear(); this.simPending = false; }
   step(input) {
     this.update(input);
     const c = WORLD_FLUID2, t = input.tSec, engine = input.engine, score = engine.score;
@@ -345,7 +361,15 @@ class WorldFluid2Analyzer extends WorldBandAnalyzer {
       const age = t - this.glintBirth[n];
       this.glints[n * 4 + 2] = age >= 0 && age <= c.GLINT_LIFE ? age : -1;
     }
+    this._normalize(input.dt);
     this.simPending = input.dt > 0;
+  }
+  // 帯域ごとの EMA と正規化（§12.1）。配列は確保済みのものを書き換える。
+  _normalize(dt) {
+    const c = WORLD_FLUID2, b = this.bandUniforms, m = this.normMean, o = this.jetLevels, a = 1 - Math.exp(-Math.max(0, dt) / c.NORM_TAU);
+    for (let i = 0; i < c.JET_COUNT; i++) {
+      const l = b[i * 4]; m[i] += (l - m[i]) * a; o[i] = worldFluid2Norm(l, m[i]);
+    }
   }
   // 高域（16..31）でいちばん強い帯域の噴出口の外側に瞬きを置く（§6）。
   _spawnGlint(t) {
@@ -362,7 +386,7 @@ class WorldFluid2Analyzer extends WorldBandAnalyzer {
     const g = this.gpu, gl = g.gl, c = WORLD_FLUID2, v = this.velocity, pr = this.pressure;
     const A = this.advectLoc;
     g.bind(this.advectProgram, v.write); g.sampler(A[0], 0, v.read);
-    gl.uniform4fv(A[1], this.bandUniforms); gl.uniform1f(A[2], this.time); gl.uniform1f(A[3], this.omega);
+    gl.uniform1fv(A[1], this.jetLevels); gl.uniform1f(A[2], this.time); gl.uniform1f(A[3], this.omega);
     gl.uniform1f(A[4], this.sectionJet); gl.uniform1f(A[5], this.kickPush); gl.uniform2fv(A[6], this.seedOff); gl.uniform1f(A[7], this.paletteShift);
     g.draw(); g.swap(v);
     g.bind(this.vorticityProgram, v.write); g.sampler(this.vorticityLoc[0], 0, v.read); g.draw(); g.swap(v);
@@ -373,7 +397,7 @@ class WorldFluid2Analyzer extends WorldBandAnalyzer {
     g.bind(this.projectProgram, v.write); g.sampler(this.projectLoc[0], 0, v.read); g.sampler(this.projectLoc[1], 1, pr.read); g.draw(); g.swap(v);
     const D = this.dyeLoc;
     g.bind(this.dyeProgram, this.dye.write); g.sampler(D[0], 0, this.dye.read); g.sampler(D[1], 1, v.read);
-    gl.uniform4fv(D[2], this.bandUniforms); gl.uniform1f(D[3], this.sectionJet); gl.uniform1f(D[4], this.decayMul); gl.uniform1f(D[5], this.paletteShift);
+    gl.uniform1fv(D[2], this.jetLevels); gl.uniform1f(D[3], this.sectionJet); gl.uniform1f(D[4], this.decayMul); gl.uniform1f(D[5], this.paletteShift);
     g.draw(); g.swap(this.dye);
     this.kickPush = 0; // 衝撃は 1 ステップだけ加える
   }
@@ -384,7 +408,7 @@ class WorldFluid2Analyzer extends WorldBandAnalyzer {
     if (this.simPending) { this._simulate(); this.simPending = false; }
     const C = this.compositeLoc, w = input.target.width, h = input.target.height, aspect = w / h;
     g.bind(this.compositeProgram, input.target); g.sampler(C[0], 0, this.dye.read);
-    gl.uniform4fv(C[1], this.bandUniforms); gl.uniform4fv(C[2], this.glints); gl.uniform3fv(C[3], input.song.palette.primary);
+    gl.uniform1fv(C[1], this.jetLevels); gl.uniform4fv(C[2], this.glints); gl.uniform3fv(C[3], input.song.palette.primary);
     gl.uniform2fv(C[4], this.cam); gl.uniform1f(C[5], aspect); gl.uniform1f(C[6], this.zoom); gl.uniform1f(C[7], this.exposure);
     gl.uniform1f(C[8], this.kickEnv); gl.uniform1f(C[9], h); gl.uniform1f(C[10], this.paletteShift);
     g.draw();
@@ -397,5 +421,5 @@ class WorldFluid2Analyzer extends WorldBandAnalyzer {
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = { WorldFluid2Analyzer, WORLD_FLUID2, WORLD_FLUID2_TABLE, worldFluid2Hash, worldFluid2JetPosition, worldFluid2JetNormal,
     worldFluid2SectionParams, worldFluid2Params, worldFluid2Camera, worldFluid2DustScreen, worldFluid2GlintEnvelope,
-    worldFluid2GlintPosition, worldFluid2Hue };
+    worldFluid2GlintPosition, worldFluid2Hue, worldFluid2Norm, worldFluid2Tangential };
 }

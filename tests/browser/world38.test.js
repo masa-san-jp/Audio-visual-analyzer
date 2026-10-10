@@ -1,7 +1,7 @@
 // 目的 — g-fluid v2 の実GPU：噴出口ごとの染料・キックの外向き押し出し・7区間の撮影・再演一致・1080p計測・書き出し — doc/20261010-design-fluid-v2.md §11
 // @page harness
 async function world38Page(run) {
-  const iframe=document.createElement('iframe');iframe.src=new URL('../../world.html',location.href).href;
+  const iframe=document.createElement('iframe');iframe.src=new URL('../browser/harness/world.html',location.href).href;
   const ready=new Promise((resolve,reject)=>{iframe.onload=resolve;iframe.onerror=()=>reject(new Error('world.html load failed'));});
   document.body.appendChild(iframe);
   try {await ready;const child=iframe.contentWindow;avzAssert.ok(child.__world?.engine,child.__world?.error);return await run(child);}

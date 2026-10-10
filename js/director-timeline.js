@@ -29,7 +29,7 @@ function fnv1a32(str) {
 function directorVariationApplicable(settings, op) {
   if (op === 'hueShift') return true;
   const capabilities = getRendererEntry(settings.analyzerType).capabilities;
-  if (op === 'method') return capabilities.methods.length >= 2;
+  if (op === 'method') return (capabilities.methods || []).length >= 2;
   if (op === 'mirror') return capabilities.barDisplayMode === true;
   if (op === 'layers') return capabilities.layers === true;
   return false;

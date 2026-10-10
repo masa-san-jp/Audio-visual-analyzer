@@ -1,5 +1,5 @@
 <!doctype html>
-<!-- 目的 — ワールドモードの独立入口（file://対応） — doc/20261004-concept-world-mode.md §2.8・§5 -->
+<!-- 目的 — ブラウザテスト専用の WORLD 画面（利用者向けには廃止。GPU タイプは index.html に統合 / doc/20261010-design-integration-v1.md §6）。旧: ワールドモードの独立入口 — doc/20261004-concept-world-mode.md §2.8・§5 -->
 <html lang="ja">
 <head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
@@ -35,18 +35,18 @@ body{display:grid;place-items:center}canvas{display:block;position:absolute;obje
 <output id="export-status" role="status" aria-live="polite"></output>
 </nav>
 <audio id="audio" preload="auto" hidden></audio>
-<script src="js/vis-utils.js"></script>
-<script src="js/fft.js"></script><script src="js/mfs-const.js"></script><script src="js/mfs-dsp.js"></script>
-<script src="js/mfs-onset.js"></script><script src="js/mfs-tempo.js"></script><script src="js/mfs-extractor.js"></script>
-<script src="js/mfs-worklet.js"></script><script src="js/mfs-view.js"></script>
-<script src="js/songmap-analysis.js"></script><script src="js/songmap-service.js"></script><script src="js/audio-engine.js"></script>
-<script src="js/world/gl-util.js"></script><script src="js/world/fluid.js"></script><script src="js/world/particles.js"></script>
-<script src="js/world/score.js"></script>
-<script src="js/webm-muxer.js"></script><script src="js/mp4-muxer.js"></script>
-<script src="js/offline-exporter.js"></script>
-<script src="js/world/analyzer-types.js"></script><script src="js/world/g-fluid2.js"></script>
-<script src="js/world/g-rings.js"></script><script src="js/world/g-galaxy.js"></script>
-<script src="js/world/g-gargantua.js"></script><script src="js/world/g-attractor.js"></script><script src="js/world/post.js"></script>
-<script src="js/world/world-engine.js"></script><script src="js/world/world-exporter.js"></script><script src="js/world/world-app.js"></script>
+<script src="../../../js/vis-utils.js"></script>
+<script src="../../../js/fft.js"></script><script src="../../../js/mfs-const.js"></script><script src="../../../js/mfs-dsp.js"></script>
+<script src="../../../js/mfs-onset.js"></script><script src="../../../js/mfs-tempo.js"></script><script src="../../../js/mfs-extractor.js"></script>
+<script src="../../../js/mfs-worklet.js"></script><script src="../../../js/mfs-view.js"></script>
+<script src="../../../js/songmap-analysis.js"></script><script src="../../../js/songmap-service.js"></script><script src="../../../js/audio-engine.js"></script>
+<script src="../../../js/world/gl-util.js"></script><script src="../../../js/world/fluid.js"></script><script src="../../../js/world/particles.js"></script>
+<script src="../../../js/world/score.js"></script>
+<script src="../../../js/webm-muxer.js"></script><script src="../../../js/mp4-muxer.js"></script>
+<script src="../../../js/offline-exporter.js"></script>
+<script src="../../../js/world/analyzer-types.js"></script><script src="../../../js/world/g-fluid2.js"></script>
+<script src="../../../js/world/g-rings.js"></script><script src="../../../js/world/g-galaxy.js"></script>
+<script src="../../../js/world/g-gargantua.js"></script><script src="../../../js/world/g-attractor.js"></script><script src="../../../js/world/post.js"></script>
+<script src="../../../js/world/world-engine.js"></script><script src="../../../js/world/world-exporter.js"></script><script src="../../../js/world/world-bridge.js"></script><script src="world-app.js"></script>
 </body>
 </html>

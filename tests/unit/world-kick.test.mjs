@@ -3,9 +3,10 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { loadClassic } from '../lib/load-classic.mjs';
+import { worldHarnessScripts } from '../lib/world-harness.mjs';
 import { WORLD17_CHECKS, world17Correlation, world17RealKick, world23LiveAcceptance } from '../world/shoot-live.mjs';
 
-const scripts=[...fs.readFileSync(new URL('../../world.html',import.meta.url),'utf8').matchAll(/<script\s+src="([^"]+)"/g)].map(m=>m[1]);
+const scripts=worldHarnessScripts();
 const r=loadClassic(scripts),C=r.get('WORLD_GARGANTUA');
 const smoothstep=(lo,hi,x)=>{const t=Math.max(0,Math.min(1,(x-lo)/(hi-lo)));return t*t*(3-2*t);};
 const close=(actual,expected)=>assert.ok(Math.abs(actual-expected)<1e-12,`${actual} != ${expected}`);

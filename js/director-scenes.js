@@ -23,6 +23,8 @@ function directorSceneCandidates(cls, pool, presets) {
       const builtin = DIRECTOR_SCENES.find(scene => scene.patch.analyzerType === preset.settings.analyzerType);
       // 削除済みタイプの旧プリセットは演出候補に含めない。
       if (!builtin || builtin.cls !== cls) continue;
+      // GPU タイプはディレクターの対象外（統合設計 §3）
+      if (getRendererEntry(preset.settings.analyzerType).gpu) continue;
       const patch = {};
       for (const key of DIRECTOR_MANAGED_KEYS) {
         // 色相は変化で加算するだけで、プリセットの絶対値は取り込まない。
@@ -38,7 +40,7 @@ function directorSceneCandidates(cls, pool, presets) {
 function applyScenePatch(settings, patch) {
   if (Object.hasOwn(patch, 'analyzerType')) settings.analyzerType = patch.analyzerType;
   const capabilities = getRendererEntry(settings.analyzerType).capabilities;
-  if (Object.hasOwn(patch, 'expressionMethod') && capabilities.methods.includes(patch.expressionMethod)) {
+  if (Object.hasOwn(patch, 'expressionMethod') && (capabilities.methods || []).includes(patch.expressionMethod)) {
     settings.expressionMethod = patch.expressionMethod;
   }
   if (Object.hasOwn(patch, 'barDisplayMode') && capabilities.barDisplayMode === true) {

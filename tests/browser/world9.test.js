@@ -2,7 +2,7 @@
 // @page harness
 async function world9Page(run) {
   const iframe = document.createElement('iframe'); iframe.style.cssText = 'width:960px;height:600px;border:0';
-  const url = new URL('../../world.html', location.href);
+  const url = new URL('../browser/harness/world.html', location.href);
   const ready = new Promise((resolve, reject) => {
     iframe.onload = resolve; iframe.onerror = () => reject(new Error('world.html load failed'));
   });

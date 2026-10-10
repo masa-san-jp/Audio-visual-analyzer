@@ -3,8 +3,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { loadClassic } from '../lib/load-classic.mjs';
-const html=fs.readFileSync(new URL('../../world.html',import.meta.url),'utf8');
-const scripts=[...html.matchAll(/<script\s+src="([^"]+)"/g)].map(m=>m[1]);
+import { worldHarnessScripts } from '../lib/world-harness.mjs';
+const scripts=worldHarnessScripts();
 const r=loadClassic(scripts),C=r.get('WORLD_ATTRACTOR'),Analyzer=r.get('WorldAttractorAnalyzer');
 const Feature=r.get('MfsFrameView'),L=r.get('MFS_LAYOUT'),compile=r.get('compileWorldScore');
 const smooth=x=>x*x*(3-2*x);
@@ -49,7 +49,7 @@ function commandGl() {
       if(!samplers.has(loc.p))samplers.set(loc.p,new Map());samplers.get(loc.p).set(loc.name,v);
     }
   };
-  for(const name of ['uniform1ui','uniform1f','uniform2f','uniform3fv','uniform4fv'])gl[name]=(loc,...v)=>{
+  for(const name of ['uniform1ui','uniform1f','uniform2f','uniform3fv','uniform4fv','uniform1fv'])gl[name]=(loc,...v)=>{
     values.set(loc,v.length===1?v[0]:v);calls.push({uniform:loc,value:v.length===1?v[0]:v});
   };
   gl.clear=()=>calls.push({clear:fbo});
