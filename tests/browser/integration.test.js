@@ -63,7 +63,7 @@ async function intLoadSong(app) {
   await app.ui._loadMediaFile(intSong(), 0);
 }
 
-avzTest('INT-01', 'INT-01 GPU の 3 タイプが GPU グループに並び、選ぶと gpu-canvas に切り替わり、2D へ戻せる', async function () {
+avzGpuTest('INT-01', 'INT-01 GPU の 3 タイプが GPU グループに並び、選ぶと gpu-canvas に切り替わり、2D へ戻せる', async function () {
   const app = window.__app;
   try {
     const select = document.getElementById('analyzer-type');
