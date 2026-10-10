@@ -49,7 +49,8 @@ avzTest('B15-03', 'B15-03 WAV再生中の全8アナライザータイプ切替',
   const mediaManager = app.mediaManager;
   const visualizer = app.visualizer;
   const typeSelect = document.getElementById('analyzer-type');
-  const types = Array.from(typeSelect.options).map((option) => option.value);
+  // 2D の描画タイプだけを数える（GPU タイプは別グループ。GPU テストは avzGpuTest 側で確認する）
+  const types = Array.from(typeSelect.options).map((option) => option.value).filter((v) => !getRendererEntry(v).gpu);
 
   try {
     await app.ui._loadMediaFile(file);
