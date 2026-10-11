@@ -67,13 +67,13 @@ function realEngine(kinds=['main'],duration=10) {
   return {engine,gl,features:new Feature()};
 }
 test('UW-84 WORLD-31 定数表・POINT_GAIN正規化・登録',()=>{
-  // §11: 粒子数 768 行（1,572,864 個）、DECAY .90。個数は幅×高さから導出する。
-  const expected={PARTICLE_W:2048,PARTICLE_H:768,PARTICLE_COUNT:C.PARTICLE_W*C.PARTICLE_H,WARM_ITERS:40,DECAY:.90,Z_SCALE:.9,SHAPE_SCALE:1,
+  // §12: 粒子数 384 行（786,432 個）、DECAY .94。個数は幅×高さから導出する。
+  const expected={PARTICLE_W:2048,PARTICLE_H:384,PARTICLE_COUNT:C.PARTICLE_W*C.PARTICLE_H,WARM_ITERS:40,DECAY:.94,Z_SCALE:.9,SHAPE_SCALE:1,
     BAND_COUNT:32,BAND_BASE:.35,BAND_GAIN:1.6,PALETTE_TINT:.10,DEPTH_REF:3.2,EXPOSURE_BASE:2.5,EXPOSURE_FLOOR:.75,EXPOSURE_GAIN:.5,
     TRANS_SECONDS:1.8,TRANS_STAGGER:.5,TRANS_FLIGHT:1.1,SWIRL:1.6,KICK_BREATH:.06,KICK_SECONDS:.18,
     GLINT_FRACTION:.004,GLINT_GAIN:10,GLINT_SECONDS:.25,WARM_FRAMES:90,CAMERA_EASE_SECONDS:4,ORBIT_LOUD_GAIN:.8,ORBIT_MIN:.5,ORBIT_MAX:1.6,
     BLOOM_THRESHOLD:.6,BLOOM_STRENGTH:.8,GLINT_EPS:.01};
-  assert.deepEqual(C,expected);assert.equal(C.PARTICLE_COUNT,1572864);assert.ok(Object.isFrozen(C));
+  assert.deepEqual(C,expected);assert.equal(C.PARTICLE_COUNT,786432);assert.ok(Object.isFrozen(C));
   for(const [w,h] of [[1280,720],[1920,1080],[720,720]]){
     const gain=r.get('worldAttractorPointGain')(w,h);assert.equal(gain,(w*h*.08)/(C.PARTICLE_COUNT/(1-C.DECAY)));
     assert.ok(Math.abs(gain*C.PARTICLE_COUNT/(1-C.DECAY)/(w*h*.08)-1)<1e-14);
