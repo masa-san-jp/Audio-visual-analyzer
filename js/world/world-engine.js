@@ -92,7 +92,10 @@ class WorldEngine {
   render(tSec, features, dt) {
     if (!this.score) return;
     this._beginTiming(tSec, dt);
+    // ライブ再生の追いつきだけ、途中のステップの重い描画を省ける（書き出し・renderAt は全ステップ描く）。
+    this._liveRender = true;
     if (this.timeline) this.advanceTo(tSec); else this._step(tSec, features, dt);
+    this._liveRender = false;
     this._draw();
     if (this.queryActive) { this.gpu.gl.endQuery(this.timer.TIME_ELAPSED_EXT); this.queryActive = null; }
   }
@@ -176,6 +179,13 @@ class WorldEngine {
     input.dt = Math.max(0, dt); input.tSec = tSec; input.boundaryNow = boundaryNow;
     this.fadeElapsed = Math.min(.5, this.fadeElapsed + input.dt);
     this.type.step(input);
+    if (drawMatter === 'state') {
+      // ライブの追いつき途中のステップ：状態だけ進める（描画はこの rAF の最後のステップで行う）。
+      if (this.matterSkipped && this.type.warmStart) this.type.warmStart(tSec);
+      this.type.advanceState(tSec);
+      this.matterSkipped = false;
+      return;
+    }
     if (drawMatter) {
       // CPUだけの区間から暖機窓へ入る最初のステップでGPU履歴を作り直す（アトラクター §6）。
       if (this.matterSkipped && this.type.warmStart) this.type.warmStart(tSec);
@@ -266,6 +276,9 @@ class WorldEngine {
   }
   _drawMatterAt(i, steps) {
     const type = this.type;
+    // ライブ再生の追いつきでは、advanceState を持つタイプは最後以外のステップを状態更新だけにする。
+    if (this._liveRender && i < steps && type.advanceState && this.fadeElapsed >= .5
+      && i > steps - (type.warmFrames || Infinity)) return 'state';
     // statelessRenderは末尾1枚、warmFrames（g-fluid／g-attractor）は指定窓を描く。
     // 時刻0だけの要求も従来どおり描画する。
     return steps === 0 || i > steps - (type.warmFrames || (type.statelessRender ? 1 : Infinity)) || this.fadeElapsed < .5;

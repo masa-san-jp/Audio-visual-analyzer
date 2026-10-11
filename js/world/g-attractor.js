@@ -267,6 +267,19 @@ class WorldAttractorAnalyzer extends WorldBandAnalyzer {
     g.clearTarget(this.density.read);g.clearTarget(this.density.write);
     this.gpuNeedsInit=false;this.gpuNeedsB=false;this.dirty=true;
   }
+  // ライブ再生で 1 回の rAF に複数ステップを進めるとき、途中のステップは粒子の状態更新と密度の減衰だけを行う。
+  // 点の加算描画（最も重い処理）は最後のステップだけにして、描画遅れが次のフレームの仕事を増やす悪循環を防ぐ。
+  advanceState(tSec) {
+    const g=this.gpu,gl=g.gl;
+    gl.disable(gl.BLEND);
+    if(this.gpuNeedsInit)this.warmStart(tSec);
+    if(this.gpuNeedsB){this._warmState(this.stateB,this.shapeB,this.stateA.read);this.gpuNeedsB=false;}
+    if(!this.dirty)return;
+    this._updateState(this.stateA,this.shapeA);
+    if(this.shapeB)this._updateState(this.stateB,this.shapeB);
+    g.bind(this.decayProgram,this.density.write);g.sampler(this.decaySourceLoc,0,this.density.read);g.draw();g.swap(this.density);
+    this.dirty=false;
+  }
   render(input) {
     const g=this.gpu,gl=g.gl;
     gl.disable(gl.BLEND);
