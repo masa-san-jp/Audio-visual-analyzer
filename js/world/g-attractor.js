@@ -1,29 +1,43 @@
 // 目的 — 固定Clifford写像の膜・粒子の再組み立て・音楽の光を描く — doc/20261008-design-attractor-v1.md §1〜8
 const WORLD_ATTRACTOR = Object.freeze({
   PARTICLE_W: 2048, PARTICLE_H: 384, PARTICLE_COUNT: 786432, WARM_ITERS: 40,
-  DECAY: .94, Z_SCALE: .9, SHAPE_SCALE: 1.0, BAND_COUNT: 32,
-  BAND_BASE: .35, BAND_GAIN: 1.6, PALETTE_TINT: .10, DEPTH_REF: 3.2,
+  DECAY: .88, Z_SCALE: .9, SHAPE_SCALE: 1.0, BAND_COUNT: 32,
+  BAND_BASE: .25, BAND_GAIN: 2.4, PALETTE_TINT: .10, DEPTH_REF: 3.2,
   EXPOSURE_BASE: 2.5, EXPOSURE_FLOOR: .75, EXPOSURE_GAIN: .5,
   TRANS_SECONDS: 1.8, TRANS_STAGGER: .5, TRANS_FLIGHT: 1.1, SWIRL: 1.6,
-  KICK_BREATH: .06, KICK_SECONDS: .18,
-  GLINT_FRACTION: .004, GLINT_GAIN: 10, GLINT_SECONDS: .25,
+  KICK_BREATH: .12, KICK_SECONDS: .18,
+  GLINT_FRACTION: .02, GLINT_GAIN: 6, GLINT_SECONDS: .25,
+  // §13 形を音楽で踊らせる：低・中・高の盛り上がりで係数を安全範囲（±MOD_MAX）内で動かす
+  MOD_A: .14, MOD_B: .12, MOD_C: .12, MOD_D: .06, MOD_KICK: .08, MOD_PERIOD: 16, MOD_MAX: .15,
+  MOD_NORM_TAU: 4, MOD_NORM_FLOOR: .03, MOD_NORM_GAIN: .25, MOD_SMOOTH_TAU: .08,
   WARM_FRAMES: 90, CAMERA_EASE_SECONDS: 4,
   ORBIT_LOUD_GAIN: .8, ORBIT_MIN: .5, ORBIT_MAX: 1.6,
   BLOOM_THRESHOLD: .6, BLOOM_STRENGTH: .8, GLINT_EPS: .01
 });
 // 色の回転用 cos(2.1)、sin(2.1)。頂点シェーダーでは定数として使い、三角関数を呼ばない。
 const WORLD_ATTRACTOR_COS2 = Math.cos(2.1), WORLD_ATTRACTOR_SIN2 = Math.sin(2.1);
+// §13：係数を ±0.15 動かしても被覆率が 8 割以上保たれる頑丈な形（robust-search.mjs で探索）
 const WORLD_ATTRACTOR_SHAPES = Object.freeze({
-  L: Object.freeze([-2.0,-1.9,-1.2,2.0]), H: Object.freeze([-1.24,-1.25,-1.81,-1.91]),
-  J: Object.freeze([-1.9,1.9,.9,.5]), F: Object.freeze([-1.8,-2.0,-.5,-.9]),
-  D: Object.freeze([1.5,-1.8,1.6,.9]), A: Object.freeze([-1.4,1.6,1.0,.7]),
-  Cc: Object.freeze([1.7,1.7,.6,1.2])
+  L: Object.freeze([2.033,2.008,1.71,-1.528]), H: Object.freeze([-1.742,-1.414,-1.97,1.772]),
+  J: Object.freeze([-1.956,-1.329,1.601,-1.739]), F: Object.freeze([-1.746,1.81,.931,-1.827]),
+  D: Object.freeze([1.788,-2.035,1.989,.985]), A: Object.freeze([-2.088,1.823,1.546,1.122]),
+  Cc: Object.freeze([1.424,-2.072,1.752,-1.636])
 });
+// §13：音楽による係数のずれ。low/mid/high は帯域群の自分の平均に対する盛り上がり（-1..1）。
+function worldAttractorModulation(xLow, xMid, xHigh, kickEnv, tSec, out) {
+  const c = WORLD_ATTRACTOR, m = c.MOD_MAX;
+  out[0] = c.MOD_A * xLow + c.MOD_KICK * kickEnv;
+  out[1] = c.MOD_B * xMid;
+  out[2] = c.MOD_C * xHigh;
+  out[3] = c.MOD_D * Math.sin(2 * Math.PI * tSec / c.MOD_PERIOD);
+  for (let i = 0; i < 4; i++) out[i] = Math.max(-m, Math.min(m, out[i]));
+  return out;
+}
 // dist、pitch（度）、yaw速度、roll（度）、fov（度）の始点/終点。
 const WORLD_ATTRACTOR_CAMERA = Object.freeze({
   intro: Object.freeze([5.2,4.0,12,18,.05,.05,0,0,34,34]),
   build: Object.freeze([4.6,3.6,28,6,.09,.09,0,-6,34,34]),
-  drop: Object.freeze([3.4,3.1,10,14,.24,.24,8,8,38,38]),
+  drop: Object.freeze([3.9,3.6,10,14,.24,.24,8,8,38,38]),
   break: Object.freeze([4.8,4.8,58,64,.03,.03,0,0,30,30]),
   main: Object.freeze([3.9,3.9,16,16,.11,.11,-4,-4,34,34]),
   outro: Object.freeze([4.2,6.5,18,30,.04,.04,0,0,34,34])
@@ -99,20 +113,22 @@ out vec3 pointColor;
 const float PI=3.141592653589793;
 const float COS2=${WORLD_ATTRACTOR_COS2.toFixed(10)},SIN2=${WORLD_ATTRACTOR_SIN2.toFixed(10)};
 vec3 position(vec4 s,vec4 shape){return vec3(s.w/(1.+abs(shape.w)),s.z/(1.+abs(shape.z)),s.x/(1.+abs(shape.z))*Z_SCALE)*SHAPE_SCALE;}
-vec3 color(vec4 s){
+// §13：帯域は膜の高さに割り当てる（下が低音・上が高音）。どの音が鳴っているかが形の上で読める。
+vec3 color(vec4 s,float height){
  vec2 v=vec2(s.x-s.z,s.y-s.w);float L=length(v);vec2 n=L>1e-6?v/L:vec2(1,0);
- float ang=atan(v.y,v.x),u=fract((ang+PI)/(2.*PI));int k=int(u*float(BAND_COUNT));
+ int k=int(clamp(height*.5+.5,0.,.999)*float(BAND_COUNT));
  float w1=.5+.5*n.x,w2=.5+.5*dot(n,vec2(COS2,SIN2)),w3=.5+.5*dot(n,vec2(COS2,-SIN2));
  vec3 rgb=vec3(.55+.45*w1,.35+.4*w2+.1*w1,.12+.55*w3);
  return mix(rgb,rgb*primary*1.6,PALETTE_TINT)*(BAND_BASE+BAND_GAIN*bands[k].x);
 }
 void main(){
  uint i=uint(gl_VertexID);ivec2 uv=ivec2(gl_VertexID%PARTICLE_W,gl_VertexID/PARTICLE_W);
- vec4 a=texelFetch(stateA,uv,0);vec3 P=position(a,shapeA),rgb=color(a);
+ vec4 a=texelFetch(stateA,uv,0);vec3 P=position(a,shapeA),rgb=color(a,P.y);
  if(music.w>.5){
   vec4 b=texelFetch(stateB,uv,0);
   float e=smoothstep(0.,1.,clamp((music.z-particleHash(i,0u)*TRANS_STAGGER)/TRANS_FLIGHT,0.,1.));
-  P=mix(P,position(b,shapeB),e);rgb=mix(rgb,color(b),e);
+  vec3 PB=position(b,shapeB);
+  P=mix(P,PB,e);rgb=mix(rgb,color(b,PB.y),e);
   float angle=SWIRL*sin(PI*e);P=vec3(cos(angle)*P.x+sin(angle)*P.z,P.y,-sin(angle)*P.x+cos(angle)*P.z);
  }
  P*=1.+KICK_BREATH*music.x;
@@ -156,12 +172,16 @@ class WorldAttractorAnalyzer extends WorldBandAnalyzer {
     this.music=new Float32Array(4);
     // 頂点シェーダーへ渡すカメラ位置と基底。毎フレーム再利用し、確保しない。
     this.camPos=new Float32Array(3);this.camForward=new Float32Array(3);this.camRight=new Float32Array(3);this.camUp=new Float32Array(3);
+    // §13 音楽で動かした現在の係数（A/B）と、帯域群の平均・係数のずれ（毎フレーム再利用）
+    this.liveA=new Float32Array(4);this.liveB=new Float32Array(4);this.modMean=new Float32Array(3);
+    this.modTarget=new Float32Array(4);this.modSmooth=new Float32Array(4);
     this.reset();
   }
   reset() {
     super.reset();if(!this.camera)return;
     this.camera.fill(0);this.cameraFrom.fill(0);this.cameraTarget.fill(0);this.cameraShot.fill(0);this.music.fill(0);
     this.camPos.fill(0);this.camForward.fill(0);this.camRight.fill(0);this.camUp.fill(0);
+    if(this.modMean){this.modMean.fill(.2);this.modSmooth.fill(0);this.modTarget.fill(0);this.liveA.set(WORLD_ATTRACTOR_SHAPES.L);this.liveB.set(WORLD_ATTRACTOR_SHAPES.L);}
     this.section=null;this.sectionChangedSec=0;this.yaw=0;this.shapeA=null;this.shapeB=null;this.transitionStart=-100;
     this.lastKick=-100;this.lastHigh=-100;this.glintSerial=0;this.lastEventSec=-1;this.seed=0;
     this.gpuNeedsInit=true;this.gpuNeedsB=false;this.dirty=true;this.exposure=0;
@@ -233,8 +253,26 @@ class WorldAttractorAnalyzer extends WorldBandAnalyzer {
     this.music[0]=Math.exp(-Math.max(0,t-this.lastKick)/c.KICK_SECONDS);
     this.music[1]=Math.exp(-Math.max(0,t-this.lastHigh)/c.GLINT_SECONDS);
     this.music[2]=t-this.transitionStart;this.music[3]=this.shapeB?1:0;
+    this._updateModulation(t,input.dt);
     this.exposure=c.EXPOSURE_BASE*(c.EXPOSURE_FLOOR+c.EXPOSURE_GAIN*input.features.loudness.level);
     this.dirty=true;
+  }
+  // §13 低(0-5)・中(6-21)・高(22-31)帯域の、自分の平均に対する盛り上がりで係数を動かす。配列は再利用する。
+  _updateModulation(t,dt) {
+    const c=WORLD_ATTRACTOR,b=this.bandUniforms,mean=this.modMean;
+    let low=0,mid=0,high=0;
+    for(let i=0;i<6;i++)low+=b[i*4];for(let i=6;i<22;i++)mid+=b[i*4];for(let i=22;i<32;i++)high+=b[i*4];
+    low/=6;mid/=16;high/=10;
+    const k=dt>0?1-Math.exp(-dt/c.MOD_NORM_TAU):0;
+    mean[0]+=(low-mean[0])*k;mean[1]+=(mid-mean[1])*k;mean[2]+=(high-mean[2])*k;
+    const xl=Math.max(-1,Math.min(1,(low-mean[0])/Math.max(c.MOD_NORM_FLOOR,mean[0]*c.MOD_NORM_GAIN)));
+    const xm=Math.max(-1,Math.min(1,(mid-mean[1])/Math.max(c.MOD_NORM_FLOOR,mean[1]*c.MOD_NORM_GAIN)));
+    const xh=Math.max(-1,Math.min(1,(high-mean[2])/Math.max(c.MOD_NORM_FLOOR,mean[2]*c.MOD_NORM_GAIN)));
+    worldAttractorModulation(xl,xm,xh,this.music[0],t,this.modTarget);
+    const s=dt>0?1-Math.exp(-dt/c.MOD_SMOOTH_TAU):0,sm=this.modSmooth;
+    for(let i=0;i<4;i++)sm[i]+=(this.modTarget[i]-sm[i])*s;
+    const A=WORLD_ATTRACTOR_SHAPES[this.shapeA||'L'],B=WORLD_ATTRACTOR_SHAPES[this.shapeB||this.shapeA||'L'];
+    for(let i=0;i<4;i++){this.liveA[i]=A[i]+sm[i];this.liveB[i]=B[i]+sm[i];}
   }
   // 旧GLSLと同じ式でカメラ位置と前/右/上（roll適用済み）を計算する。配列は再利用する。
   _updateCameraBasis() {
@@ -253,7 +291,7 @@ class WorldAttractorAnalyzer extends WorldBandAnalyzer {
   _updateState(pair,shape,initialize=0,source=pair.read) {
     const g=this.gpu,gl=g.gl;
     g.bind(this.updateProgram,pair.write);g.sampler(this.updateStateLoc,0,source);
-    gl.uniform4fv(this.updateShapeLoc,WORLD_ATTRACTOR_SHAPES[shape]);gl.uniform1i(this.initializeLoc,initialize);
+    gl.uniform4fv(this.updateShapeLoc,typeof shape==='string'?WORLD_ATTRACTOR_SHAPES[shape]:shape);gl.uniform1i(this.initializeLoc,initialize);
     gl.uniform1ui(this.updateSeedLoc,this.seed);g.draw();g.swap(pair);
   }
   _warmState(pair,shape,source=null) {
@@ -275,8 +313,8 @@ class WorldAttractorAnalyzer extends WorldBandAnalyzer {
     if(this.gpuNeedsInit)this.warmStart(tSec);
     if(this.gpuNeedsB){this._warmState(this.stateB,this.shapeB,this.stateA.read);this.gpuNeedsB=false;}
     if(!this.dirty)return;
-    this._updateState(this.stateA,this.shapeA);
-    if(this.shapeB)this._updateState(this.stateB,this.shapeB);
+    this._updateState(this.stateA,this.liveA);
+    if(this.shapeB)this._updateState(this.stateB,this.liveB);
     g.bind(this.decayProgram,this.density.write);g.sampler(this.decaySourceLoc,0,this.density.read);g.draw();g.swap(this.density);
     this.dirty=false;
   }
@@ -286,11 +324,11 @@ class WorldAttractorAnalyzer extends WorldBandAnalyzer {
     if(this.gpuNeedsInit)this.warmStart(input.tSec);
     if(this.gpuNeedsB){this._warmState(this.stateB,this.shapeB,this.stateA.read);this.gpuNeedsB=false;}
     if(this.dirty){
-      this._updateState(this.stateA,this.shapeA);
-      if(this.shapeB)this._updateState(this.stateB,this.shapeB);
+      this._updateState(this.stateA,this.liveA);
+      if(this.shapeB)this._updateState(this.stateB,this.liveB);
       g.bind(this.decayProgram,this.density.write);g.sampler(this.decaySourceLoc,0,this.density.read);g.draw();g.swap(this.density);
       g.bind(this.program,this.density.read);g.sampler(this.stateALoc,0,this.stateA.read);g.sampler(this.stateBLoc,1,this.stateB.read);
-      gl.uniform4fv(this.shapeALoc,WORLD_ATTRACTOR_SHAPES[this.shapeA]);gl.uniform4fv(this.shapeBLoc,WORLD_ATTRACTOR_SHAPES[this.shapeB||this.shapeA]);
+      gl.uniform4fv(this.shapeALoc,this.liveA);gl.uniform4fv(this.shapeBLoc,this.shapeB?this.liveB:this.liveA);
       gl.uniform4fv(this.bandLoc,this.bandUniforms);gl.uniform3fv(this.primaryLoc,input.song.palette.primary);
       gl.uniform3fv(this.camPosLoc,this.camPos);gl.uniform3fv(this.camForwardLoc,this.camForward);gl.uniform3fv(this.camRightLoc,this.camRight);gl.uniform3fv(this.camUpLoc,this.camUp);gl.uniform2f(this.projectionLoc,input.target.width/input.target.height,Math.tan(this.cameraShot[4]*.5));
       gl.uniform4fv(this.musicLoc,this.music);gl.uniform1ui(this.seedLoc,this.seed);gl.uniform1ui(this.glintLoc,this.glintSerial);
@@ -301,4 +339,4 @@ class WorldAttractorAnalyzer extends WorldBandAnalyzer {
     g.bind(this.toneProgram,input.target);g.sampler(this.toneSourceLoc,0,this.density.read);gl.uniform1f(this.exposureLoc,this.exposure);g.draw();
   }
 }
-if(typeof module!=='undefined'&&module.exports){module.exports={WorldAttractorAnalyzer,WORLD_ATTRACTOR,WORLD_ATTRACTOR_SHAPES,WORLD_ATTRACTOR_CAMERA,worldAttractorShape,worldAttractorHash,worldAttractorFlight,worldAttractorPointGain};}
+if(typeof module!=='undefined'&&module.exports){module.exports={WorldAttractorAnalyzer,worldAttractorModulation,WORLD_ATTRACTOR,WORLD_ATTRACTOR_SHAPES,WORLD_ATTRACTOR_CAMERA,worldAttractorShape,worldAttractorHash,worldAttractorFlight,worldAttractorPointGain};}

@@ -68,10 +68,12 @@ function realEngine(kinds=['main'],duration=10) {
 }
 test('UW-84 WORLD-31 定数表・POINT_GAIN正規化・登録',()=>{
   // §12: 粒子数 384 行（786,432 個）、DECAY .94。個数は幅×高さから導出する。
-  const expected={PARTICLE_W:2048,PARTICLE_H:384,PARTICLE_COUNT:C.PARTICLE_W*C.PARTICLE_H,WARM_ITERS:40,DECAY:.94,Z_SCALE:.9,SHAPE_SCALE:1,
-    BAND_COUNT:32,BAND_BASE:.35,BAND_GAIN:1.6,PALETTE_TINT:.10,DEPTH_REF:3.2,EXPOSURE_BASE:2.5,EXPOSURE_FLOOR:.75,EXPOSURE_GAIN:.5,
-    TRANS_SECONDS:1.8,TRANS_STAGGER:.5,TRANS_FLIGHT:1.1,SWIRL:1.6,KICK_BREATH:.06,KICK_SECONDS:.18,
-    GLINT_FRACTION:.004,GLINT_GAIN:10,GLINT_SECONDS:.25,WARM_FRAMES:90,CAMERA_EASE_SECONDS:4,ORBIT_LOUD_GAIN:.8,ORBIT_MIN:.5,ORBIT_MAX:1.6,
+  const expected={PARTICLE_W:2048,PARTICLE_H:384,PARTICLE_COUNT:C.PARTICLE_W*C.PARTICLE_H,WARM_ITERS:40,DECAY:.88,Z_SCALE:.9,SHAPE_SCALE:1,
+    BAND_COUNT:32,BAND_BASE:.25,BAND_GAIN:2.4,PALETTE_TINT:.10,DEPTH_REF:3.2,EXPOSURE_BASE:2.5,EXPOSURE_FLOOR:.75,EXPOSURE_GAIN:.5,
+    TRANS_SECONDS:1.8,TRANS_STAGGER:.5,TRANS_FLIGHT:1.1,SWIRL:1.6,KICK_BREATH:.12,KICK_SECONDS:.18,
+    GLINT_FRACTION:.02,GLINT_GAIN:6,GLINT_SECONDS:.25,
+    MOD_A:.14,MOD_B:.12,MOD_C:.12,MOD_D:.06,MOD_KICK:.08,MOD_PERIOD:16,MOD_MAX:.15,MOD_NORM_TAU:4,MOD_NORM_FLOOR:.03,MOD_NORM_GAIN:.25,MOD_SMOOTH_TAU:.08,
+    WARM_FRAMES:90,CAMERA_EASE_SECONDS:4,ORBIT_LOUD_GAIN:.8,ORBIT_MIN:.5,ORBIT_MAX:1.6,
     BLOOM_THRESHOLD:.6,BLOOM_STRENGTH:.8,GLINT_EPS:.01};
   assert.deepEqual(C,expected);assert.equal(C.PARTICLE_COUNT,786432);assert.ok(Object.isFrozen(C));
   for(const [w,h] of [[1280,720],[1920,1080],[720,720]]){
@@ -83,7 +85,9 @@ test('UW-84 WORLD-31 定数表・POINT_GAIN正規化・登録',()=>{
 });
 test('UW-85 WORLD-31 固定7形・6kind×variation1〜5・有界Clifford写像',()=>{
   const shapes=r.get('WORLD_ATTRACTOR_SHAPES'),choose=r.get('worldAttractorShape');
-  assert.deepEqual(shapes,{L:[-2,-1.9,-1.2,2],H:[-1.24,-1.25,-1.81,-1.91],J:[-1.9,1.9,.9,.5],F:[-1.8,-2,-.5,-.9],D:[1.5,-1.8,1.6,.9],A:[-1.4,1.6,1,.7],Cc:[1.7,1.7,.6,1.2]});
+  // §13：係数を ±0.15 動かしても崩れない頑丈な形
+  assert.deepEqual(shapes,{L:[2.033,2.008,1.71,-1.528],H:[-1.742,-1.414,-1.97,1.772],J:[-1.956,-1.329,1.601,-1.739],F:[-1.746,1.81,.931,-1.827],
+    D:[1.788,-2.035,1.989,.985],A:[-2.088,1.823,1.546,1.122],Cc:[1.424,-2.072,1.752,-1.636]});
   const base={intro:'L',build:'J',drop:'H',break:'A',main:'D',outro:'L'};
   let cases=0,maxMagnitude=0;
   for(const [kind,name] of Object.entries(base))for(let variation=1;variation<=5;variation++){
@@ -96,10 +100,23 @@ test('UW-85 WORLD-31 固定7形・6kind×variation1〜5・有界Clifford写像',
   }
   console.log('UW-85 assignmentCases='+cases+' mapIterations=7000 maxMagnitude='+maxMagnitude);
 });
+test('UW-97 §13 音楽による係数のずれ：帯域群・キック・周期・安全範囲±0.15',()=>{
+  const mod=r.get('worldAttractorModulation'),out=new Float32Array(4),m=C.MOD_MAX;let cases=0;
+  for(const xl of [-1,-.5,0,.5,1])for(const xm of [-1,0,1])for(const xh of [-1,0,1])for(const k of [0,1])for(const t of [0,4,8,12]){
+    mod(xl,xm,xh,k,t,out);
+    const e=[C.MOD_A*xl+C.MOD_KICK*k,C.MOD_B*xm,C.MOD_C*xh,C.MOD_D*Math.sin(2*Math.PI*t/C.MOD_PERIOD)].map(v=>Math.max(-m,Math.min(m,v)));
+    for(let i=0;i<4;i++){assert.ok(Math.abs(out[i]-e[i])<1e-6);assert.ok(Math.abs(out[i])<=m+1e-7);}cases++;
+  }
+  // 低音の盛り上がりで a が増え、キックはさらに上乗せ（上限で止まる）
+  mod(1,0,0,0,0,out);const a0=out[0];mod(1,0,0,1,0,out);assert.ok(out[0]>=a0&&out[0]<=m+1e-7);
+  console.log('UW-97 modulationCases='+cases+' max='+m);
+});
 test('UW-86 WORLD-31 粒子別変身の端点・単調性・遅延・GLSL式一致',()=>{
   const flight=r.get('worldAttractorFlight');let cases=0,maxError=0;
   const shader=r.get('WORLD_ATTRACTOR_POINT_VERTEX');assert.match(shader,/SWIRL\*sin\(PI\*e\)/);
-  assert.match(shader,/P=mix\(P,position\(b,shapeB\),e\);rgb=mix\(rgb,color\(b\),e\)/);
+  assert.match(shader,/vec3 PB=position\(b,shapeB\);\s*P=mix\(P,PB,e\);rgb=mix\(rgb,color\(b,PB\.y\),e\)/);
+  // §13：帯域は膜の高さ（下が低音）で選ぶ
+  assert.match(shader,/int k=int\(clamp\(height\*\.5\+\.5,0\.,\.999\)\*float\(BAND_COUNT\)\)/);
   assert.match(shader,/\(music\.z-particleHash\(i,0u\)\*TRANS_STAGGER\)\/TRANS_FLIGHT/);
   for(const h of [0,.1,.5,.999999]){
     const delay=h*C.TRANS_STAGGER;assert.equal(flight(-1,h),0);assert.equal(flight(delay,h),0);assert.equal(flight(C.TRANS_SECONDS,h),1);
@@ -126,12 +143,14 @@ test('UW-87 WORLD-31 グリント部分集合とhashの決定性・seed/serial�
     assert.equal(h,((u^(u>>>16))>>>8)/16777216);
     selected+=pick;changedSerial+=pick!==(hash(i,5,11)<C.GLINT_FRACTION);changedSeed+=pick!==(hash(i,4,12)<C.GLINT_FRACTION);
   }
-  assert.ok(selected>300&&selected<500);assert.ok(changedSerial>500&&changedSeed>500);
+  // 期待個数は n×GLINT_FRACTION の ±25%
+  const expectedPick=n*C.GLINT_FRACTION;assert.ok(selected>expectedPick*.75&&selected<expectedPick*1.25);
+  assert.ok(changedSerial>expectedPick*1.2&&changedSeed>expectedPick*1.2);
   console.log('UW-87 particles='+n+' selected='+selected+' serialChanged='+changedSerial+' seedChanged='+changedSeed+' replayError=0');
 });
 test('UW-88 WORLD-31 カメラ表・区間内smoothstep・奇数反転・全項目4秒補間',()=>{
   const expected={intro:[5.2,4,12,18,.05,.05,0,0,34,34],build:[4.6,3.6,28,6,.09,.09,0,-6,34,34],
-    drop:[3.4,3.1,10,14,.24,.24,8,8,38,38],break:[4.8,4.8,58,64,.03,.03,0,0,30,30],
+    drop:[3.9,3.6,10,14,.24,.24,8,8,38,38],break:[4.8,4.8,58,64,.03,.03,0,0,30,30],
     main:[3.9,3.9,16,16,.11,.11,-4,-4,34,34],outro:[4.2,6.5,18,30,.04,.04,0,0,34,34]};
   const camera=r.get('WORLD_ATTRACTOR_CAMERA');assert.deepEqual(camera,expected);let cases=0,maxError=0;
   for(const [kind,row] of Object.entries(camera))for(const variation of [1,2,3])for(const p of [0,.25,.5,.75,1]){
