@@ -8,6 +8,10 @@
   --accent: #6fa8ff;
   /* 見出しの帯（白抜き文字が読める深めの青。白とのコントラスト比 4.5 以上） */
   --accent-fill: #2f6fd6;
+  /* 選択中を表す色。見出しの青と区別できるよう、反対寄りの色相（琥珀）にする */
+  --selected-fill: #f0a43a;
+  --selected-line: #ffc266;
+  --selected-ink: #1a1a1a;
 }
 #section-strip { display: flex; height: 3px; width: 100%; }
 #section-strip[hidden] { display: none; }
@@ -72,7 +76,7 @@ body {
   background: rgba(255, 255, 255, 0.04);
 }
 .slot-row.active {
-  outline: 1px solid #4da3ff;
+  outline: 1px solid var(--selected-fill);
 }
 .slot-no {
   opacity: 0.7;
@@ -197,10 +201,16 @@ button:disabled {
   cursor: default;
 }
 
+button.active:hover:not(:disabled) {
+  background: var(--selected-line);
+  color: var(--selected-ink);
+}
+
 button.active {
-  background: #2a4f82;
-  border-color: #4070b0;
-  color: #e0eaff;
+  background: var(--selected-fill);
+  border-color: var(--selected-line);
+  color: var(--selected-ink);
+  font-weight: 600;
 }
 
 button#btn-file {
@@ -243,7 +253,7 @@ label input[type="range"] {
   display: block;
   width: 100%;
   margin-top: 4px;
-  accent-color: #4070b0;
+  accent-color: var(--selected-fill);
   cursor: pointer;
 }
 
@@ -313,7 +323,7 @@ select:disabled {
 }
 
 .toggle-row input[type="checkbox"] {
-  accent-color: #4070b0;
+  accent-color: var(--selected-fill);
   width: 15px;
   height: 15px;
   cursor: pointer;
