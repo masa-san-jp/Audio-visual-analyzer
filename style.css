@@ -4,6 +4,8 @@
   --section-build: #c90;
   --section-drop: #e33;
   --section-main: #999;
+  /* 操作パネルの見出し用アクセント（選択中ボタンの青と同系統。見出しの文字と細い線だけに使い、UI 全体の 10% 未満に抑える） */
+  --accent: #6fa8ff;
 }
 #section-strip { display: flex; height: 3px; width: 100%; }
 #section-strip[hidden] { display: none; }
@@ -155,11 +157,14 @@ body.gpu-type [data-gpu-hide] { display: none !important; }
 }
 
 .control-group h2 {
-  font-size: 10px;
-  font-weight: 600;
+  font-size: 11px;
+  font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.08em;
-  color: #555;
+  color: var(--accent);
+  border-left: 2px solid var(--accent);
+  padding-left: 6px;
+  line-height: 1.3;
   margin-bottom: 8px;
 }
 
