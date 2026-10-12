@@ -6,12 +6,15 @@
   --section-main: #999;
   /* 操作パネルの見出し用アクセント（選択中ボタンの青と同系統。見出しの文字と細い線だけに使い、UI 全体の 10% 未満に抑える） */
   --accent: #6fa8ff;
-  /* 見出しの帯（白抜き文字が読める深めの青。白とのコントラスト比 4.5 以上） */
-  --accent-fill: #2f6fd6;
-  /* 選択中を表す色。見出しの青と区別できるよう、反対寄りの色相（琥珀）にする */
-  --selected-fill: #f0a43a;
-  --selected-line: #ffc266;
-  --selected-ink: #1a1a1a;
+  /* 見出しの帯。Apple HIG ダークモードの systemIndigo（白抜き文字とのコントラスト比 約 4.4） */
+  --accent-fill: #5E5CE6;
+  /* 選択中を表す色。Apple HIG ダークモードの systemTeal。見出しのインディゴと区別できる水色で、
+     塗りつぶさず、薄い地に色付きの文字と枠で示す */
+  --selected-fill: #64D2FF;
+  --selected-line: #64D2FF;
+  --selected-ink: #64D2FF;
+  --selected-bg: color-mix(in srgb, #64D2FF 20%, #1c1c1c);
+  --selected-bg-hover: color-mix(in srgb, #64D2FF 30%, #1c1c1c);
 }
 #section-strip { display: flex; height: 3px; width: 100%; }
 #section-strip[hidden] { display: none; }
@@ -202,12 +205,12 @@ button:disabled {
 }
 
 button.active:hover:not(:disabled) {
-  background: var(--selected-line);
+  background: var(--selected-bg-hover);
   color: var(--selected-ink);
 }
 
 button.active {
-  background: var(--selected-fill);
+  background: var(--selected-bg);
   border-color: var(--selected-line);
   color: var(--selected-ink);
   font-weight: 600;
