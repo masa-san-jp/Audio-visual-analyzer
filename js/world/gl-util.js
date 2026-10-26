@@ -287,4 +287,13 @@ class WorldGL {
     gl.deleteBuffer(this.ubo); gl.deleteVertexArray(this.vao);
   }
 }
-if (typeof module !== 'undefined' && module.exports) { module.exports = { WorldGL, OVERSCAN, WORLD_DOMAIN_MARGIN }; }
+// '#RRGGBB'（sRGB）を linear に変換して out[0..2] に書く
+function worldSrgbToLinear(hex, out = new Float32Array(3)) {
+  const v = parseInt(hex.slice(1), 16);
+  for (let i = 0; i < 3; i++) {
+    const c = ((v >> (16 - 8 * i)) & 255) / 255;
+    out[i] = c <= .04045 ? c / 12.92 : Math.pow((c + .055) / 1.055, 2.4);
+  }
+  return out;
+}
+if (typeof module !== 'undefined' && module.exports) { module.exports = { WorldGL, OVERSCAN, WORLD_DOMAIN_MARGIN, worldSrgbToLinear }; }
