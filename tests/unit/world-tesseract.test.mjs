@@ -68,9 +68,9 @@ function realEngine(kinds=['main'],duration=10) {
 }
 
 test('UW-T-01 定数・パレット・linear変換・登録',()=>{
-  const expected={PITCH:.02,LAYERS:6,LAYER_DZ:.8,NEAR:.25,NEAR_FADE:.35,FAR_FADE:1.2,FOG:3.5,PRESENCE:.8,
-    W_MIN:.06,W_MAX:.38,W_POW:2.5,JITTER:.6,BUNDLE:.28,BUNDLE_LO:.30,BUNDLE_HI:.70,BUNDLE_FLOOR:.08,
-    HALO_GAIN:.22,HALO_WIDTH:3,APERTURE:.012,NEIGHBOR:3,PEAK:1.6,BAND_BASE:.55,BAND_GAIN:.9,KICK_GAIN:.25,KICK_SECONDS:.18,
+  const expected={PITCH:.02,LAYERS:3,LAYER_DZ:1.2,NEAR:.25,NEAR_FADE:.35,FAR_FADE:1.2,FOG:3.5,PRESENCE:.45,
+    W_MIN:.06,W_MAX:.30,W_POW:2.5,JITTER:.6,BUNDLE:.28,BUNDLE_LO:.38,BUNDLE_HI:.60,BUNDLE_FLOOR:0,
+    HALO_GAIN:.08,HALO_WIDTH:3,APERTURE:.003,NEIGHBOR:3,PEAK:3.0,BAND_BASE:.55,BAND_GAIN:.9,KICK_GAIN:.25,KICK_SECONDS:.18,
     FLOW_WAVELENGTH:.9,FLOW_SPEED:.12,FLOW_DEPTH:.12,PULSE_FRACTION:.04,PULSE_SPEED:2.4,PULSE_LENGTH:.12,PULSE_GAIN:3,PULSE_SECONDS:1.6,PULSE_START:1.6,
     PULSE_SLOTS:4,BG:'#080502',EXPOSURE_BASE:1,EXPOSURE_FLOOR:.8,EXPOSURE_GAIN:.4,BLOOM_THRESHOLD:.8,BLOOM_STRENGTH:.55,CAMERA_EASE_SECONDS:4,
     SPEED_LOUD_GAIN:.8,SPEED_MIN:.5,SPEED_MAX:1.6};
@@ -87,7 +87,7 @@ test('UW-T-01 定数・パレット・linear変換・登録',()=>{
     assert.ok(Math.abs(pal[0].core[i]-lin([0xC1,0xC5,0xBC][i]/255))<1e-6);
   }
   const shader=r.get('WORLD_TESSERACT_FRAGMENT');
-  assert.match(shader,/const int LAYERS = 6;/);assert.match(shader,/const float PITCH = 0\.02000000;/);
+  assert.match(shader,/const int LAYERS = 3;/);assert.match(shader,/const float PITCH = 0\.02000000;/);
   assert.deepEqual(r.get('WORLD_ANALYZER_TYPES')[3],{id:'g-tesseract',label:'テッセラクト',key:4,available:true});
   assert.equal(new Analyzer().statelessRender,true);
   console.log('UW-T-01 constants='+Object.keys(C).length+' paletteFamilies='+palette.length);
