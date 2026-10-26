@@ -67,19 +67,19 @@ function glContext() {
 const lin=hex=>{const v=parseInt(hex.slice(1),16);return [16,8,0].map(s=>{const c=((v>>s)&255)/255;return c<=.04045?c/12.92:Math.pow((c+.055)/1.055,2.4);});};
 test('UW-Q-00 定数表・登録・色の linear 変換・GLSL 定数',()=>{
   assert.ok(Object.isFrozen(C));
-  const num={FIL_BUNDLES:6,FIL_PER_BUNDLE:8,FIL_SAMPLES:4096,FIL_R_MIN:1.2,FIL_R_SPAN:1.2,FIL_TILT:70,FIL_OMEGA_MIN:.12,FIL_OMEGA_SPAN:.25,FIL_SPAN:2.6,
+  const num={FIL_BUNDLES:6,FIL_PER_BUNDLE:16,FIL_SAMPLES:4096,FIL_R_MIN:1.2,FIL_R_SPAN:1.2,FIL_TILT:70,FIL_OMEGA_MIN:.12,FIL_OMEGA_SPAN:.25,FIL_SPAN:2.6,
     FIL_WAVE_M_MIN:3,FIL_WAVE_M_SPAN:4,FIL_WAVE_A_MIN:.06,FIL_WAVE_A_SPAN:.16,FIL_WAVE_NU:1.3,FIL_WAVE_LOUD:.8,FIL_WAVE_BAND:.6,
-    FIL_BUNDLE_W:.10,FIL_RADIAL_W:.05,FIL_GAIN:.35,FIL_PULSE_FRACTION:.35,FIL_PULSE_SPEED:.9,FIL_PULSE_WIDTH:.03,FIL_PULSE_GAIN:4,FIL_PULSE_SECONDS:1.4,
-    SHELL_COUNT:262144,SHELL_R:.8,SHELL_JITTER:.06,SHELL_SPRAY:.10,SHELL_SPRAY_MIN:1.12,SHELL_SPRAY_SPAN:.5,SHELL_SPRAY_GAIN:.45,
-    CRACK_FREQ:3.2,CRACK_WIDTH:.035,CRACK_FLOOR:.05,SHELL_SPIN:.06,SHELL_GAIN:.5,BURST_GROW:1.8,BURST_SECONDS:4,IMPLODE:.85,
-    CORE_RADIUS:.05,CORE_GAIN:6,CORE_KICK:1.5,CORE_HALO:.15,SPARK_BURSTS:16,SPARK_PER_BURST:768,SPARK_TAPS:4,
-    SPARK_SPEED_MIN:1.2,SPARK_SPEED_MAX:4,SPARK_LIFE_MIN:.5,SPARK_LIFE_SPAN:.9,SPARK_DRAG:1.6,SPARK_GRAVITY:2.2,SPARK_SHUTTER:1/30,SPARK_GAIN:2.2,
-    SPARK_BOKEH:.12,SPARK_BOKEH_NEAR:1,STAR_GRID:420,STAR_PROB:.06,STAR_RADIUS_PX:.6,STAR_GAIN:1.4,
+    FIL_BUNDLE_W:.22,FIL_RADIAL_W:.10,FIL_GAIN:2,FIL_PULSE_FRACTION:.35,FIL_PULSE_SPEED:.9,FIL_PULSE_WIDTH:.03,FIL_PULSE_GAIN:4,FIL_PULSE_SECONDS:1.4,
+    SHELL_COUNT:262144,SHELL_R:.8,SHELL_JITTER:.30,SHELL_SPRAY:.18,SHELL_SPRAY_MIN:1.12,SHELL_SPRAY_SPAN:.5,SHELL_SPRAY_GAIN:.45,
+    CRACK_FREQ:4,CRACK_WIDTH:.08,CRACK_FLOOR:.05,SHELL_SPIN:.06,SHELL_GAIN:5,BURST_GROW:.4,BURST_SECONDS:4,IMPLODE:.85,
+    CORE_RADIUS:.05,CORE_GAIN:6,CORE_KICK:1.5,CORE_HALO:.03,SPARK_BURSTS:16,SPARK_PER_BURST:768,SPARK_TAPS:4,
+    SPARK_SPEED_MIN:1.2,SPARK_SPEED_MAX:4,SPARK_LIFE_MIN:.5,SPARK_LIFE_SPAN:.9,SPARK_DRAG:1.6,SPARK_GRAVITY:2.2,SPARK_SHUTTER:1/30,SPARK_GAIN:12,
+    SPARK_BOKEH:.3,SPARK_BOKEH_NEAR:1,STAR_GRID:420,STAR_PROB:.06,STAR_RADIUS_PX:.6,STAR_GAIN:1.4,
     BEAM_COUNT:3,BEAM_WIDTH:.06,BEAM_GAIN:.35,BASE_SIZE:1.6,COC_K:26,MAX_POINT:64,BAND_BASE:.55,BAND_GAIN:.9,KICK_SECONDS:.18,
-    EXPOSURE_BASE:1,EXPOSURE_FLOOR:.8,EXPOSURE_GAIN:.4,BLOOM_THRESHOLD:.7,BLOOM_STRENGTH:.9,SCENE_FADE:2,CAMERA_EASE_SECONDS:4,
+    EXPOSURE_BASE:1,EXPOSURE_FLOOR:.8,EXPOSURE_GAIN:.4,BLOOM_THRESHOLD:.7,BLOOM_STRENGTH:.6,SCENE_FADE:2,CAMERA_EASE_SECONDS:4,
     SPEED_LOUD_GAIN:.8,SPEED_MIN:.5,SPEED_MAX:1.6};
   for(const [k,v] of Object.entries(num))assert.equal(C[k],v,k);
-  assert.equal(C.FIL_BUNDLES*C.FIL_PER_BUNDLE*C.FIL_SAMPLES,196608);assert.equal(C.SPARK_BURSTS*C.SPARK_PER_BURST*C.SPARK_TAPS,49152);
+  assert.equal(C.FIL_BUNDLES*C.FIL_PER_BUNDLE*C.FIL_SAMPLES,393216);assert.equal(C.SPARK_BURSTS*C.SPARK_PER_BURST*C.SPARK_TAPS,49152);
   assert.deepEqual([C.FIL_CORE,C.FIL_EDGE,C.STAR_COLOR,C.GROUND_BLACK,C.GROUND_TEAL_CENTER,C.GROUND_TEAL_EDGE,C.BEAM_COLOR],
     ['#EBE0C4','#C3C3A8','#9D9287','#060B04','#0D2226','#060E0A','#566B67']);
   assert.deepEqual(C.SHELL_GOLD.map(g=>[g[0],g[1]]),[['#925A05',29.4],['#A66704',25.3],['#BA7704',20.1],['#CE8B07',14.9],['#9D9287',10.2]]);
@@ -95,7 +95,7 @@ test('UW-Q-00 定数表・登録・色の linear 変換・GLSL 定数',()=>{
   const cum=C.SHELL_GOLD.reduce((a,g)=>a+g[1],0);assert.match(shader,new RegExp('const float GOLD_CUM0 = '+(C.SHELL_GOLD[0][1]/cum).toFixed(8)));
   // 加算ブレンドの点は 1 回の drawArrays（下の GL モックテスト）。smoothstep の逆順引数は使わない。
   assert.doesNotMatch(r.get('WORLD_QUANTUM_POINT_FRAGMENT'),/smoothstep\(1\.,/);
-  console.log('UW-Q-00 constants='+Object.keys(num).length+' filPoints=196608 sparkPoints=49152');
+  console.log('UW-Q-00 constants='+Object.keys(num).length+' filPoints=393216 sparkPoints=49152');
 });
 test('UW-Q-01 区間の重み表（§3.2）・variation 奇数≥3 の main',()=>{
   const table={intro:[0,1,0,0],build:[1,.35,0,1],drop:[.35,1,1,0],break:[1,0,0,1],main:[1,0,.7,1],outro:[0,1,0,0]};
@@ -191,7 +191,7 @@ test('UW-Q GL モック：init/step/render が通り、背景 1 回＋点 1 回�
   const base=gl.calls.length;analyzer.render(input);
   const draws=gl.calls.slice(base).filter(c=>c.mode!==undefined);
   assert.equal(draws.length,2);assert.equal(draws[0].mode,gl.TRIANGLES);assert.equal(draws[1].mode,gl.POINTS);
-  assert.equal(draws[1].count,196608+262144+49152);assert.equal(draws[0].fbo,draws[1].fbo);
+  assert.equal(draws[1].count,393216+262144+49152);assert.equal(draws[0].fbo,draws[1].fbo);
   assert.notEqual(draws[0].program,draws[1].program);
   assert.ok(analyzer.exposure>0&&Number.isFinite(analyzer.exposure));
   for(const a of [analyzer.camPos,analyzer.camForward,analyzer.camRight,analyzer.camUp,analyzer.corePx])for(const v of a)assert.ok(Number.isFinite(v));
