@@ -94,6 +94,10 @@ const RENDERER_REGISTRY = {
     label: 'ストレンジアトラクター', group: 'GPU', gpu: true, stateful: false,
     capabilities: { gpu: true },
   },
+  'g-tesseract': {
+    label: 'テッセラクト', group: 'GPU', gpu: true, stateful: false,
+    capabilities: { gpu: true },
+  },
 };
 
 // タイプ一覧を group 順で返す（UI の optgroup 構築用）

@@ -132,7 +132,7 @@ test('UW-06 GPU命令: 流体射影24反復・円環・同時合成・MFS即時u
   const gl = worldCommandGl(), canvas = { width: 1920, height: 1080, getContext: () => gl };
   gl.canvas = canvas;
   const runtime = loadClassic(['js/vis-utils.js', 'js/mfs-const.js', 'js/mfs-view.js', 'js/world/gl-util.js',
-    'js/world/fluid.js', 'js/world/particles.js', 'js/world/score.js', 'js/world/analyzer-types.js', 'js/world/g-fluid2.js', 'js/world/g-rings.js', 'js/world/g-galaxy.js', 'js/world/g-gargantua.js', 'js/world/g-attractor.js', 'js/world/post.js', 'js/world/world-engine.js']);
+    'js/world/fluid.js', 'js/world/particles.js', 'js/world/score.js', 'js/world/analyzer-types.js', 'js/world/g-fluid2.js', 'js/world/g-rings.js', 'js/world/g-galaxy.js', 'js/world/g-gargantua.js', 'js/world/g-attractor.js', 'js/world/g-tesseract.js', 'js/world/post.js', 'js/world/world-engine.js']);
   const engine = new (runtime.get('WorldEngine'))(canvas), score = runtime.get('compileWorldScore')(fixture, 11);
   const features = new (runtime.get('MfsFrameView'))(), layout = runtime.get('MFS_LAYOUT');
   engine.setScore(score);
@@ -172,7 +172,7 @@ test('UW-07 曲の三色だけで全抽象状態を配色・種別をまたぐ�
 function worldTestEngine() {
   const gl = worldCommandGl(), canvas = { width: 1920, height: 1080, getContext: () => gl }; gl.canvas = canvas;
   const runtime = loadClassic(['js/vis-utils.js', 'js/mfs-const.js', 'js/mfs-view.js', 'js/world/gl-util.js',
-    'js/world/fluid.js', 'js/world/particles.js', 'js/world/score.js', 'js/world/analyzer-types.js', 'js/world/g-fluid2.js', 'js/world/g-rings.js', 'js/world/g-galaxy.js', 'js/world/g-gargantua.js', 'js/world/g-attractor.js', 'js/world/post.js', 'js/world/world-engine.js']);
+    'js/world/fluid.js', 'js/world/particles.js', 'js/world/score.js', 'js/world/analyzer-types.js', 'js/world/g-fluid2.js', 'js/world/g-rings.js', 'js/world/g-galaxy.js', 'js/world/g-gargantua.js', 'js/world/g-attractor.js', 'js/world/g-tesseract.js', 'js/world/post.js', 'js/world/world-engine.js']);
   const engine = new (runtime.get('WorldEngine'))(canvas); engine.setScore(runtime.get('compileWorldScore')(fixture, 11));
   return { engine, gl };
 }
@@ -658,7 +658,7 @@ test('UW-39 WORLD-13 タイプ契約: ブラックホールkey2・32帯域・半
   assert.deepEqual([engine.gpu.textures.length,engine.gpu.fbos.length,engine.gpu.programs.length],resources);
   for(const id of ['g-terrain','g-rings','g-galaxy'])assert.throws(()=>engine.selectType(id),RangeError);
   const types=loadClassic(['js/world/gl-util.js','js/world/analyzer-types.js']).get('WORLD_ANALYZER_TYPES');
-  assert.deepEqual(Array.from(types,t=>t.id),['g-fluid','g-gargantua','g-attractor']);
+  assert.deepEqual(Array.from(types,t=>t.id),['g-fluid','g-gargantua','g-attractor','g-tesseract']);
   assert.equal(types[1].key,2);assert.equal(types[1].label,'ブラックホール');
   console.log(`UW-39 availableTypes=${types.filter(t=>t.available).length} annuli=32 internal=960x540 latencyFrames=0 fadeSec=.5 inactiveFluidSteps=0 GPUResourceGrowth=0`);
 });

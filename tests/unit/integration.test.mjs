@@ -29,9 +29,9 @@ const runtime = loadClassic([
 ], { document: _d, window: { devicePixelRatio: 1 }, WorldExporter: class {}, WorldEngine: class {} });
 const get = runtime.get;
 const registry = get('RENDERER_REGISTRY');
-const GPU_IDS = ['g-fluid', 'g-gargantua', 'g-attractor'];
+const GPU_IDS = ['g-fluid', 'g-gargantua', 'g-attractor', 'g-tesseract'];
 
-test('UI-01 レジストリ: GPU 3 項目・グループ GPU が最後・capabilities は gpu のみ・create なし', () => {
+test('UI-01 レジストリ: GPU 4 項目・グループ GPU が最後・capabilities は gpu のみ・create なし', () => {
   const order = get('RENDERER_GROUP_ORDER');
   assert.equal(order.at(-1), 'GPU');
   const gpuKeys = Object.keys(registry).filter((key) => registry[key].gpu);

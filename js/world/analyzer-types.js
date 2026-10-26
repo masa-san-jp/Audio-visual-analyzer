@@ -3,7 +3,8 @@
 const WORLD_ANALYZER_TYPES = [
   { id: 'g-fluid', label: 'スペクトル流体', key: 1, available: true },
   { id: 'g-gargantua', label: 'ブラックホール', key: 2, available: true },
-  { id: 'g-attractor', label: 'ストレンジアトラクター', key: 3, available: true }
+  { id: 'g-attractor', label: 'ストレンジアトラクター', key: 3, available: true },
+  { id: 'g-tesseract', label: 'テッセラクト', key: 4, available: true }
 ];
 const WORLD_BAND_FLOOR = .12;
 const WORLD_BAND_RANGE = .70;
