@@ -14,7 +14,7 @@ class WorldEngine {
     this.canvas = canvas; this.seed = seed; this.gpu = new WorldGL(canvas);
     this.post = new WorldPost(this.gpu, canvas.width, canvas.height);
     this.scene = this.gpu.target(canvas.width, canvas.height);
-    this.types = [new WorldFluid2Analyzer(), new WorldGargantuaAnalyzer(), new WorldAttractorAnalyzer(), new WorldTesseractAnalyzer()];
+    this.types = [new WorldFluid2Analyzer(), new WorldGargantuaAnalyzer(), new WorldAttractorAnalyzer(), new WorldTesseractAnalyzer(), new WorldQuantumAnalyzer()];
     for (let i = 0; i < this.types.length; i++) this.types[i].init(this.gpu);
     this.type = this.types[0]; this.fadeElapsed = .5; this.previousPostMode = 0;
     this.typeTarget = this.gpu.target(canvas.width, canvas.height); this.typeSnapshot = this.gpu.target(canvas.width, canvas.height);
@@ -348,6 +348,7 @@ class WorldEngine {
     this.post.gargantua = this.type.id === 'g-gargantua';
     this.post.attractor = this.type.id === 'g-attractor';
     this.post.tesseract = this.type.id === 'g-tesseract';
+    this.post.quantum = this.type.id === 'g-quantum';
     this.post.fluid2 = this.type.id === 'g-fluid';
     this.post.kick = this.post.gargantua ? this.type.music[0] : 0;
     this.post.exposureMultiplier = this.post.gargantua ? this.type.exposureMultiplier : 1;

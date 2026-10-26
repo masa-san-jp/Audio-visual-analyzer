@@ -29,8 +29,8 @@ test('UW-47 全WORLD vertex/fragmentソース: version直後にfloat/int/sampler
       assert.equal((shader.match(/#version/g) || []).length, 1, match[1] + ': version重複');
     }
   }
-  assert.equal(count, 34, '全34シェーダーを監査する');
-  assert.equal(vertices, 7); assert.equal(fragments, 27);
+  assert.equal(count, 37, '全37シェーダーを監査する');
+  assert.equal(vertices, 8); assert.equal(fragments, 29);
   assert.deepEqual(failures, [], '宣言より前に完全なprecisionヘッダーが必要');
   console.log('UW-47 shaders=' + count + ' vertex=' + vertices + ' fragment=' + fragments + ' headerFailures=' + failures.length);
 });
