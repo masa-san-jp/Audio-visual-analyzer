@@ -18,6 +18,7 @@ v2 は試作（scratchpad/proto/tess4〜7.html）をオーナーと往復して�
 - ブラックホールのように常に光らせ、明るさは音楽に追従させる。
 - カメラは速くダイナミックに動き続ける。速さは最初の案の ×0.8（明滅が見える速さ）。
 - 「構造と色はいい」「まぁいいですよ」で確定。
+- 2026-10-28「短く切り替わりすぎ。画面酔いすると思う」: 直進を 1〜3 部屋から 3〜7 部屋へ、角の丸みを .9 から 1 へ（2 では押し出しを掠めた）、視線の先読みを 16 から 24 単位へ、回転と傾き・首振りを弱めた（§2 の値）。
 
 ### 0.3 試作での実測（1280×720、128 BPM のテスト曲 14〜34 秒）
 - 拍のフレームでは画面平均輝度が約 21 上がる。拍以外のフレームの変化は約 ±10。
@@ -42,19 +43,22 @@ v1 の定数・パレット・カメラ表（`WORLD_TESSERACT_PALETTE`、`WORLD_
 const WORLD_TESSERACT = Object.freeze({
   FOV: 80,                       // 縦の画角（度）
   SPEED_BASE: 6, SPEED_LOUD: 9, SPEED_SCALE: .8,   // 前進の速さ = SPEED_SCALE*(SPEED_BASE+SPEED_LOUD*loud) [単位/秒]
-  CORNER: .9,                    // 道の角の丸み（2 次ベジエの半径）
-  LOOK_STEPS: 8, LOOK_STEP: 2,   // 視線 = 先の道 k*LOOK_STEP（k=1..8）への方向の平均
-  BANK_NEAR: 6, BANK_FAR: 16, BANK_GAIN: 1.1,      // 曲がる向きへの傾き
-  ROLL_RATE: .28, ROLL_SWAY: .6, ROLL_SWAY_RATE: .36,
-  SWAY_RATE_X: .72, SWAY_X: .35, SWAY_RATE_Y: .56, SWAY_Y: .28, SWAY_PHASE_Y: 1.3, SWAY_RATE_Z: .4, SWAY_Z: .2, SWAY_PHASE_Z: 2.1,
-  PATH_NODES: 4096,              // 道の折れ点の数（1 区間 4〜12 単位 → 16000 単位以上。最速 12 単位/秒で 20 分超）
+  CORNER: 1,                     // 道の角の丸み（2 次ベジエの半径。角の中点は通路の中心から .35 ずれる。2 では押し出しの表面から .04 まで寄って掠めた）
+  ROOMS_MIN: 3, ROOMS_SPAN: 5,   // 1 区間に進む部屋の数（3〜7）
+  LOOK_STEPS: 8, LOOK_STEP: 3,   // 視線 = 先の道 k*LOOK_STEP（k=1..8）への方向の平均
+  BANK_NEAR: 8, BANK_FAR: 24, BANK_GAIN: .6,       // 曲がる向きへの傾き
+  ROLL_RATE: .12, ROLL_SWAY: .35, ROLL_SWAY_RATE: .25,
+  SWAY_RATE_X: .5, SWAY_X: .22, SWAY_RATE_Y: .4, SWAY_Y: .18, SWAY_PHASE_Y: 1.3, SWAY_RATE_Z: .28, SWAY_Z: .12, SWAY_PHASE_Z: 2.1,
+  PATH_NODES: 4096,              // 道の折れ点の数（1 区間 12〜28 単位 → 49000 単位以上。最速 12 単位/秒で 60 分超）
   LEVEL_ATTACK: .048, LEVEL_RELEASE: .26,          // 帯域群のなめらかな音量の時定数（秒）
   LOUD_ATTACK: .065, LOUD_RELEASE: .4,             // 全体音量の時定数（秒）
   LOUD_LO: .33, LOUD_HI: .93,    // loudness.level を 0..1 へ写す範囲（§10 の実測: テスト曲で静か .40、ドロップ .66〜.69 を、試作の loud .12、.57 へ）
   ENERGY_TAU: .54, CENTROID_TAU: 1.09,
   PHASE_BASE: .015, PHASE_GAIN: .12, PHASE_RATE: 4, PHASE_TIMBRE: .6,
   AGE_MAX: 9, REFRACTORY: .12,   // 同じ群の立ち上がりを数えない間隔（秒）
-  EXPOSURE: 1.4,                 // 試作の後処理（ACES の前に ×1.05）と、エンジンの後処理（×.75）の差を埋める
+  BEAT_HOLD: 2,                  // 最後の拍からこの秒数のあいだは拍だけで明滅させる
+  EXPOSURE: 1.8,                 // 試作の後処理との差を埋める。1.4 ではドロップの画面平均輝度が中央値 64 で、試作（約 100〜110）より暗かった
+  FLASH_GAIN: 1.6,               // 拍の明滅の強さ（試作の値に掛ける）。1.0 では拍での平均輝度の上昇が 8 で、試作の 21 に届かなかった
   VIGNETTE: .35,
   BLOOM_THRESHOLD: .05, BLOOM_STRENGTH: .7
 });
@@ -96,6 +100,7 @@ const int MN=4;
 const int S=3;
 const float EXPOSURE=${C.EXPOSURE.toFixed(8)};
 const float VIGNETTE=${C.VIGNETTE.toFixed(8)};
+const float FLASH_GAIN=${C.FLASH_GAIN.toFixed(8)};
 const vec3 WOOD[6]=vec3[](${VEC3_LIST(WOOD)});
 const vec3 BOOK[8]=vec3[](${VEC3_LIST(BOOK)});
 const vec3 SILVER[4]=vec3[](${VEC3_LIST(SILVER)});
@@ -122,7 +127,7 @@ float flash1(ivec3 key,int a,float along,float ag,float cn){
   float org=(h3(kk,a*7+59)-.5)*60.,dir=h3(kk,a*7+61)<.5?-1.:1.;
   float x=(along-org)*dir-26.*ag;
   float stroke=smoothstep(-70.,0.,x)*(1.-smoothstep(0.,4.,x));
-  return sel*env*(.6+2.6*stroke);
+  return sel*env*(.6+2.6*stroke)*FLASH_GAIN;
 }
 float flash(ivec3 key,int a,float along){
   int b=int(h3(key,a*7+47)*4.);
@@ -323,7 +328,8 @@ void main(){
 6. `phaseAcc += dt*(PHASE_BASE+PHASE_GAIN*energy*energy)*PHASE_RATE`。シェーダーへ渡す `phase = phaseAcc + PHASE_TIMBRE*(cen-1.5)`。
 7. 立ち上がり: `features.onset.flags` の bit g（g=0..3。MFS の群は 50–150 Hz、150–2500 Hz、5–15 kHz、全帯域）。
    音声なしの preview（`engine.preview`）では、`engine.beatIndex` が進んだステップ（新しい拍）で群 0 と 1、`engine.score.downbeats` を越えたステップで群 2 と 3 を立てる。
-   さらに、音声のある経路では拍（`features.tempo.beatFlag`）で 4 群すべてを立てる。
+   音声のある経路では、拍（`features.tempo.beatFlag`）で 4 群すべてを立てる。拍があるあいだ（最後の拍から BEAT_HOLD 秒以内）は帯域ごとの立ち上がりを使わず、拍が途絶えたときだけ使う。
+   理由（2026-10-28 の実測 2 回目）: 帯域ごとの立ち上がりも併用すると、MFS は中高域の立ち上がりを拍より多く出すため、違う束が毎秒何度も光り始めて明滅が散り、拍での平均輝度の上昇が 5 しかなかった。
    理由（2026-10-28 の実測）: MFS の群 1（150–2500 Hz）の立ち上がりは 128 BPM のテスト曲で 26 秒に 2〜3 回、群 2・3 も拍の 1/3 ほどしか立たない。
    試作の解析では拍ごとに 4 群が揃って立っていたため、エンジンでは明滅する束が約 1/4 になり、拍での画面平均輝度の上昇が試作の 21 に対して 3 しかなかった。
    同じ群が `REFRACTORY`（0.12 秒）以内に再び立つ場合は数えない（拍と立ち上がりが同時に来ても 1 回）。
@@ -336,7 +342,7 @@ void main(){
 ### 6.1 道（折れ線）
 部屋と部屋の間の通路（座標がすべて「4 の倍数 + 2」の線）を進む。道は乱数の種 `engine.score.seed` から決まる（種が変わったら作り直す）。
 - 乱数: `x = (x*1664525 + 1013904223) >>> 0; return x/4294967296`（初期値 = seed >>> 0）。
-- 折れ点 0 = (2,2,2)、進む軸 = 2（z）、向き = +1。区間 k ごとに `n = 1+floor(R()*3)` 部屋（長さ 4n）進んで次の折れ点へ行き、残り 2 軸からどちらかを `R()<.5` で選んで軸を替え、向きを `R()<.5 ? -1 : 1` で選ぶ（乱数を呼ぶ順はこのとおり: n、軸、向き）。
+- 折れ点 0 = (2,2,2)、進む軸 = 2（z）、向き = +1。区間 k ごとに `n = ROOMS_MIN+floor(R()*ROOMS_SPAN)` 部屋（3〜7、長さ 4n）進んで次の折れ点へ行き、残り 2 軸からどちらかを `R()<.5` で選んで軸を替え、向きを `R()<.5 ? -1 : 1` で選ぶ（乱数を呼ぶ順はこのとおり: n、軸、向き）。
 - 折れ点 PATH_NODES 個を `Float64Array` に作り、各区間の累積距離も持つ。
 
 ### 6.2 道の上の位置 `at(s, out)`（角を 2 次ベジエで丸める、r = CORNER）
@@ -373,7 +379,7 @@ renderAt は時刻 0 から全ステップを進めるので、状態を持つ�
 ## 9. テスト（tests/unit/world-tesseract.test.mjs を書き換え）
 - 定数・色: 表の値、GLD が金の標準色 5 つであること、AMB と GLD の色相が 15°〜55°（アンバー〜黄金）に入ること。
 - シェーダー: 試作と同じ主要関数（beam、trace、shade、flash1、palCol、beamLight、mat）を含み、`phase`・`loud` などの uniform を宣言していること。
-- 道: 同じ種で同じ折れ点。折れ点の座標がすべて 4 の倍数 + 2。隣の折れ点とは 1 軸だけが 4〜12 異なる。`at()` が区間の境目と角の前後で連続（距離 0.01 進めた差が 0.02 以下）。
+- 道: 同じ種で同じ折れ点。折れ点の座標がすべて 4 の倍数 + 2。隣の折れ点とは 1 軸だけが 12〜28 異なる。`at()` が区間の境目と角の前後で連続（距離 0.01 進めた差が 0.02 以下）。
 - 向き: 60 fps で 60 秒進めたとき、1 ステップあたりの f と up の角度変化の最大が 0.35 rad 未満（飛びがない）。up と f が直交（|dot| < 1e-6）。
 - 音の状態: flags の bit で cnt・age・age2 が更新されること、同じ t で二重に数えないこと、sm・loud の立ち上がりと減衰の時定数、phase が単調に増えること（PHASE_TIMBRE の項を除く）。
 - preview: 拍の時刻で群 0・1 が立つこと。

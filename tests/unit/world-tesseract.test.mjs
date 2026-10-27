@@ -77,10 +77,10 @@ function setBands(features,fn){for(let i=0;i<32;i++)features.raw[L.BANDS_SMOOTH+
 function stepAt(s,t,dt){s.input.tSec=t;s.input.dt=dt;s.analyzer.step(s.input);}
 
 test('UW-T-01 定数・色・シェーダー本文・登録',()=>{
-  const expected={FOV:80,SPEED_BASE:6,SPEED_LOUD:9,SPEED_SCALE:.8,CORNER:.9,LOOK_STEPS:8,LOOK_STEP:2,BANK_NEAR:6,BANK_FAR:16,BANK_GAIN:1.1,
-    ROLL_RATE:.28,ROLL_SWAY:.6,ROLL_SWAY_RATE:.36,SWAY_RATE_X:.72,SWAY_X:.35,SWAY_RATE_Y:.56,SWAY_Y:.28,SWAY_PHASE_Y:1.3,SWAY_RATE_Z:.4,SWAY_Z:.2,SWAY_PHASE_Z:2.1,
+  const expected={FOV:80,SPEED_BASE:6,SPEED_LOUD:9,SPEED_SCALE:.8,CORNER:1,ROOMS_MIN:3,ROOMS_SPAN:5,LOOK_STEPS:8,LOOK_STEP:3,BANK_NEAR:8,BANK_FAR:24,BANK_GAIN:.6,
+    ROLL_RATE:.12,ROLL_SWAY:.35,ROLL_SWAY_RATE:.25,SWAY_RATE_X:.5,SWAY_X:.22,SWAY_RATE_Y:.4,SWAY_Y:.18,SWAY_PHASE_Y:1.3,SWAY_RATE_Z:.28,SWAY_Z:.12,SWAY_PHASE_Z:2.1,
     PATH_NODES:4096,LEVEL_ATTACK:.048,LEVEL_RELEASE:.26,LOUD_ATTACK:.065,LOUD_RELEASE:.4,LOUD_LO:.33,LOUD_HI:.93,ENERGY_TAU:.54,CENTROID_TAU:1.09,
-    PHASE_BASE:.015,PHASE_GAIN:.12,PHASE_RATE:4,PHASE_TIMBRE:.6,AGE_MAX:9,REFRACTORY:.12,EXPOSURE:1.4,VIGNETTE:.35,BLOOM_THRESHOLD:.05,BLOOM_STRENGTH:.7};
+    PHASE_BASE:.015,PHASE_GAIN:.12,PHASE_RATE:4,PHASE_TIMBRE:.6,AGE_MAX:9,REFRACTORY:.12,BEAT_HOLD:2,EXPOSURE:1.8,VIGNETTE:.35,FLASH_GAIN:1.6,BLOOM_THRESHOLD:.05,BLOOM_STRENGTH:.7};
   assert.deepEqual(C,expected);assert.ok(Object.isFrozen(C));
   const col=r.get('WORLD_TESSERACT_COLORS');
   assert.deepEqual([...col.WOOD],['#2D1C15','#493225','#5C4739','#695241','#77634F','#8F7B63']);
@@ -95,14 +95,14 @@ test('UW-T-01 定数・色・シェーダー本文・登録',()=>{
   assert.ok(shader.startsWith('#version 300 es'));
   for(const fn of ['void beam(','Hit trace(','vec3 shade(','float flash1(','vec3 palCol(','float beamLight(','int mat(','float flash(','bool hasB('])assert.ok(shader.includes(fn),fn);
   for(const u of ['uniform vec2 resolution','uniform float tSec, tanH, pxk','uniform vec3 camPos','uniform mat3 camRot','uniform vec4 lvl, sm, age, age2, cnt','uniform float loud, phase'])assert.ok(shader.includes(u),u);
-  assert.ok(!shader.includes('${'));assert.match(shader,/const float EXPOSURE=1\.40000000;/);assert.match(shader,/const float VIGNETTE=0\.35000000;/);
+  assert.ok(!shader.includes('${'));assert.match(shader,/const float EXPOSURE=1\.80000000;/);assert.match(shader,/const float FLASH_GAIN=1\.60000000;/);assert.match(shader,/const float VIGNETTE=0\.35000000;/);
   assert.equal((shader.match(/vec3\(/g)||[]).length>=28,true);
   const types=r.get('WORLD_ANALYZER_TYPES');
   assert.deepEqual(types[3],{id:'g-tesseract',label:'テッセラクト',key:4,available:true});
   const a=new Analyzer();assert.equal(a.statelessRender,true);assert.equal(a.id,'g-tesseract');assert.equal(a.label,'テッセラクト');
   console.log('UW-T-01 constants='+Object.keys(C).length);
 });
-test('UW-T-02 道: 同じ種で同じ折れ点・4の倍数+2・隣は1軸だけ4〜12・at()の連続',()=>{
+test('UW-T-02 道: 同じ種で同じ折れ点・4の倍数+2・隣は1軸だけ12〜28・at()の連続',()=>{
   const a=new Analyzer(),b=new Analyzer(),d=new Analyzer(),N=C.PATH_NODES;
   a._buildPath(11);b._buildPath(11);d._buildPath(12);
   assert.deepEqual(a.pathNodes,b.pathNodes);assert.notDeepEqual(a.pathNodes,d.pathNodes);
@@ -110,7 +110,7 @@ test('UW-T-02 道: 同じ種で同じ折れ点・4の倍数+2・隣は1軸だけ
   for(let k=0;k<N;k++)for(let i=0;i<3;i++)assert.equal(Math.abs((a.pathNodes[k*3+i]-2)%4),0);
   for(let k=0;k<N-1;k++){
     const diff=[0,1,2].map(i=>Math.abs(a.pathNodes[(k+1)*3+i]-a.pathNodes[k*3+i]));
-    assert.equal(diff.filter(v=>v>0).length,1);const m=Math.max(...diff);assert.ok(m>=4&&m<=12);
+    assert.equal(diff.filter(v=>v>0).length,1);const m=Math.max(...diff);assert.ok(m>=12&&m<=28);
     assert.equal(a.pathCum[k+1]-a.pathCum[k],m);
     if(k>0)assert.notEqual(a.pathAxis[k],a.pathAxis[k-1]);
   }

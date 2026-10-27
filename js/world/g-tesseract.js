@@ -2,11 +2,12 @@
 const WORLD_TESSERACT = Object.freeze({
   FOV: 80,                       // 縦の画角（度）
   SPEED_BASE: 6, SPEED_LOUD: 9, SPEED_SCALE: .8,   // 前進の速さ = SPEED_SCALE*(SPEED_BASE+SPEED_LOUD*loud) [単位/秒]
-  CORNER: .9,                    // 道の角の丸み（2 次ベジエの半径）
-  LOOK_STEPS: 8, LOOK_STEP: 2,   // 視線 = 先の道 k*LOOK_STEP（k=1..8）への方向の平均
-  BANK_NEAR: 6, BANK_FAR: 16, BANK_GAIN: 1.1,      // 曲がる向きへの傾き
-  ROLL_RATE: .28, ROLL_SWAY: .6, ROLL_SWAY_RATE: .36,
-  SWAY_RATE_X: .72, SWAY_X: .35, SWAY_RATE_Y: .56, SWAY_Y: .28, SWAY_PHASE_Y: 1.3, SWAY_RATE_Z: .4, SWAY_Z: .2, SWAY_PHASE_Z: 2.1,
+  CORNER: 1,                     // 道の角の丸み（2 次ベジエの半径。角の中点は通路の中心から .35 ずれる。押し出しまでの余裕は .75）
+  ROOMS_MIN: 3, ROOMS_SPAN: 5,   // 1 区間に進む部屋の数 = ROOMS_MIN + floor(R()*ROOMS_SPAN)（3〜7 部屋）
+  LOOK_STEPS: 8, LOOK_STEP: 3,   // 視線 = 先の道 k*LOOK_STEP（k=1..8）への方向の平均
+  BANK_NEAR: 8, BANK_FAR: 24, BANK_GAIN: .6,       // 曲がる向きへの傾き
+  ROLL_RATE: .12, ROLL_SWAY: .35, ROLL_SWAY_RATE: .25,
+  SWAY_RATE_X: .5, SWAY_X: .22, SWAY_RATE_Y: .4, SWAY_Y: .18, SWAY_PHASE_Y: 1.3, SWAY_RATE_Z: .28, SWAY_Z: .12, SWAY_PHASE_Z: 2.1,
   PATH_NODES: 4096,              // 道の折れ点の数
   LEVEL_ATTACK: .048, LEVEL_RELEASE: .26,          // 帯域群のなめらかな音量の時定数（秒）
   LOUD_ATTACK: .065, LOUD_RELEASE: .4,             // 全体音量の時定数（秒）
@@ -14,8 +15,10 @@ const WORLD_TESSERACT = Object.freeze({
   ENERGY_TAU: .54, CENTROID_TAU: 1.09,
   PHASE_BASE: .015, PHASE_GAIN: .12, PHASE_RATE: 4, PHASE_TIMBRE: .6,
   AGE_MAX: 9, REFRACTORY: .12,   // 同じ群の立ち上がりを数えない間隔（秒）
-  EXPOSURE: 1.4,
+  BEAT_HOLD: 2,                  // 最後の拍からこの秒数のあいだは拍だけで明滅させる（帯域ごとの立ち上がりは使わない）
+  EXPOSURE: 1.8,
   VIGNETTE: .35,
+  FLASH_GAIN: 1.6,                // 拍の明滅の強さ（試作の値に掛ける。エンジンは試作より暗く、明滅が埋もれたため）
   BLOOM_THRESHOLD: .05, BLOOM_STRENGTH: .7
 });
 // 色（sRGB）。JS で linear にしてから GLSL 定数にする（設計 §3）。
@@ -47,6 +50,7 @@ const int MN=4;
 const int S=3;
 const float EXPOSURE=${C.EXPOSURE.toFixed(8)};
 const float VIGNETTE=${C.VIGNETTE.toFixed(8)};
+const float FLASH_GAIN=${C.FLASH_GAIN.toFixed(8)};
 const vec3 WOOD[6]=vec3[](${VEC3_LIST(WOOD)});
 const vec3 BOOK[8]=vec3[](${VEC3_LIST(BOOK)});
 const vec3 SILVER[4]=vec3[](${VEC3_LIST(SILVER)});
@@ -73,7 +77,7 @@ float flash1(ivec3 key,int a,float along,float ag,float cn){
   float org=(h3(kk,a*7+59)-.5)*60.,dir=h3(kk,a*7+61)<.5?-1.:1.;
   float x=(along-org)*dir-26.*ag;
   float stroke=smoothstep(-70.,0.,x)*(1.-smoothstep(0.,4.,x));
-  return sel*env*(.6+2.6*stroke);
+  return sel*env*(.6+2.6*stroke)*FLASH_GAIN;
 }
 float flash(ivec3 key,int a,float along){
   int b=int(h3(key,a*7+47)*4.);
@@ -276,7 +280,7 @@ function worldTesseractBuildPath(seed, nodes, cum, axisOf, signOf) {
   nodes[0] = 2; nodes[1] = 2; nodes[2] = 2; cum[0] = 0;
   let axis = 2, sign = 1;
   for (let k = 0; k < n - 1; k++) {
-    const rooms = 1 + Math.floor(R() * 3), len = 4 * rooms;
+    const rooms = C.ROOMS_MIN + Math.floor(R() * C.ROOMS_SPAN), len = 4 * rooms;
     axisOf[k] = axis; signOf[k] = sign;
     nodes[(k + 1) * 3] = nodes[k * 3]; nodes[(k + 1) * 3 + 1] = nodes[k * 3 + 1]; nodes[(k + 1) * 3 + 2] = nodes[k * 3 + 2];
     nodes[(k + 1) * 3 + axis] += sign * len;
@@ -307,7 +311,7 @@ class WorldTesseractAnalyzer extends WorldBandAnalyzer {
     this.lvl.fill(0); this.sm.fill(0); this.age.fill(WORLD_TESSERACT.AGE_MAX); this.age2.fill(WORLD_TESSERACT.AGE_MAX); this.cnt.fill(0);
     this.lastOn.fill(-100); this.prevOn.fill(-100);
     this.loud = 0; this.energy = 0; this.cen = 1.5; this.phaseAcc = 0; this.phase = 0;
-    this.lastEventSec = -1; this.lastBeatIndex = 0; this.previewDownbeatIndex = 0;
+    this.lastEventSec = -1; this.lastBeatSec = -100; this.lastBeatIndex = 0; this.previewDownbeatIndex = 0;
     this.s = 0; this.pathSeed = null; this.tanH = Math.tan(WORLD_TESSERACT.FOV * Math.PI / 360);
     this.camPos.fill(0); this.camRot.fill(0); this.camRot[0] = 1; this.camRot[4] = 1; this.camRot[8] = 1;
     this.up[0] = 0; this.up[1] = 1; this.up[2] = 0; this.fwd[0] = 0; this.fwd[1] = 0; this.fwd[2] = 1;
@@ -378,9 +382,10 @@ class WorldTesseractAnalyzer extends WorldBandAnalyzer {
         while (this.previewDownbeatIndex < db.length && db[this.previewDownbeatIndex] <= t) { this.previewDownbeatIndex++; crossed = true; }
         if (crossed) { this._fire(2, t); this._fire(3, t); }
       } else {
-        const flags = f.onset.flags;
-        for (let g = 0; g < 4; g++) if (flags & (1 << g)) this._fire(g, t);
-        if (f.tempo.beatFlag) for (let g = 0; g < 4; g++) this._fire(g, t);
+        // 拍があるあいだは拍だけで 4 群を立てる（MFS は中高域の立ち上がりを拍より多く出すため、明滅が細かく散って拍が見えなくなる）。
+        // 拍が BEAT_HOLD 秒ないときだけ、帯域ごとの立ち上がりを使う
+        if (f.tempo.beatFlag) { this.lastBeatSec = t; for (let g = 0; g < 4; g++) this._fire(g, t); }
+        else if (t - this.lastBeatSec > c.BEAT_HOLD) { const flags = f.onset.flags; for (let g = 0; g < 4; g++) if (flags & (1 << g)) this._fire(g, t); }
       }
       this.lastEventSec = t;
     }
