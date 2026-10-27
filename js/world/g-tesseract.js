@@ -13,7 +13,7 @@ const WORLD_TESSERACT = Object.freeze({
   LOUD_LO: 0, LOUD_HI: 1,        // loudness.level を 0..1 へ写す範囲（実機計測で調整する）
   ENERGY_TAU: .54, CENTROID_TAU: 1.09,
   PHASE_BASE: .015, PHASE_GAIN: .12, PHASE_RATE: 4, PHASE_TIMBRE: .6,
-  AGE_MAX: 9,
+  AGE_MAX: 9, REFRACTORY: .12,   // 同じ群の立ち上がりを数えない間隔（秒）
   EXPOSURE: 1.4,
   VIGNETTE: .35,
   BLOOM_THRESHOLD: .05, BLOOM_STRENGTH: .7
@@ -346,7 +346,7 @@ class WorldTesseractAnalyzer extends WorldBandAnalyzer {
     this.pathSeed = seed; this.s = 0;
     this.up[0] = 0; this.up[1] = 1; this.up[2] = 0;
   }
-  _fire(g, t) { this.prevOn[g] = this.lastOn[g]; this.lastOn[g] = t; this.cnt[g]++; }
+  _fire(g, t) { if (t - this.lastOn[g] < WORLD_TESSERACT.REFRACTORY) return; this.prevOn[g] = this.lastOn[g]; this.lastOn[g] = t; this.cnt[g]++; }
   step(input) {
     this.update(input);
     const c = WORLD_TESSERACT, t = input.tSec, dt = input.dt, f = input.features, engine = input.engine, b = this.bandUniforms;
@@ -380,6 +380,7 @@ class WorldTesseractAnalyzer extends WorldBandAnalyzer {
       } else {
         const flags = f.onset.flags;
         for (let g = 0; g < 4; g++) if (flags & (1 << g)) this._fire(g, t);
+        if (f.tempo.beatFlag) for (let g = 0; g < 4; g++) this._fire(g, t);
       }
       this.lastEventSec = t;
     }

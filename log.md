@@ -5,6 +5,7 @@
 - `js/world/g-tesseract.js` を全面書き換え：3D DDA で間隔 4 の立方格子を進み、Nolan の交互規則の押し出し（断面 14 升 × 細分 3 の光の糸）を交差判定するフラグメントシェーダー（設計 §4 の本文）、音の状態（4 帯域群のなめらかな音量・全体音量・位相・立ち上がりの回数と経過秒）、乱数の種から作る道（折れ線、2 次ベジエで角を丸める）に沿うカメラ（上向きを平行移動で運ぶ）。v1 の定数・パレット・カメラ表は削除し、`WORLD_TESSERACT`、`WORLD_TESSERACT_COLORS`（sRGB と linear）を新設
 - 量子のビジョンは作り直しまで UI から外した：`WORLD_ANALYZER_TYPES` で `available:false`、`renderer-registry.js` の UI 一覧から除外（エンジンの型とコードは残す）。キー操作（world-app の数字キー）は `available` を見て無視する実装が既にあり、UI の一覧は registry、ランダム選択は 2D タイプのみのため、追加の除外実装は不要だった
 - テスト：`world-tesseract.test.mjs` を設計 §9 に合わせて書き換え（定数・色相・シェーダー・道・向き・音の状態・preview・量子の非表示・GL モック）。`integration.test.mjs`（GPU の UI 項目 4）、`world-quantum.test.mjs`（available:false）、`world-keys.test.mjs`（利用できるタイプだけを割当とみなす）を追従
+- 拍（`features.tempo.beatFlag`）で 4 群すべてを立て、同じ群は `REFRACTORY`（0.12 秒）以内に数えない（チケット V-03b）。理由: MFS の中域の立ち上がりが少なく、エンジンで明滅が試作の 1/4 しか出なかった
 
 ### spec.md 変更
 - v2.25：テッセラクト v2 の記述、量子のビジョンを一時的に非表示にした旨。理由：オーナー指示

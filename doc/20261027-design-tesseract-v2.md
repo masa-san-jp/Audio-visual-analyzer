@@ -53,7 +53,7 @@ const WORLD_TESSERACT = Object.freeze({
   LOUD_LO: 0, LOUD_HI: 1,        // loudness.level を 0..1 へ写す範囲（§9 の実機計測で調整する）
   ENERGY_TAU: .54, CENTROID_TAU: 1.09,
   PHASE_BASE: .015, PHASE_GAIN: .12, PHASE_RATE: 4, PHASE_TIMBRE: .6,
-  AGE_MAX: 9,
+  AGE_MAX: 9, REFRACTORY: .12,   // 同じ群の立ち上がりを数えない間隔（秒）
   EXPOSURE: 1.4,                 // 試作の後処理（ACES の前に ×1.05）と、エンジンの後処理（×.75）の差を埋める
   VIGNETTE: .35,
   BLOOM_THRESHOLD: .05, BLOOM_STRENGTH: .7
@@ -323,6 +323,10 @@ void main(){
 6. `phaseAcc += dt*(PHASE_BASE+PHASE_GAIN*energy*energy)*PHASE_RATE`。シェーダーへ渡す `phase = phaseAcc + PHASE_TIMBRE*(cen-1.5)`。
 7. 立ち上がり: `features.onset.flags` の bit g（g=0..3。MFS の群は 50–150 Hz、150–2500 Hz、5–15 kHz、全帯域）。
    音声なしの preview（`engine.preview`）では、`engine.beatIndex` が進んだステップ（新しい拍）で群 0 と 1、`engine.score.downbeats` を越えたステップで群 2 と 3 を立てる。
+   さらに、音声のある経路では拍（`features.tempo.beatFlag`）で 4 群すべてを立てる。
+   理由（2026-10-28 の実測）: MFS の群 1（150–2500 Hz）の立ち上がりは 128 BPM のテスト曲で 26 秒に 2〜3 回、群 2・3 も拍の 1/3 ほどしか立たない。
+   試作の解析では拍ごとに 4 群が揃って立っていたため、エンジンでは明滅する束が約 1/4 になり、拍での画面平均輝度の上昇が試作の 21 に対して 3 しかなかった。
+   同じ群が `REFRACTORY`（0.12 秒）以内に再び立つ場合は数えない（拍と立ち上がりが同時に来ても 1 回）。
    立ち上がった群は `prev[g]=last[g]; last[g]=t; cnt[g]++`。
    `age[g]=min(AGE_MAX,t-last[g])`、`age2[g]=min(AGE_MAX,t-prev[g])`。last と prev の初期値は −100。
 8. `reset()` ですべて初期値へ戻す（sm=0、loud=0、energy=0、cen=1.5、phaseAcc=0、cnt=0）。

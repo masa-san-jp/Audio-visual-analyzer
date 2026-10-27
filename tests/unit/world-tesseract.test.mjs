@@ -80,7 +80,7 @@ test('UW-T-01 定数・色・シェーダー本文・登録',()=>{
   const expected={FOV:80,SPEED_BASE:6,SPEED_LOUD:9,SPEED_SCALE:.8,CORNER:.9,LOOK_STEPS:8,LOOK_STEP:2,BANK_NEAR:6,BANK_FAR:16,BANK_GAIN:1.1,
     ROLL_RATE:.28,ROLL_SWAY:.6,ROLL_SWAY_RATE:.36,SWAY_RATE_X:.72,SWAY_X:.35,SWAY_RATE_Y:.56,SWAY_Y:.28,SWAY_PHASE_Y:1.3,SWAY_RATE_Z:.4,SWAY_Z:.2,SWAY_PHASE_Z:2.1,
     PATH_NODES:4096,LEVEL_ATTACK:.048,LEVEL_RELEASE:.26,LOUD_ATTACK:.065,LOUD_RELEASE:.4,LOUD_LO:0,LOUD_HI:1,ENERGY_TAU:.54,CENTROID_TAU:1.09,
-    PHASE_BASE:.015,PHASE_GAIN:.12,PHASE_RATE:4,PHASE_TIMBRE:.6,AGE_MAX:9,EXPOSURE:1.4,VIGNETTE:.35,BLOOM_THRESHOLD:.05,BLOOM_STRENGTH:.7};
+    PHASE_BASE:.015,PHASE_GAIN:.12,PHASE_RATE:4,PHASE_TIMBRE:.6,AGE_MAX:9,REFRACTORY:.12,EXPOSURE:1.4,VIGNETTE:.35,BLOOM_THRESHOLD:.05,BLOOM_STRENGTH:.7};
   assert.deepEqual(C,expected);assert.ok(Object.isFrozen(C));
   const col=r.get('WORLD_TESSERACT_COLORS');
   assert.deepEqual([...col.WOOD],['#2D1C15','#493225','#5C4739','#695241','#77634F','#8F7B63']);
@@ -183,6 +183,23 @@ test('UW-T-06 量子のビジョンは available:false・UI 一覧に出ない',
   const reg=fs.readFileSync(new URL('../../js/renderer-registry.js',import.meta.url),'utf8');
   assert.ok(!reg.includes("'g-quantum': {"));assert.ok(reg.includes("'g-tesseract': {"));
   console.log('UW-T-06 ok');
+});
+test('UW-T-07 拍と不応期: 非プレビューの拍で4群すべて・同じ群は REFRACTORY 以内に数えない',()=>{
+  // (a) 拍（beatFlag）で、立ち上がりのビットがなくても 4 群すべてが立つ
+  const s=setup(['main']),a=s.analyzer;
+  stepAt(s,.5,.016);assert.deepEqual([...a.cnt],[0,0,0,0]);
+  s.features.raw[L.BEAT_FLAG]=1;stepAt(s,1,.016);
+  assert.deepEqual([...a.cnt],[1,1,1,1]);assert.deepEqual([...a.age],[0,0,0,0]);
+  // 拍とビットが同じ時刻に来ても、群 0 と 2 は 1 回だけ数える
+  s.features.raw[L.ONSET_FLAGS]=5;stepAt(s,2,.016);
+  assert.deepEqual([...a.cnt],[2,2,2,2]);
+  // (b) 同じ群は REFRACTORY 以内の立ち上がりを無視し、無視された分は立ち上がりの時刻を進めない
+  const s2=setup(['main']),b=s2.analyzer,T=10;
+  s2.features.raw[L.ONSET_FLAGS]=1;
+  stepAt(s2,T,.016);assert.equal(b.cnt[0],1);
+  stepAt(s2,T+C.REFRACTORY/2,.016);assert.equal(b.cnt[0],1);assert.ok(Math.abs(b.age[0]-C.REFRACTORY/2)<1e-6);
+  stepAt(s2,T+C.REFRACTORY+.001,.016);assert.equal(b.cnt[0],2);assert.equal(b.age[0],0);
+  console.log('UW-T-07 ok');
 });
 test('UW-T GLモックで init/step/render が通り、stepで新しい配列を作らない',()=>{
   const {engine,gl,features}=realEngine(['intro','drop'],10),a=engine.type,g=engine.gpu;
