@@ -50,7 +50,7 @@ const WORLD_TESSERACT = Object.freeze({
   PATH_NODES: 4096,              // 道の折れ点の数（1 区間 4〜12 単位 → 16000 単位以上。最速 12 単位/秒で 20 分超）
   LEVEL_ATTACK: .048, LEVEL_RELEASE: .26,          // 帯域群のなめらかな音量の時定数（秒）
   LOUD_ATTACK: .065, LOUD_RELEASE: .4,             // 全体音量の時定数（秒）
-  LOUD_LO: 0, LOUD_HI: 1,        // loudness.level を 0..1 へ写す範囲（§9 の実機計測で調整する）
+  LOUD_LO: .33, LOUD_HI: .93,    // loudness.level を 0..1 へ写す範囲（§10 の実測: テスト曲で静か .40、ドロップ .66〜.69 を、試作の loud .12、.57 へ）
   ENERGY_TAU: .54, CENTROID_TAU: 1.09,
   PHASE_BASE: .015, PHASE_GAIN: .12, PHASE_RATE: 4, PHASE_TIMBRE: .6,
   AGE_MAX: 9, REFRACTORY: .12,   // 同じ群の立ち上がりを数えない間隔（秒）
