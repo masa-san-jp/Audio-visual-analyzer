@@ -1,4 +1,5 @@
-// 目的 — テッセラクトの定数・パレット・カメラ表・パルススロット・GPU命令を検査する — doc/20261024-design-visions-v1.md §2・§5
+// 目的 — テッセラクト v2 の定数・色・シェーダー・道・向き・音の状態・GPU命令を検査する — doc/20261027-design-tesseract-v2.md §9
+import fs from 'node:fs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { loadClassic } from '../lib/load-classic.mjs';
@@ -49,7 +50,7 @@ function commandGl() {
       if(!samplers.has(loc.p))samplers.set(loc.p,new Map());samplers.get(loc.p).set(loc.name,v);
     }
   };
-  for(const name of ['uniform1ui','uniform1f','uniform2f','uniform3fv','uniform4fv','uniform1fv'])gl[name]=(loc,...v)=>{
+  for(const name of ['uniform1ui','uniformMatrix3fv','uniform1f','uniform2f','uniform3fv','uniform4fv','uniform1fv'])gl[name]=(loc,...v)=>{
     values.set(loc,v.length===1?v[0]:v);calls.push({uniform:loc,value:v.length===1?v[0]:v});
   };
   gl.clear=()=>calls.push({clear:fbo});
@@ -67,93 +68,129 @@ function realEngine(kinds=['main'],duration=10) {
   return {engine,gl,features:new Feature()};
 }
 
-test('UW-T-01 定数・パレット・linear変換・登録',()=>{
-  const expected={PITCH:.02,LAYERS:3,LAYER_DZ:1.2,NEAR:.25,NEAR_FADE:.35,FAR_FADE:1.2,FOG:3.5,PRESENCE:.45,
-    W_MIN:.06,W_MAX:.30,W_POW:2.5,JITTER:.6,BUNDLE:.28,BUNDLE_LO:.38,BUNDLE_HI:.60,BUNDLE_FLOOR:0,
-    HALO_GAIN:.08,HALO_WIDTH:3,APERTURE:.003,NEIGHBOR:3,PEAK:3.0,BAND_BASE:.55,BAND_GAIN:.9,KICK_GAIN:.25,KICK_SECONDS:.18,
-    FLOW_WAVELENGTH:.9,FLOW_SPEED:.12,FLOW_DEPTH:.12,PULSE_FRACTION:.04,PULSE_SPEED:2.4,PULSE_LENGTH:.12,PULSE_GAIN:3,PULSE_SECONDS:1.6,PULSE_START:1.6,
-    PULSE_SLOTS:4,BG:'#080502',EXPOSURE_BASE:1,EXPOSURE_FLOOR:.8,EXPOSURE_GAIN:.4,BLOOM_THRESHOLD:.8,BLOOM_STRENGTH:.55,CAMERA_EASE_SECONDS:4,
-    SPEED_LOUD_GAIN:.8,SPEED_MIN:.5,SPEED_MAX:1.6};
+const hueOf=hex=>{
+  const v=parseInt(hex.slice(1),16),R=(v>>16)/255,G=((v>>8)&255)/255,B=(v&255)/255,mx=Math.max(R,G,B),mn=Math.min(R,G,B),d=mx-mn;
+  let h=mx===R?((G-B)/d)%6:mx===G?(B-R)/d+2:(R-G)/d+4;h*=60;return h<0?h+360:h;
+};
+const bandLevel=raw=>Math.pow(Math.max(0,Math.min(1,(raw-.12)/.7)),.8);
+function setBands(features,fn){for(let i=0;i<32;i++)features.raw[L.BANDS_SMOOTH+i]=fn(i);}
+function stepAt(s,t,dt){s.input.tSec=t;s.input.dt=dt;s.analyzer.step(s.input);}
+
+test('UW-T-01 定数・色・シェーダー本文・登録',()=>{
+  const expected={FOV:80,SPEED_BASE:6,SPEED_LOUD:9,SPEED_SCALE:.8,CORNER:.9,LOOK_STEPS:8,LOOK_STEP:2,BANK_NEAR:6,BANK_FAR:16,BANK_GAIN:1.1,
+    ROLL_RATE:.28,ROLL_SWAY:.6,ROLL_SWAY_RATE:.36,SWAY_RATE_X:.72,SWAY_X:.35,SWAY_RATE_Y:.56,SWAY_Y:.28,SWAY_PHASE_Y:1.3,SWAY_RATE_Z:.4,SWAY_Z:.2,SWAY_PHASE_Z:2.1,
+    PATH_NODES:4096,LEVEL_ATTACK:.048,LEVEL_RELEASE:.26,LOUD_ATTACK:.065,LOUD_RELEASE:.4,LOUD_LO:0,LOUD_HI:1,ENERGY_TAU:.54,CENTROID_TAU:1.09,
+    PHASE_BASE:.015,PHASE_GAIN:.12,PHASE_RATE:4,PHASE_TIMBRE:.6,AGE_MAX:9,EXPOSURE:1.4,VIGNETTE:.35,BLOOM_THRESHOLD:.05,BLOOM_STRENGTH:.7};
   assert.deepEqual(C,expected);assert.ok(Object.isFrozen(C));
-  const palette=r.get('WORLD_TESSERACT_PALETTE');
-  assert.deepEqual(palette.map(p=>[...p]),[[.426,'#C1C5BC','#929388'],[.418,'#F9F7DF','#B0A58A'],[.097,'#EEC1AE','#B28B83'],
-    [.043,'#F5F9E8','#C9CEB8'],[.009,'#EBF7F3','#BFD0CC'],[.007,'#E1EBE3','#D2DFD7']]);
-  assert.ok(Math.abs(palette.reduce((a,p)=>a+p[0],0)-1)<1e-12);
-  for(let i=1;i<palette.length;i++)assert.ok(palette[i-1][0]>=palette[i][0]);
-  // linear変換: 地 #080502 と先頭族の core #C1C5BC
-  const bg=r.get('WORLD_TESSERACT_BG_LINEAR'),pal=r.get('WORLD_TESSERACT_PALETTE_LINEAR');
-  for(let i=0;i<3;i++){
-    assert.ok(Math.abs(bg[i]-lin([8,5,2][i]/255))<1e-7);
-    assert.ok(Math.abs(pal[0].core[i]-lin([0xC1,0xC5,0xBC][i]/255))<1e-6);
-  }
+  const col=r.get('WORLD_TESSERACT_COLORS');
+  assert.deepEqual([...col.WOOD],['#2D1C15','#493225','#5C4739','#695241','#77634F','#8F7B63']);
+  assert.deepEqual([...col.BOOK],['#6B4A2C','#89612B','#806A66','#9E8785','#7A6D30','#938C47','#566B67','#B1B15F']);
+  assert.deepEqual([...col.SILVER],['#8C8473','#A49A89','#B9B1A3','#CECBC7']);
+  assert.deepEqual([...col.AMB],['#E07E34','#89612B','#8B6250','#6B4A2C','#C98A4B']);
+  assert.deepEqual([...col.GLD],['#D4AF37','#CFB53B','#DAA520','#B8860B','#E6BE8A']);
+  for(const hex of [...col.AMB,...col.GLD]){const h=hueOf(hex);assert.ok(h>=15&&h<=55,hex+' hue='+h);}
+  const lin3=r.get('WORLD_TESSERACT_COLORS_LINEAR');
+  for(let i=0;i<3;i++)assert.ok(Math.abs(lin3.GLD[0][i]-lin([0xD4,0xAF,0x37][i]/255))<1e-6);
   const shader=r.get('WORLD_TESSERACT_FRAGMENT');
-  assert.match(shader,/const int LAYERS = 3;/);assert.match(shader,/const float PITCH = 0\.02000000;/);
-  assert.deepEqual(r.get('WORLD_ANALYZER_TYPES')[3],{id:'g-tesseract',label:'テッセラクト',key:4,available:true});
-  assert.equal(new Analyzer().statelessRender,true);
-  console.log('UW-T-01 constants='+Object.keys(C).length+' paletteFamilies='+palette.length);
+  assert.ok(shader.startsWith('#version 300 es'));
+  for(const fn of ['void beam(','Hit trace(','vec3 shade(','float flash1(','vec3 palCol(','float beamLight(','int mat(','float flash(','bool hasB('])assert.ok(shader.includes(fn),fn);
+  for(const u of ['uniform vec2 resolution','uniform float tSec, tanH, pxk','uniform vec3 camPos','uniform mat3 camRot','uniform vec4 lvl, sm, age, age2, cnt','uniform float loud, phase'])assert.ok(shader.includes(u),u);
+  assert.ok(!shader.includes('${'));assert.match(shader,/const float EXPOSURE=1\.40000000;/);assert.match(shader,/const float VIGNETTE=0\.35000000;/);
+  assert.equal((shader.match(/vec3\(/g)||[]).length>=28,true);
+  const types=r.get('WORLD_ANALYZER_TYPES');
+  assert.deepEqual(types[3],{id:'g-tesseract',label:'テッセラクト',key:4,available:true});
+  const a=new Analyzer();assert.equal(a.statelessRender,true);assert.equal(a.id,'g-tesseract');assert.equal(a.label,'テッセラクト');
+  console.log('UW-T-01 constants='+Object.keys(C).length);
 });
-test('UW-T-02 カメラ表の補間・奇数variationで反転列だけ符号変更・4秒補間',()=>{
-  const expected={intro:[.03,.03,.02,.02,0,0,0,0,0,0,40,40,2.2,2.2],build:[.05,.10,.05,.35,0,6,0,4,0,-3,40,46,2.2,1.6],
-    drop:[.22,.22,.30,.30,20,26,-4,-4,-7,-7,52,52,1.4,1.4],break:[.015,.015,.03,.03,0,0,24,30,0,0,44,44,2.6,2.6],
-    main:[.08,.08,.10,.10,-10,-10,3,3,3,3,42,42,1.8,1.8],outro:[.02,.01,-.06,-.06,0,0,0,0,0,0,40,36,2.4,2.4]};
-  const camera=r.get('WORLD_TESSERACT_CAMERA');assert.deepEqual(camera,expected);let cases=0;
-  const flip=[0,2,4],deg=[2,3,4,5];
-  for(const [kind,row] of Object.entries(camera))for(const variation of [1,2,3,4,5])for(const p of [0,.25,.5,.75,1]){
-    const {analyzer,engine,input}=setup([kind]);engine.score.sections[0].variation=variation;input.tSec=p*10;analyzer.step(input);
-    for(let i=0;i<7;i++){
-      let want=row[2*i]+(row[2*i+1]-row[2*i])*smooth(p);
-      if(variation>=3&&variation%2===1&&flip.includes(i))want=-want;
-      if(deg.includes(i))want*=Math.PI/180;
-      assert.ok(Math.abs(analyzer.cameraShot[i]-want)<1e-14,kind+' v'+variation+' col'+i);cases++;
+test('UW-T-02 道: 同じ種で同じ折れ点・4の倍数+2・隣は1軸だけ4〜12・at()の連続',()=>{
+  const a=new Analyzer(),b=new Analyzer(),d=new Analyzer(),N=C.PATH_NODES;
+  a._buildPath(11);b._buildPath(11);d._buildPath(12);
+  assert.deepEqual(a.pathNodes,b.pathNodes);assert.notDeepEqual(a.pathNodes,d.pathNodes);
+  assert.deepEqual([...a.pathNodes.slice(0,3)],[2,2,2]);assert.equal(a.pathAxis[0],2);assert.equal(a.pathSign[0],1);
+  for(let k=0;k<N;k++)for(let i=0;i<3;i++)assert.equal(Math.abs((a.pathNodes[k*3+i]-2)%4),0);
+  for(let k=0;k<N-1;k++){
+    const diff=[0,1,2].map(i=>Math.abs(a.pathNodes[(k+1)*3+i]-a.pathNodes[k*3+i]));
+    assert.equal(diff.filter(v=>v>0).length,1);const m=Math.max(...diff);assert.ok(m>=4&&m<=12);
+    assert.equal(a.pathCum[k+1]-a.pathCum[k],m);
+    if(k>0)assert.notEqual(a.pathAxis[k],a.pathAxis[k-1]);
+  }
+  const p=new Float64Array(3),q=new Float64Array(3);let maxJump=0;
+  for(let s=0;s<400;s+=.01){a.at(s,p);a.at(s+.01,q);maxJump=Math.max(maxJump,Math.hypot(q[0]-p[0],q[1]-p[1],q[2]-p[2]));}
+  assert.ok(maxJump<=.02,'maxJump='+maxJump);
+  // 区間の境目と角の前後
+  for(let k=1;k<30;k++){const s=a.pathCum[k];for(const off of [-C.CORNER-.005,-.005,0,.005,C.CORNER-.005]){
+    a.at(s+off,p);a.at(s+off+.01,q);assert.ok(Math.hypot(q[0]-p[0],q[1]-p[1],q[2]-p[2])<=.02);}}
+  console.log('UW-T-02 maxStep='+maxJump.toFixed(5));
+});
+test('UW-T-03 向き: 60秒で飛びがなく up と f が直交',()=>{
+  const s=setup(['main'],70),dt=1/60;let maxAng=0,maxDot=0;
+  const pf=new Float64Array(3),pu=new Float64Array(3);
+  for(let i=0;i<3600;i++){
+    stepAt(s,i*dt,dt);const a=s.analyzer,f=a.fwd,u=a.up;
+    if(i>0){
+      const cf=Math.max(-1,Math.min(1,f[0]*pf[0]+f[1]*pf[1]+f[2]*pf[2])),cu=Math.max(-1,Math.min(1,u[0]*pu[0]+u[1]*pu[1]+u[2]*pu[2]));
+      maxAng=Math.max(maxAng,Math.acos(cf),Math.acos(cu));
     }
+    maxDot=Math.max(maxDot,Math.abs(f[0]*u[0]+f[1]*u[1]+f[2]*u[2]));
+    pf.set(f);pu.set(u);
   }
-  const {analyzer,engine,input}=setup(['intro','drop']);analyzer.step(input);input.tSec=9;analyzer.step(input);
-  const from=analyzer.cameraShot.slice();engine.sectionIndex=1;input.tSec=10;analyzer.step(input);assert.deepEqual(analyzer.cameraShot,from);
-  input.tSec=10+C.CAMERA_EASE_SECONDS/2;analyzer.step(input);for(let i=0;i<7;i++)assert.equal(analyzer.cameraShot[i],from[i]+(analyzer.cameraTarget[i]-from[i])*.5);
-  input.tSec=10+C.CAMERA_EASE_SECONDS;analyzer.step(input);assert.deepEqual(analyzer.cameraShot,analyzer.cameraTarget);
-  // 移動の積分: camZ += vz*speedFactor*motionSpeed*dt（音量係数はclamp）、基底は直交・単位長
-  for(const loud of [-2,.5,3]){
-    const s=setup(['main']);s.features.raw[L.LEVEL]=loud;s.input.dt=.5;s.input.tSec=1;s.analyzer.step(s.input);
-    const f=Math.max(C.SPEED_MIN,Math.min(C.SPEED_MAX,1+C.SPEED_LOUD_GAIN*(loud-.5)));
-    assert.ok(Math.abs(s.analyzer.camZ-s.analyzer.cameraShot[1]*f*s.input.song.motionSpeed*.5)<1e-12);
-    assert.ok(Math.abs(s.analyzer.camX-s.analyzer.cameraShot[0]*f*s.input.song.motionSpeed*.5)<1e-12);
-  }
-  const dot=(a,b)=>a[0]*b[0]+a[1]*b[1]+a[2]*b[2];
-  for(const kind of Object.keys(camera)){
-    const s=setup([kind]);s.input.tSec=3;s.analyzer.step(s.input);const a=s.analyzer;
-    for(const v of [a.camForward,a.camRight,a.camUp])assert.ok(Math.abs(dot(v,v)-1)<1e-6);
-    assert.ok(Math.abs(dot(a.camForward,a.camRight))<1e-6&&Math.abs(dot(a.camForward,a.camUp))<1e-6&&Math.abs(dot(a.camRight,a.camUp))<1e-6);
-  }
-  const t0=setup(['intro']);t0.analyzer.step(t0.input);const a0=t0.analyzer;
-  for(const [got,want] of [[a0.camForward,[0,0,1]],[a0.camRight,[1,0,0]],[a0.camUp,[0,1,0]]])for(let i=0;i<3;i++)assert.ok(Math.abs(got[i]-want[i])<1e-7);
-  console.log('UW-T-02 shotComponents='+cases);
+  assert.ok(maxAng<.35,'maxAng='+maxAng);assert.ok(maxDot<1e-6,'maxDot='+maxDot);
+  const m=s.analyzer.camRot,dot=(i,j)=>m[i*3]*m[j*3]+m[i*3+1]*m[j*3+1]+m[i*3+2]*m[j*3+2];
+  for(let i=0;i<3;i++){assert.ok(Math.abs(dot(i,i)-1)<1e-5);for(let j=i+1;j<3;j++)assert.ok(Math.abs(dot(i,j))<1e-5);}
+  // 前進: 静かなときの速さ = SPEED_SCALE*SPEED_BASE
+  const q=setup(['main']);stepAt(q,0,0);stepAt(q,1,1);assert.ok(Math.abs(q.analyzer.s-C.SPEED_SCALE*C.SPEED_BASE)<1e-9);
+  console.log('UW-T-03 maxAngle='+maxAng.toFixed(4));
 });
-test('UW-T-03 高域オンセットでパルススロットが循環・同時刻の再呼び出しで二重に入らない',()=>{
-  const {analyzer,input,features}=setup();const S=C.PULSE_SLOTS,hash=r.get('worldAttractorHash');
-  for(let i=0;i<S;i++){assert.equal(analyzer.pulses[i*4+1],-100);}
-  const seen=[];
-  for(let k=1;k<=S+2;k++){
-    input.tSec=k;features.raw[L.ONSET_FLAGS]=4;analyzer.step(input);
-    const o=(k%S)*4;assert.equal(analyzer.pulses[o],k);assert.equal(analyzer.pulses[o+1],k);
-    assert.equal(analyzer.pulses[o+2],hash(0,k,analyzer.seed)<.5?1:-1);assert.equal(analyzer.pulseSerial,k);
-    // 同時刻の再呼び出しでは増えない
-    const snap=analyzer.pulses.slice();analyzer.step(input);assert.equal(analyzer.pulseSerial,k);assert.deepEqual(analyzer.pulses,snap);
-    seen.push(o/4);
-  }
-  assert.deepEqual(seen.slice(0,S),[1,2,3,0]);assert.equal(analyzer.pulses[1*4],S+1);
-  // キックだけではパルスは増えず、キック包絡が立つ
-  input.tSec=20;features.raw[L.ONSET_FLAGS]=1;const n=analyzer.pulseSerial;analyzer.step(input);assert.equal(analyzer.pulseSerial,n);assert.equal(analyzer.kick,1);
-  // reset で t0=-100、serial=0
-  analyzer.reset();assert.equal(analyzer.pulseSerial,0);for(let i=0;i<S;i++)assert.equal(analyzer.pulses[i*4+1],-100);
-  console.log('UW-T-03 slots='+S);
+test('UW-T-04 音の状態: 立ち上がり・二重カウントなし・時定数・phase 単調増加',()=>{
+  const s=setup(['main']),a=s.analyzer;
+  stepAt(s,1,0);assert.deepEqual([...a.cnt],[0,0,0,0]);assert.equal(a.age[0],C.AGE_MAX);
+  s.features.raw[L.ONSET_FLAGS]=5; // 群 0 と 2
+  stepAt(s,2,.016);assert.deepEqual([...a.cnt],[1,0,1,0]);assert.equal(a.age[0],0);assert.equal(a.age2[0],C.AGE_MAX);
+  stepAt(s,2,.016);assert.deepEqual([...a.cnt],[1,0,1,0]); // 同じ t では増えない
+  s.features.raw[L.ONSET_FLAGS]=1;stepAt(s,3,.016);assert.equal(a.cnt[0],2);assert.equal(a.age[0],0);assert.equal(a.age2[0],1);
+  s.features.raw[L.ONSET_FLAGS]=8;stepAt(s,4,.016);assert.equal(a.cnt[3],1);assert.ok(Math.abs(a.age[0]-1)<1e-6);
+  s.features.raw[L.ONSET_FLAGS]=0;stepAt(s,20,.016);assert.equal(a.age[0],C.AGE_MAX);
+  // sm と loud の時定数
+  const s2=setup(['main']);setBands(s2.features,()=>.82);s2.features.raw[L.LEVEL]=1;
+  stepAt(s2,0,.016);const lv=bandLevel(.82);
+  assert.ok(Math.abs(s2.analyzer.sm[1]-lv*(1-Math.exp(-.016/C.LEVEL_ATTACK)))<1e-6);
+  assert.ok(Math.abs(s2.analyzer.loud-(1-Math.exp(-.016/C.LOUD_ATTACK)))<1e-9);
+  for(let i=1;i<200;i++)stepAt(s2,i*.016,.016);
+  assert.ok(s2.analyzer.sm[0]>.99*lv&&s2.analyzer.loud>.99);
+  const top=s2.analyzer.sm[2],topLoud=s2.analyzer.loud;setBands(s2.features,()=>0);s2.features.raw[L.LEVEL]=0;
+  stepAt(s2,4,.016);
+  assert.ok(Math.abs(s2.analyzer.sm[2]-top*Math.exp(-.016/C.LEVEL_RELEASE))<1e-6);
+  assert.ok(Math.abs(s2.analyzer.loud-topLoud*Math.exp(-.016/C.LOUD_RELEASE))<1e-6);
+  // phaseAcc は単調増加
+  let prev=-1;const s3=setup(['main']);for(let i=0;i<100;i++){setBands(s3.features,()=>i%7*.1);stepAt(s3,i*.016,.016);assert.ok(s3.analyzer.phaseAcc>prev);prev=s3.analyzer.phaseAcc;}
+  // reset
+  s2.analyzer.reset();assert.equal(s2.analyzer.loud,0);assert.deepEqual([...s2.analyzer.sm],[0,0,0,0]);assert.equal(s2.analyzer.cen,1.5);assert.equal(s2.analyzer.phaseAcc,0);assert.deepEqual([...s2.analyzer.cnt],[0,0,0,0]);
+  console.log('UW-T-04 ok');
 });
-test('UW-T 両タイプ共通: GLモックで init/step/render が通り、stepで新しい配列を作らない',()=>{
+test('UW-T-05 preview: 拍で群 0・1、小節頭で群 2・3',()=>{
+  const s=setup(['main']);s.engine.preview=true;s.engine.beatIndex=0;s.engine.score={seed:11,beats:[],downbeats:[2,6]};
+  const a=s.analyzer;stepAt(s,1,.016);assert.deepEqual([...a.cnt],[0,0,0,0]);
+  s.engine.beatIndex=1;stepAt(s,1.5,.016);assert.deepEqual([...a.cnt],[1,1,0,0]);assert.equal(a.age[0],0);
+  stepAt(s,2,.016);assert.deepEqual([...a.cnt],[1,1,1,1]);
+  stepAt(s,2.5,.016);assert.deepEqual([...a.cnt],[1,1,1,1]);
+  s.engine.beatIndex=2;stepAt(s,3,.016);assert.deepEqual([...a.cnt],[2,2,1,1]);
+  console.log('UW-T-05 ok');
+});
+test('UW-T-06 量子のビジョンは available:false・UI 一覧に出ない',()=>{
+  const types=r.get('WORLD_ANALYZER_TYPES');
+  assert.deepEqual(types.find(t=>t.id==='g-quantum'),{id:'g-quantum',label:'量子のビジョン',key:5,available:false});
+  assert.equal(types.filter(t=>t.available).length,4);
+  const reg=fs.readFileSync(new URL('../../js/renderer-registry.js',import.meta.url),'utf8');
+  assert.ok(!reg.includes("'g-quantum': {"));assert.ok(reg.includes("'g-tesseract': {"));
+  console.log('UW-T-06 ok');
+});
+test('UW-T GLモックで init/step/render が通り、stepで新しい配列を作らない',()=>{
   const {engine,gl,features}=realEngine(['intro','drop'],10),a=engine.type,g=engine.gpu;
   assert.equal(a.id,'g-tesseract');
   const resources=[g.textures.length,g.fbos.length,g.programs.length];
   const count=p=>gl.calls.filter(c=>c.program===p).length;
   engine._step(0,features,0);assert.equal(count(a.program),1);
-  const arrays=['camPos','camForward','camRight','camUp','pulses','cameraFrom','cameraTarget','cameraShot','bandUniforms'];
+  const arrays=['camPos','camRot','lvl','sm','age','age2','cnt','up','fwd','pathNodes','pathCum','bandUniforms'];
   const before=arrays.map(n=>a[n]);
   features.raw[L.ONSET_FLAGS]=5;engine._step(10/60,features,1/60);engine._step(11/60,features,1/60);engine._step(10.5,features,1/60);
   assert.ok(arrays.every((n,i)=>a[n]===before[i]),'配列を再確保しない');
@@ -161,6 +198,5 @@ test('UW-T 両タイプ共通: GLモックで init/step/render が通り、step�
   assert.ok(gl.calls.some(c=>c.uniform===engine.post.thresholdLoc&&c.value===C.BLOOM_THRESHOLD));
   assert.equal(count(engine.post.exposureProgram),0);
   assert.deepEqual([g.textures.length,g.fbos.length,g.programs.length],resources);
-  // 出力はフル解像度のtargetへ直接描く（半解像度なし）
   engine.dispose();console.log('UW-T GL mock draws='+gl.calls.length);
 });

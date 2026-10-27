@@ -5,7 +5,7 @@ const WORLD_ANALYZER_TYPES = [
   { id: 'g-gargantua', label: 'ブラックホール', key: 2, available: true },
   { id: 'g-attractor', label: 'ストレンジアトラクター', key: 3, available: true },
   { id: 'g-tesseract', label: 'テッセラクト', key: 4, available: true },
-  { id: 'g-quantum', label: '量子のビジョン', key: 5, available: true }
+  { id: 'g-quantum', label: '量子のビジョン', key: 5, available: false } // 作り直しまで UI から外す（エンジンの型とコードは残す）
 ];
 const WORLD_BAND_FLOOR = .12;
 const WORLD_BAND_RANGE = .70;

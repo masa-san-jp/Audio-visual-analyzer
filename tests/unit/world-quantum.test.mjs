@@ -88,7 +88,7 @@ test('UW-Q-00 定数表・登録・色の linear 変換・GLSL 定数',()=>{
   const conv=r.get('worldSrgbToLinear');
   for(const hex of ['#EBE0C4','#060B04','#566B67'])for(let k=0;k<3;k++)assert.ok(Math.abs(conv(hex,new Float32Array(3))[k]-lin(hex)[k])<1e-6);
   const types=r.get('WORLD_ANALYZER_TYPES');
-  assert.deepEqual(types.find(t=>t.id==='g-quantum'),{id:'g-quantum',label:'量子のビジョン',key:5,available:true});
+  assert.deepEqual(types.find(t=>t.id==='g-quantum'),{id:'g-quantum',label:'量子のビジョン',key:5,available:false});
   const shader=r.get('WORLD_QUANTUM_POINT_VERTEX');
   assert.match(shader,/const int SHELL_COUNT = 262144;/);assert.match(shader,/const float FIL_PULSE_GAIN = 4\.00000000;/);
   const got=shader.match(/const vec3 FIL_CORE_LIN = vec3\(([\d.]+),/)[1];assert.ok(Math.abs(Number(got)-lin('#EBE0C4')[0])<1e-6);
