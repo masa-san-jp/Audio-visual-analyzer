@@ -70,12 +70,17 @@ uniform vec4 lvl; uniform vec4 sm; uniform vec4 age; uniform float loud;
 const float EXPOSURE=${C.EXPOSURE.toFixed(8)}; const float VIGNETTE=${C.VIGNETTE.toFixed(8)};
 const vec3 TEAL[8]=vec3[](${VEC3_LIST(LIN.TEAL)}); const vec3 TEAL_BG[4]=vec3[](${VEC3_LIST(LIN.TEAL_BG)}); const vec3 SHELL[6]=vec3[](${VEC3_LIST(LIN.SHELL)}); const vec3 SUN[7]=vec3[](${VEC3_LIST(LIN.SUN)});
 const vec3 SPARK[5]=vec3[](${VEC3_LIST(LIN.SPARK)}); const vec3 GOLDB[5]=vec3[](${VEC3_LIST(LIN.GOLDB)}); const vec3 STREAK[7]=vec3[](${VEC3_LIST(LIN.STREAK)}); const vec3 MINT[5]=vec3[](${VEC3_LIST(LIN.MINT)});
+const float PXREF=1440.;
 uint hu(uint x){x^=x>>16;x*=0x7feb352du;x^=x>>15;x*=0x846ca68bu;x^=x>>16;return x;}
 float h1(ivec2 c,int s){return float(hu(uint(c.x)*73856093u^uint(c.y)*19349663u^uint(s)*83492791u))/4294967295.;}
 vec2 h2(ivec2 c,int s){return vec2(h1(c,s),h1(c,s+101));}
+// 1 回のハッシュを 8 ビットずつに分けた 4 つの乱数（0..1）。粒や火花の性質のように粗くてよい値に使う
+vec4 h4(ivec2 c,int s){uint x=hu(uint(c.x)*73856093u^uint(c.y)*19349663u^uint(s)*83492791u);return (vec4(x&255u,(x>>8)&255u,(x>>16)&255u,x>>24)+.5)/256.;}
 float vnoise(vec2 p){vec2 i=floor(p),f=fract(p);f=f*f*(3.-2.*f);ivec2 c=ivec2(i);
   return mix(mix(h1(c,7),h1(c+ivec2(1,0),7),f.x),mix(h1(c+ivec2(0,1),7),h1(c+ivec2(1,1),7),f.x),f.y);}
 float fbm(vec2 p){float a=.5,s=0.;for(int i=0;i<5;i++){s+=a*vnoise(p);p=p*2.03+vec2(17.1,9.3);a*=.5;}return s;}
+// 低周波だけでよいところ用の 3 オクターブ版（5 オクターブ版と平均をそろえる）
+float fbm3(vec2 p){float a=.5,s=0.;for(int i=0;i<3;i++){s+=a*vnoise(p);p=p*2.03+vec2(17.1,9.3);a*=.5;}return s+.047;}
 // ぼけの円: 半径 r、中心からの距離 d。縁がわずかに明るい（実写のぼけ）。面積が大きいほど暗い
 float bokeh(float d,float r,float px){
   float e=max(px*1.2,r*.22);
@@ -86,9 +91,9 @@ float bokeh(float d,float r,float px){
 // 層に分けた粒子の場（画面空間）。z=0 が奥（小さく鋭い点）、1 が手前（大きなぼけ）
 mat2 rot(float a){float c=cos(a),s=sin(a);return mat2(c,-s,s,c);}
 float beat(float k){return exp(-age.x*k);}
-float clump(vec2 uv,float t,int seed){return smoothstep(.42,.72,fbm(uv*1.4+vec2(float(seed)*3.1,t*.03)));}
+float clump(vec2 uv,float t,int seed){return smoothstep(.42,.72,fbm3(uv*1.4+vec2(float(seed)*3.1,t*.03)));}
 vec3 particles(vec2 uv,float t,int seed,int nl,float dens,vec2 drift,int pal,float gain){
-  vec3 col=vec3(0.); float px=1./res.y;
+  vec3 col=vec3(0.); float px=1./PXREF;
   for(int i=0;i<8;i++){
     if(i>=nl)break;
     float zr=(float(i)+.5)/float(nl)+camZ;
@@ -100,24 +105,28 @@ vec3 particles(vec2 uv,float t,int seed,int nl,float dens,vec2 drift,int pal,flo
     vec2 v=drift*(.25+2.2*z);
     vec2 p=(uv+v*t+camPan*(.15+2.5*z*z))/cs+float(i)*13.7;
     ivec2 c=ivec2(floor(p));
+    float cm=clump((floor(p)+.5-float(i)*13.7)*cs-v*t-camPan*(.15+2.5*z*z),t,sd);
+    float dth=dens*(1.-.6*z)*(.15+.85*cm);
+    if(fz<=0.||dth<=0.)continue;
     for(int dy=-1;dy<=1;dy++)for(int dx=-1;dx<=1;dx++){
       ivec2 cc=c+ivec2(dx,dy);
-      float hp=h1(cc,sd+i*31);
-      float cm=clump((vec2(cc)+.5)*cs-v*t,t,sd);
-      if(hp>dens*(1.-.6*z)*(.15+.85*cm))continue;
-      vec2 o=h2(cc,sd+i*31+5);
+      vec4 ha=h4(cc,sd+i*31);
+      float hp=ha.x;
+      if(hp>dth)continue;
+      vec4 hb=h4(cc,sd+i*31+5);
+      vec2 o=vec2(ha.y,ha.z);
       vec2 q=vec2(cc)+.15+.7*o+.12*vec2(sin(t*.7+hp*40.),cos(t*.6+hp*30.));
       vec2 dv=(p-q)*cs; vec2 rad=normalize(uv+1e-4);
       float st=1.+camV*z*z*length(uv)*5.;
       float d=length(vec2(dot(dv,rad)/st,dot(dv,vec2(-rad.y,rad.x))));
-      float rr=r*(.6+.8*h1(cc,sd+i*31+9));
+      float rr=r*(.6+.8*ha.w);
       float b=bokeh(d,max(rr,px*.8),px);
       if(b<=0.)continue;
-      float hc=h1(cc,sd+i*31+13);
+      float hc=hb.x;
       vec3 cl=pal==0?TEAL[int(hc*8.)%8]:pal==1?GOLDB[int(hc*5.)%5]:SHELL[int(hc*6.)%6];
       // 小さい鋭い点は明るく、大きなぼけは薄く広く
       float sharp=1.-z;
-      float I=fz*gain*(.25+2.2*pow(h1(cc,sd+i*31+17),5.)*sharp)*clamp(.0035/max(rr,.0011),.11,2.2);
+      float I=fz*gain*(.25+2.2*pow(hb.y,5.)*sharp)*clamp(.0035/max(rr,.0011),.11,2.2);
       float tw=.75+.25*sin(t*(1.+3.*hc)+hp*60.);
       col+=cl*b*I*tw;
     }
@@ -139,7 +148,7 @@ float powder(vec2 uv,float t,float scale,int seed,float dens){
     ivec2 cc=c+ivec2(dx,dy); float h=h1(cc,seed);
     if(h>dens)continue;
     vec2 q=vec2(cc)+h2(cc,seed+3);
-    float d=length(p-q)/scale*res.y;
+    float d=length(p-q)/scale*PXREF;
     s+=exp(-d*d*.22)*(.4+1.2*h1(cc,seed+7));
   }
   return s;
@@ -208,31 +217,33 @@ vec3 sparks(vec2 uv,float t,vec2 src,float spread,float speed,float grav,float l
   return sparks2(uv,t,src,spread,speed,grav,life,seed,gain,pal,.07,1.,.04);
 }
 vec3 sparks2(vec2 uv,float t,vec2 src,float spread,float speed,float grav,float life,int seed,float gain,int pal,float dtE,float thick,float jit){
-  vec3 col=vec3(0.); float px=1./res.y;
-  const int NS=220;
+  vec3 col=vec3(0.); float px=1./PXREF;
+  const int NS=48;
   for(int i=0;i<NS;i++){
     float fi=float(i);
-    float per=life*(.7+.6*h1(ivec2(i,seed),1));
-    float ph=h1(ivec2(i,seed),2)*per;
+    vec2 hi=h4(ivec2(i,seed),1).xy;
+    float per=life*(.7+.6*hi.x);
+    float ph=hi.y*per;
     float tt=t+ph; float k=floor(tt/per); float a=tt-k*per;   // この火花の年齢
     ivec2 key=ivec2(i,int(k));
-    float ang=1.5708+(h1(key,seed+3)-.5)*spread;
-    float v=speed*(.4+.9*h1(key,seed+4))*(1.+.6*sm.x);
+    vec4 ka=h4(key,seed+3), kb=h4(key,seed+5);
+    float ang=1.5708+(ka.x-.5)*spread;
+    float v=speed*(.4+.9*ka.y)*(1.+.6*sm.x);
     vec2 v0=vec2(cos(ang),sin(ang))*v;
-    vec2 p0=src+(h2(key,seed+5)-.5)*jit;
+    vec2 p0=src+(kb.xy-.5)*jit;
     // 長時間露光: 年齢 a-dt から a までの区間を線分として描く
-    float dt=dtE*(.5+h1(key,seed+8));
+    float dt=dtE*(.5+ka.z);
     vec2 pa=p0+v0*max(a-dt,0.)+vec2(0.,-grav)*.5*max(a-dt,0.)*max(a-dt,0.);
     vec2 pb=p0+v0*a+vec2(0.,-grav)*.5*a*a;
     vec2 ab=pb-pa; float l2=max(dot(ab,ab),1e-9);
     float h=clamp(dot(uv-pa,ab)/l2,0.,1.);
     float dd=length(uv-pa-ab*h);
-    float w=px*thick*(1.2+1.5*h1(key,seed+6));
+    float w=px*thick*(1.2+1.5*ka.w);
     float core=exp(-dd*dd/(w*w));
     if(core<1e-3)continue;
     float heat=1.-a/per;
     vec3 cl=pal==0?(heat>.75?mix(SPARK[3],SPARK[4],(heat-.75)*4.):heat>.4?mix(SPARK[1],SPARK[3],(heat-.4)/.35):mix(SPARK[0]*.6,SPARK[1],heat/.4))
-                  :mix(STREAK[int(h1(key,seed+7)*7.)%7],vec3(.85,.95,1.),heat*.5);
+                  :mix(STREAK[int(kb.z*7.)%7],vec3(.85,.95,1.),heat*.5);
     col+=cl*core*gain*(.3+1.2*heat)*smoothstep(0.,.02,a);
   }
   return col;
@@ -242,12 +253,12 @@ vec3 sceneSparks(vec2 uv,float t){
   vec2 src=vec2(.02,-.02);
   vec3 c=vec3(.015,.006,.002);
   // 火の霞（発生点のまわり）
-  float fire=pow(fbm(uv*4.5+vec2(0.,-t*.6)+fbm(uv*9.)*.6),2.6)*exp(-length((uv-src)*vec2(1.6,.8))*2.6)*1.6;
+  float fire=pow(fbm(uv*4.5+vec2(0.,-t*.6)+fbm3(uv*9.)*.6),2.6)*exp(-length((uv-src)*vec2(1.6,.8))*2.6)*1.6;
   c+=mix(SPARK[0],SPARK[4],fire*fire*2.)*fire*2.2*(1.+.8*sm.x);
   c+=sparks2(uv,t,src+vec2(0.,.05),6.283,.8,.3,.8,3,1.4*(.4+2.6*beat(2.5)),0,.03,1.6,.5);
   c+=sparks2(uv,t*1.3,src,6.283,.45,.2,1.1,4,1.,0,.02,1.2,.8);
   c+=particles(uv,t,17,5,.5,vec2(.0,.02),1,1.2)*vec3(1.,.55,.2)*exp(-length(uv-src)*1.2)*(1.+1.5*beat(2.5));
-  c+=sparks2(uv,t*.8,src+vec2(.1,.2),6.283,.3,.1,1.4,5,.8,0,.025,1.4,.9);
+  {float hc; float rr=length(uv-src); float k=dashField(uv,src,t*.8,320.,.35,.9,85,.06+.25*exp(-rr*2.),hc); c+=mix(SPARK[2],SPARK[4],hc)*k*1.2*(.5+1.5*beat(2.5))*smoothstep(.03,.1,rr);}
   {float hc; float rr=length(uv-src); float k=dashField(uv,src,t,500.,.5,1.2,81,(.03+.18*exp(-rr*3.))*(.3+1.4*clump(uv,t,4)),hc); c+=mix(SPARK[1],SPARK[4],hc)*k*1.1*smoothstep(.04,.12,rr);}
   // 金のぼけの雲（手前、ピントの外）
   vec3 gb=particles(uv*.8+vec2(.1,0.),t,7,6,.55,vec2(.006,.012),1,1.3);
@@ -271,7 +282,7 @@ float dashField(vec2 uv,vec2 src,float t,float cols,float spd,float len,int seed
     float ay=q.y-float(cc.y)-o.y;                             // 線に沿った位置（格子単位）
     float L=len*(.5+h1(cc,seed+2));
     float along=smoothstep(0.,.15*L,ay+L)*smoothstep(0.,.08,-ay)*step(ay,0.);
-    float w=(.6+1.*h1(cc,seed+3))/res.y;
+    float w=(.6+1.*h1(cc,seed+3))/PXREF;
     float k=exp(-ax*ax/(w*w))*along*(.4+1.2*h1(cc,seed+4));
     if(k>s){s=k;hc=h1(cc,seed+5);}
   }
@@ -286,7 +297,7 @@ vec3 sceneStreams(vec2 uv,float t){
   float colm=exp(-pow((th+.2)/.11,2.))+exp(-pow((th-.18)/.11,2.));
   for(int L=0;L<3;L++){
     float hc; float fl=float(L);
-    vec2 wob=vec2(fbm(uv*3.+t*.2)-.5,0.)*.06;
+    vec2 wob=vec2(fbm3(uv*3.+t*.2)-.5,0.)*.06;
     float k=dashField(uv+wob,src+vec2(.03*fl,0.),t,1600.-fl*400.,.9+.3*fl,1.1+fl*.5,71+L,.05+.55*colm,hc);
     vec3 cl=mix(STREAK[int(hc*4.)%4],vec3(.8,.95,1.),.25+.35*hc);
     c+=cl*k*(.35+.9*colm)*(1.-.25*fl)*(1.+.6*sm.z+1.2*beat(3.))*smoothstep(.25,.6,length(uv-src));
@@ -304,7 +315,7 @@ vec3 sceneStreams(vec2 uv,float t){
 vec3 sceneMint(vec2 uv,float t){
   vec3 c=mix(MINT[0],MINT[2],fbm(uv*2.+t*.05))*.62;
   c=mix(vec3(dot(c,vec3(.3,.59,.11))),c,1.6);
-  c+=MINT[3]*.6*sparks2(uv,t*.5,vec2(-.9,-.6),1.4,.6,0.,3.,61,1.,1,.05,1.6,1.2);
+  {float hc; float k=dashField(uv,vec2(-1.4,-1.),t*.5,420.,.35,1.4,62,.12,hc); c+=MINT[3]*.5*k;}
   c-=vec3(.08,.05,.07)*powder(uv+vec2(t*.02,-t*.01),t,220.,51,.35);
   {float hc; float k=dashField(uv,vec2(-1.2,-.9),t,500.,.3,.8,91,.1*(.3+fbm(uv*2.)),hc); c+=MINT[3]*k*.6;}
   return c;
@@ -322,15 +333,17 @@ void main(){
   c*=1.-VIGNETTE*dot(ndc*.8,ndc*.8); if(any(isnan(c))||any(isinf(c)))c=vec3(0.); frag=vec4(min(c,vec3(60.))*EXPOSURE,1.);
 }
 vec2 camera(int scene,vec2 uv,float ts){
+  float sat=1.-exp(-ts/6.);
+  if(scene==4)return rot(.25*sin(camRoll)+.12*sin(ts*.3))*(uv+vec2(0.,-.35+.5*(1.-exp(-ts/5.))));   // 流れを追って振り上げる
   uv=rot(camRoll)*uv;
   if(scene==0)return uv;
-  if(scene==4)return rot(.05*ts)*(uv+vec2(0.,-.35+.09*ts));                 // 流れを追って振り上げる
   if(scene==6)return uv+vec2(.08,.04)*ts;
-  if(scene==1)return rot(.14*ts+.2)*uv/(.75+.16*ts);                         // 遠くから殻へ寄りながら回り込む
-  if(scene==3)return rot(-.08*ts)*uv/(.8+.2*ts);                             // 噴出へ突っ込む
-  if(scene==2)return uv/(1.+.05*ts)+vec2(.13*ts-.35,.03*ts);                 // 表面を横へなめる
+  if(scene==1)return rot(.14*ts+.2)*uv/(.75+1.1*sat);                        // 遠くから殻へ寄りながら回り込む
+  if(scene==3)return rot(-.08*ts)*uv/(.8+1.3*sat);                           // 噴出へ突っ込む
+  if(scene==2)return uv/(1.+.3*sat)+vec2(.8*sat-.35,.18*sat);                // 表面を横へなめる
   return uv;
 }
+
 vec3 sceneOf(int scene,vec2 uv0,float time,float ts){
   vec2 uv=camera(scene,uv0,ts);
   vec3 c;
