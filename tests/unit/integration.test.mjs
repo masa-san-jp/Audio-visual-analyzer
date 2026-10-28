@@ -29,7 +29,7 @@ const runtime = loadClassic([
 ], { document: _d, window: { devicePixelRatio: 1 }, WorldExporter: class {}, WorldEngine: class {} });
 const get = runtime.get;
 const registry = get('RENDERER_REGISTRY');
-const GPU_IDS = ['g-fluid', 'g-gargantua', 'g-attractor', 'g-tesseract']; // g-quantum は作り直しまで UI から外す
+const GPU_IDS = ['g-fluid', 'g-gargantua', 'g-attractor', 'g-tesseract', 'g-quantum'];
 
 test('UI-01 レジストリ: GPU 4 項目・グループ GPU が最後・capabilities は gpu のみ・create なし', () => {
   const order = get('RENDERER_GROUP_ORDER');

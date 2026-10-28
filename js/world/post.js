@@ -41,14 +41,19 @@ uniform sampler2D scene, history, bloom0, bloom1, bloom2, bloom3, exposure;
 uniform float analyzerPulse;
 uniform float analyzerMode;
 uniform float gargantuaMode, attractorMode, tesseractMode, quantumMode, fluid2Mode, exposureMultiplier, kick;
+uniform int grainFrame;
 const float FLUID2_BLOOM_STRENGTH = ${WORLD_FLUID2.BLOOM_STRENGTH.toFixed(8)};
 const float TESSERACT_BLOOM_STRENGTH = ${WORLD_TESSERACT.BLOOM_STRENGTH.toFixed(8)};
 const float ATTRACTOR_BLOOM_STRENGTH = ${WORLD_ATTRACTOR.BLOOM_STRENGTH.toFixed(8)};
 const float QUANTUM_BLOOM_STRENGTH = ${WORLD_QUANTUM.BLOOM_STRENGTH.toFixed(8)};
+const float QUANTUM_HALATION = ${WORLD_QUANTUM.HALATION.toFixed(8)};
+const float QUANTUM_GRAIN = ${WORLD_QUANTUM.GRAIN.toFixed(8)};
 const float GARGANTUA_BLOOM_STRENGTH = ${WORLD_GARGANTUA.BLOOM_STRENGTH.toFixed(8)};
 const float VEIL_GAIN = ${WORLD_GARGANTUA.VEIL_GAIN.toFixed(8)};
 const float KICK_BLOOM = ${WORLD_GARGANTUA.KICK_BLOOM.toFixed(8)};
 out vec4 frag;
+// フィルム粒子用の整数ハッシュ（0..1）。量子のビジョンの hu と同じ混ぜ方
+float qhash(uvec3 p){uint x=(p.x*1973u)^(p.y*9277u)^(p.z*26699u);x^=x>>16;x*=0x7feb352du;x^=x>>15;x*=0x846ca68bu;x^=x>>16;return float(x)/4294967295.;}
 vec3 aces(vec3 x){return clamp((x*(2.51*x+.03))/(x*(2.43*x+.59)+.14),0.,1.);}
 void main(){
  if(fluid2Mode>.5){
@@ -70,8 +75,15 @@ void main(){
   frag=vec4(c,1.);return;
  }
  if(quantumMode>.5){
-  vec3 bloom=texture(bloom0,vUv).rgb*.25+texture(bloom1,vUv).rgb*.25+texture(bloom2,vUv).rgb*.30+texture(bloom3,vUv).rgb*.45;
-  vec3 c=aces((texture(scene,vUv).rgb+bloom*QUANTUM_BLOOM_STRENGTH)*.75);
+  vec3 b2=texture(bloom2,vUv).rgb;
+  vec3 bloom=texture(bloom0,vUv).rgb*.25+texture(bloom1,vUv).rgb*.25+b2*.30+texture(bloom3,vUv).rgb*.45;
+  vec3 c=texture(scene,vUv).rgb+bloom*QUANTUM_BLOOM_STRENGTH;
+  c+=vec3(1.,.32,.08)*QUANTUM_HALATION*max(dot(b2,vec3(.33))-.05,0.); // ハレーション（暖色のにじみ）
+  c=aces(c*.75);
+  // フィルム粒子: 毎フレーム変わる（grainFrame は整数のフレーム番号）。暗部にも明部にも少し
+  float g=qhash(uvec3(uvec2(gl_FragCoord.xy),uint(grainFrame)))-.5;
+  c+=g*QUANTUM_GRAIN*(.3+c);
+  c=max(c,vec3(0.));
   c=mix(c*12.92,1.055*pow(c,vec3(1./2.4))-.055,step(vec3(.0031308),c));
   frag=vec4(c,1.);return;
  }
@@ -119,7 +131,7 @@ class WorldPost {
     this.gargantua = false; this.attractor = false; this.tesseract = false; this.quantum = false; this.fluid2 = false; this.exposureMultiplier = 1; this.kick = 0;
     this.attractorLoc = gpu.texture(this.program, 'attractorMode'); this.tesseractLoc = gpu.texture(this.program, 'tesseractMode'); this.quantumLoc = gpu.texture(this.program, 'quantumMode'); this.fluid2Loc = gpu.texture(this.program, 'fluid2Mode');
     this.gargantuaLoc = gpu.texture(this.program, 'gargantuaMode'); this.exposureMultiplierLoc = gpu.texture(this.program, 'exposureMultiplier');
-    this.kickLoc = gpu.texture(this.program, 'kick');
+    this.kickLoc = gpu.texture(this.program, 'kick'); this.grainFrameLoc = gpu.texture(this.program, 'grainFrame'); this.grainFrame = 0;
     this.pulseLoc = gpu.texture(this.program, 'analyzerPulse'); this.modeLoc = gpu.texture(this.program, 'analyzerMode');
     this.samplers = ['scene', 'history', 'bloom0', 'bloom1', 'bloom2', 'bloom3', 'exposure'].map(n => gpu.texture(this.program, n));
     this.resize(w, h);
@@ -157,7 +169,7 @@ class WorldPost {
     g.bind(this.program, this.output);
     gl.uniform1f(this.gargantuaLoc, this.gargantua ? 1 : 0); gl.uniform1f(this.exposureMultiplierLoc, this.exposureMultiplier);
     gl.uniform1f(this.attractorLoc, this.attractor ? 1 : 0); gl.uniform1f(this.tesseractLoc, this.tesseract ? 1 : 0); gl.uniform1f(this.quantumLoc, this.quantum ? 1 : 0); gl.uniform1f(this.fluid2Loc, this.fluid2 ? 1 : 0);
-    gl.uniform1f(this.kickLoc, this.kick);
+    gl.uniform1f(this.kickLoc, this.kick); gl.uniform1i(this.grainFrameLoc, this.grainFrame);
     gl.uniform1f(this.pulseLoc, this.pulse); gl.uniform1f(this.modeLoc, this.analyzerMode);
     g.sampler(this.samplers[0], 0, scene); g.sampler(this.samplers[1], 1, this.feedback.read);
     for (let i = 0; i < 4; i++) g.sampler(this.samplers[i + 2], i + 2, this.bloom[i].read);

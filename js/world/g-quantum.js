@@ -1,419 +1,460 @@
-// 目的 — 映画の「量子のビジョン」：筋の弧・金の粒子殻と白い核・金の火花を描く — doc/20261024-design-visions-v1.md §0・§1・§3
+// 目的 — 映画の「量子のビジョン」を、実写のレンズの質感（ぼけ・光跡・粉・粒子）の場面のモンタージュで描く（量子のビジョン v2）— doc/20261028-design-quantum-v2.md
 const WORLD_QUANTUM = Object.freeze({
-  FIL_BUNDLES: 6, FIL_PER_BUNDLE: 16, FIL_SAMPLES: 4096,
-  FIL_R_MIN: 1.2, FIL_R_SPAN: 1.2, FIL_TILT: 70,
-  FIL_OMEGA_MIN: .12, FIL_OMEGA_SPAN: .25, FIL_SPAN: 2.6,
-  FIL_WAVE_M_MIN: 3, FIL_WAVE_M_SPAN: 4, FIL_WAVE_A_MIN: .06, FIL_WAVE_A_SPAN: .16,
-  FIL_WAVE_NU: 1.3, FIL_WAVE_LOUD: .8, FIL_WAVE_BAND: .6,
-  FIL_BUNDLE_W: .22, FIL_RADIAL_W: .10, FIL_GAIN: 2.0,
-  FIL_CORE: '#EBE0C4', FIL_EDGE: '#C3C3A8',
-  FIL_PULSE_FRACTION: .35, FIL_PULSE_SPEED: .9, FIL_PULSE_WIDTH: .03, FIL_PULSE_GAIN: 4.0, FIL_PULSE_SECONDS: 1.4, FIL_PULSE_SLOTS: 4,
-  SHELL_COUNT: 262144, SHELL_R: .8, SHELL_JITTER: .30,
-  SHELL_SPRAY: .18, SHELL_SPRAY_MIN: 1.12, SHELL_SPRAY_SPAN: .5, SHELL_SPRAY_GAIN: .45,
-  CRACK_FREQ: 4.0, CRACK_WIDTH: .08, CRACK_FLOOR: .05,
-  SHELL_SPIN: .06, SHELL_GAIN: 5.0,
-  // 03 の殻の金（sRGB 色と割合）。粒ごとに累積重みで選ぶ。
-  SHELL_GOLD: Object.freeze([
-    Object.freeze(['#925A05', 29.4]), Object.freeze(['#A66704', 25.3]), Object.freeze(['#BA7704', 20.1]),
-    Object.freeze(['#CE8B07', 14.9]), Object.freeze(['#9D9287', 10.2])
-  ]),
-  BURST_GROW: .4, BURST_SECONDS: 4, IMPLODE: .85,
-  CORE_RADIUS: .05, CORE_GAIN: 6.0, CORE_KICK: 1.5, CORE_HALO: .03,
-  CORE_COLOR: Object.freeze([1.0, .96, .88]), // linear
-  SPARK_BURSTS: 16, SPARK_PER_BURST: 768, SPARK_TAPS: 4,
-  SPARK_SPEED_MIN: 1.2, SPARK_SPEED_MAX: 4.0, SPARK_LIFE_MIN: .5, SPARK_LIFE_SPAN: .9,
-  SPARK_DRAG: 1.6, SPARK_GRAVITY: 2.2, SPARK_SHUTTER: 1 / 30, SPARK_GAIN: 12,
-  // 07 の火花（温度順）。u = 0, .33, .66, 1 に置く。
-  SPARK_COLORS: Object.freeze(['#EECA81', '#DEAF5C', '#CA913C', '#935C25']),
-  SPARK_BOKEH: .3, SPARK_BOKEH_NEAR: 1.0,
-  STAR_GRID: 420, STAR_PROB: .06, STAR_RADIUS_PX: .6, STAR_GAIN: 1.4, STAR_COLOR: '#9D9287',
-  GROUND_BLACK: '#060B04', GROUND_TEAL_CENTER: '#0D2226', GROUND_TEAL_EDGE: '#060E0A',
-  BEAM_COUNT: 3, BEAM_WIDTH: .06, BEAM_GAIN: .35, BEAM_COLOR: '#566B67',
-  BASE_SIZE: 1.6, COC_K: 26, MAX_POINT: 64,
-  BAND_BASE: .55, BAND_GAIN: .9, KICK_SECONDS: .18,
-  EXPOSURE_BASE: 1.0, EXPOSURE_FLOOR: .8, EXPOSURE_GAIN: .4,
-  BLOOM_THRESHOLD: .7, BLOOM_STRENGTH: .6,
-  SCENE_FADE: 2.0, CAMERA_EASE_SECONDS: 4,
-  SPEED_LOUD_GAIN: .8, SPEED_MIN: .5, SPEED_MAX: 1.6,
-  // 実装の内部定数（設計に値のないもの）
-  MIN_WEIGHT: .002, SPARK_MIN_WEIGHT: .05, NEAR_Z: .05, BURST_BALL_R: 1.6, DISCARD_AGE: -100
+  FADE: 2.5,                     // 場面の切り替えにかける秒数（次の場面の開始時刻の FADE 秒前から溶かし始める）
+  MINT_LEAD: 3,                  // drop の直前の build で、最後のこの秒数をミントの光にする
+  DROP_SPLIT: 3,                 // drop 区間を 3 等分して、殻 → 火花 → 太陽面
+  CAM_BASE: .14, CAM_LOUD: .5, CAM_PUSH: .45,   // 前進の速さの目標 = CAM_BASE + CAM_LOUD*loud + CAM_PUSH*push（層/秒）
+  CAM_TAU: .35,                  // 速さが目標へ追いつく時定数（秒）
+  PUSH_ATTACK: .08, PUSH_RELEASE: .6,           // 拍の押し出しの立ち上がりと減衰の時定数（秒）
+  PAN_RATE_X: .23, PAN_X: .05, PAN_X_LOUD: .2,  // 横のパンの速度 = sin(t*PAN_RATE_X)*(PAN_X+PAN_X_LOUD*loud)
+  PAN_RATE_Y: .17, PAN_PHASE_Y: 1, PAN_Y: .04, PAN_Y_LOUD: .14,
+  ROLL_SWAY: .25, ROLL_SWAY_RATE: .09, ROLL_RATE: .02,   // 回転 = ROLL_SWAY*sin(t*ROLL_SWAY_RATE) + ROLL_RATE*t
+  // 音の状態（テッセラクトと同じ。§5）
+  LEVEL_ATTACK: .048, LEVEL_RELEASE: .26, LOUD_ATTACK: .065, LOUD_RELEASE: .4, LOUD_LO: .33, LOUD_HI: .93,
+  AGE_MAX: 9, REFRACTORY: .12, BEAT_HOLD: 2,
+  EXPOSURE: 1.47,                // 試作の後処理（ACES の前に ×1.1）と、エンジンの後処理（×.75）の差を埋める
+  VIGNETTE: .4,
+  GRAIN: .035,                   // フィルム粒子（後処理で毎フレーム更新。§7）
+  HALATION: .25,                 // 明るい所のまわりの暖色のにじみ（後処理。§7）
+  BLOOM_THRESHOLD: .02, BLOOM_STRENGTH: .55
 });
-// §3.2 区間の重み：filaments、star、sparks、teal。main の variation 奇数 ≥3 だけ別行。
-const WORLD_QUANTUM_SCENES = Object.freeze({
-  intro: Object.freeze([0, 1, 0, 0]),
-  build: Object.freeze([1, .35, 0, 1]),
-  drop: Object.freeze([.35, 1, 1, 0]),
-  break: Object.freeze([1, 0, 0, 1]),
-  main: Object.freeze([1, 0, .7, 1]),
-  mainAlt: Object.freeze([.5, 1, .7, 0]),
-  outro: Object.freeze([0, 1, 0, 0])
+// 場面の番号（シェーダーの scene。5 は欠番＝水面、不使用）
+const WORLD_QUANTUM_SCENE = Object.freeze({ DUST: 0, SHELL: 1, SUN: 2, SPARKS: 3, STREAMS: 4, MINT: 6 });
+// 色（sRGB）。JS で linear にしてから GLSL 定数にする（設計 §3）。
+const WORLD_QUANTUM_COLORS = Object.freeze({
+  TEAL: Object.freeze(['#1D5953', '#266B61', '#44A69B', '#3B796E', '#A3D3BE', '#1A6287', '#39A1B8', '#93B0BA']),
+  TEAL_BG: Object.freeze(['#041104', '#06150D', '#071515', '#08212A']),
+  SHELL: Object.freeze(['#72470B', '#885206', '#9F6105', '#B87405', '#D18D05', '#CABBA5']),
+  SUN: Object.freeze(['#7B4402', '#884B01', '#935601', '#9F6401', '#AE7C01', '#BE9715', '#DBCC97']),
+  SPARK: Object.freeze(['#A33C09', '#B95113', '#D47228', '#E89B51', '#F9D289']),
+  GOLDB: Object.freeze(['#8C5522', '#A56C2D', '#C48939', '#DCA954', '#EDC67C']),
+  STREAK: Object.freeze(['#285668', '#457688', '#719FAD', '#B3DEDA', '#155792', '#3785BE', '#5FA0D2']),
+  MINT: Object.freeze(['#A7ECCD', '#B3F0CF', '#C1F0C4', '#CAF3CE', '#3A5148'])
 });
-// §3.4 dist、yaw速度、pitch(°)、roll(°)、fov(°)、focus の始点/終点（各 2 値）。
-const WORLD_QUANTUM_CAMERA = Object.freeze({
-  intro: Object.freeze([4.2, 3.4, .04, .04, 6, 6, 0, 0, 34, 34, 4.2, 3.4]),
-  build: Object.freeze([3.6, 3.0, .10, .10, 10, 18, -4, -4, 38, 38, 3.0, 3.0]),
-  drop: Object.freeze([3.8, 3.8, .22, .22, 4, 4, 8, 8, 44, 44, 3.8, 3.8]),
-  break: Object.freeze([3.4, 3.8, .05, .05, 20, 20, 0, 0, 36, 36, 3.4, 3.4]),
-  main: Object.freeze([3.2, 3.2, .12, .12, -6, -6, -3, -3, 40, 40, 3.2, 3.2]),
-  outro: Object.freeze([3.6, 5.0, .03, .03, 8, 14, 0, 0, 34, 34, 4.0, 4.0])
-});
-// 区間の種類から重みを out[0..3] へ書く（純関数）。
-function worldQuantumSceneWeights(kind, variation, out) {
-  const row = kind === 'main' && variation >= 3 && variation % 2 === 1 ? WORLD_QUANTUM_SCENES.mainAlt : (WORLD_QUANTUM_SCENES[kind] || WORLD_QUANTUM_SCENES.intro);
-  out[0] = row[0]; out[1] = row[1]; out[2] = row[2]; out[3] = row[3];
-  return out;
-}
-// 殻の膨張係数 B（§3.7）。drop は冒頭で膨らみ、outro は核へ縮む。
-function worldQuantumShellFactor(kind, tSec, startSec, progress) {
-  const c = WORLD_QUANTUM;
-  if (kind === 'drop') {
-    const q = Math.max(0, Math.min(1, (tSec - startSec) / c.BURST_SECONDS));
-    return 1 + c.BURST_GROW * (1 - (1 - q) * (1 - q) * (1 - q));
+const WORLD_QUANTUM_COLORS_LINEAR = Object.freeze(Object.fromEntries(Object.entries(WORLD_QUANTUM_COLORS).map(([name, list]) =>
+  [name, Object.freeze(list.map(hex => worldSrgbToLinear(hex, new Float32Array(3))))])));
+const WORLD_QUANTUM_VEC3_LIST = list => list.map(c => `vec3(${c[0].toFixed(8)},${c[1].toFixed(8)},${c[2].toFixed(8)})`).join(',');
+// 曲の区間から場面の予定表 [開始秒, 場面] を作る（設計 §6.2）。starts/scenes は呼び出し側が確保した配列（容量 = 区間数*3+2 以上）。行数を返す
+function worldQuantumBuildSchedule(sections, starts, scenes) {
+  const C = WORLD_QUANTUM, S = WORLD_QUANTUM_SCENE;
+  let n = 0;
+  const add = (start, scene) => { if (n > 0 && scenes[n - 1] === scene) return; starts[n] = start; scenes[n] = scene; n++; };
+  for (let i = 0; i < sections.length; i++) {
+    const s = sections[i], a = s.startSec, b = s.endSec;
+    switch (s.kind) {
+      case 'build':
+        add(a, S.STREAMS);
+        if (i + 1 < sections.length && sections[i + 1].kind === 'drop' && b - C.MINT_LEAD > a) add(b - C.MINT_LEAD, S.MINT);
+        break;
+      case 'drop': {
+        const len = (b - a) / C.DROP_SPLIT;
+        add(a, S.SHELL); add(a + len, S.SPARKS); add(a + 2 * len, S.SUN);
+        break;
+      }
+      case 'break': add(a, S.DUST); add(a + (b - a) / 2, S.STREAMS); break;
+      case 'main': add(a, s.variation % 2 === 1 ? S.SHELL : S.SUN); break;
+      default: add(a, S.DUST); // intro・outro
+    }
   }
-  if (kind === 'outro') return 1 - c.IMPLODE * progress;
-  return 1;
+  return n;
 }
-const WORLD_QUANTUM_INT_NAMES = ['FIL_BUNDLES', 'FIL_PER_BUNDLE', 'FIL_SAMPLES', 'FIL_PULSE_SLOTS', 'SHELL_COUNT', 'SPARK_BURSTS', 'SPARK_PER_BURST', 'SPARK_TAPS', 'BEAM_COUNT'];
-const WORLD_QUANTUM_GLSL_TMP = new Float32Array(3);
-function worldQuantumVec3(hex) {
-  const v = worldSrgbToLinear(hex, WORLD_QUANTUM_GLSL_TMP);
-  return `vec3(${v[0].toFixed(10)},${v[1].toFixed(10)},${v[2].toFixed(10)})`;
+function worldQuantumShaderBody() {
+  const C = WORLD_QUANTUM, LIN = WORLD_QUANTUM_COLORS_LINEAR, VEC3_LIST = WORLD_QUANTUM_VEC3_LIST;
+  return `out vec4 frag;
+uniform vec2 res;               // 描画先の幅・高さ（画素）
+uniform float time;             // 曲の時刻（秒）
+uniform int scene; uniform int sceneB; uniform float mixW;   // 今の場面、次の場面、溶かす量（0..1）
+uniform float camZ; uniform float tA; uniform float tB;       // 前進量（層）、今の場面と次の場面の経過秒
+uniform float camV; uniform vec2 camPan; uniform float camRoll;
+uniform vec4 lvl; uniform vec4 sm; uniform vec4 age; uniform float loud;
+const float EXPOSURE=${C.EXPOSURE.toFixed(8)}; const float VIGNETTE=${C.VIGNETTE.toFixed(8)};
+const vec3 TEAL[8]=vec3[](${VEC3_LIST(LIN.TEAL)}); const vec3 TEAL_BG[4]=vec3[](${VEC3_LIST(LIN.TEAL_BG)}); const vec3 SHELL[6]=vec3[](${VEC3_LIST(LIN.SHELL)}); const vec3 SUN[7]=vec3[](${VEC3_LIST(LIN.SUN)});
+const vec3 SPARK[5]=vec3[](${VEC3_LIST(LIN.SPARK)}); const vec3 GOLDB[5]=vec3[](${VEC3_LIST(LIN.GOLDB)}); const vec3 STREAK[7]=vec3[](${VEC3_LIST(LIN.STREAK)}); const vec3 MINT[5]=vec3[](${VEC3_LIST(LIN.MINT)});
+uint hu(uint x){x^=x>>16;x*=0x7feb352du;x^=x>>15;x*=0x846ca68bu;x^=x>>16;return x;}
+float h1(ivec2 c,int s){return float(hu(uint(c.x)*73856093u^uint(c.y)*19349663u^uint(s)*83492791u))/4294967295.;}
+vec2 h2(ivec2 c,int s){return vec2(h1(c,s),h1(c,s+101));}
+float vnoise(vec2 p){vec2 i=floor(p),f=fract(p);f=f*f*(3.-2.*f);ivec2 c=ivec2(i);
+  return mix(mix(h1(c,7),h1(c+ivec2(1,0),7),f.x),mix(h1(c+ivec2(0,1),7),h1(c+ivec2(1,1),7),f.x),f.y);}
+float fbm(vec2 p){float a=.5,s=0.;for(int i=0;i<5;i++){s+=a*vnoise(p);p=p*2.03+vec2(17.1,9.3);a*=.5;}return s;}
+// ぼけの円: 半径 r、中心からの距離 d。縁がわずかに明るい（実写のぼけ）。面積が大きいほど暗い
+float bokeh(float d,float r,float px){
+  float e=max(px*1.2,r*.22);
+  float disc=1.-smoothstep(r-e,r+e,d);
+  float rim=smoothstep(r*.55,r,d)*disc;
+  return disc*(.75+.35*rim);
 }
-const WORLD_QUANTUM_GLSL = (() => {
-  const c = WORLD_QUANTUM, lines = [];
-  for (const [name, value] of Object.entries(c)) {
-    if (typeof value !== 'number') continue;
-    lines.push(WORLD_QUANTUM_INT_NAMES.includes(name) ? `const int ${name} = ${value};` : `const float ${name} = ${value.toFixed(8)};`);
+// 層に分けた粒子の場（画面空間）。z=0 が奥（小さく鋭い点）、1 が手前（大きなぼけ）
+mat2 rot(float a){float c=cos(a),s=sin(a);return mat2(c,-s,s,c);}
+float beat(float k){return exp(-age.x*k);}
+float clump(vec2 uv,float t,int seed){return smoothstep(.42,.72,fbm(uv*1.4+vec2(float(seed)*3.1,t*.03)));}
+vec3 particles(vec2 uv,float t,int seed,int nl,float dens,vec2 drift,int pal,float gain){
+  vec3 col=vec3(0.); float px=1./res.y;
+  for(int i=0;i<8;i++){
+    if(i>=nl)break;
+    float zr=(float(i)+.5)/float(nl)+camZ;
+    float z=fract(zr); int wrap=int(floor(zr));
+    float fz=smoothstep(0.,.15,z)*smoothstep(1.,.85,z);
+    int sd=seed+wrap*977;
+    float cs=mix(.018,.22,z*z);
+    float r=mix(.0011,.075,pow(z,2.2));
+    vec2 v=drift*(.25+2.2*z);
+    vec2 p=(uv+v*t+camPan*(.15+2.5*z*z))/cs+float(i)*13.7;
+    ivec2 c=ivec2(floor(p));
+    for(int dy=-1;dy<=1;dy++)for(int dx=-1;dx<=1;dx++){
+      ivec2 cc=c+ivec2(dx,dy);
+      float hp=h1(cc,sd+i*31);
+      float cm=clump((vec2(cc)+.5)*cs-v*t,t,sd);
+      if(hp>dens*(1.-.6*z)*(.15+.85*cm))continue;
+      vec2 o=h2(cc,sd+i*31+5);
+      vec2 q=vec2(cc)+.15+.7*o+.12*vec2(sin(t*.7+hp*40.),cos(t*.6+hp*30.));
+      vec2 dv=(p-q)*cs; vec2 rad=normalize(uv+1e-4);
+      float st=1.+camV*z*z*length(uv)*5.;
+      float d=length(vec2(dot(dv,rad)/st,dot(dv,vec2(-rad.y,rad.x))));
+      float rr=r*(.6+.8*h1(cc,sd+i*31+9));
+      float b=bokeh(d,max(rr,px*.8),px);
+      if(b<=0.)continue;
+      float hc=h1(cc,sd+i*31+13);
+      vec3 cl=pal==0?TEAL[int(hc*8.)%8]:pal==1?GOLDB[int(hc*5.)%5]:SHELL[int(hc*6.)%6];
+      // 小さい鋭い点は明るく、大きなぼけは薄く広く
+      float sharp=1.-z;
+      float I=fz*gain*(.25+2.2*pow(h1(cc,sd+i*31+17),5.)*sharp)*clamp(.0035/max(rr,.0011),.11,2.2);
+      float tw=.75+.25*sin(t*(1.+3.*hc)+hp*60.);
+      col+=cl*b*I*tw;
+    }
   }
-  for (const name of ['FIL_CORE', 'FIL_EDGE', 'STAR_COLOR', 'GROUND_BLACK', 'GROUND_TEAL_CENTER', 'GROUND_TEAL_EDGE', 'BEAM_COLOR']) lines.push(`const vec3 ${name}_LIN = ${worldQuantumVec3(c[name])};`);
-  lines.push(`const vec3 CORE_COLOR_LIN = vec3(${c.CORE_COLOR.map(v => v.toFixed(8)).join(',')});`);
-  // 殻の金：累積重み（合計で正規化）と色
-  let total = 0; for (const g of c.SHELL_GOLD) total += g[1];
-  let acc = 0;
-  c.SHELL_GOLD.forEach((g, i) => { acc += g[1]; lines.push(`const vec3 GOLD${i} = ${worldQuantumVec3(g[0])};`, `const float GOLD_CUM${i} = ${(acc / total).toFixed(8)};`); });
-  c.SPARK_COLORS.forEach((hex, i) => lines.push(`const vec3 SPARK_C${i} = ${worldQuantumVec3(hex)};`));
-  return lines.join('\n');
-})();
-const WORLD_QUANTUM_HASH_GLSL = `
-uniform uint seed;
-float particleHash(uint i,uint serial){
- uint h=i^(serial*0x9e3779b9u)^seed;
- h=(h^(h>>16u))*0x7feb352du;h=(h^(h>>15u))*0x846ca68bu;
- return float((h^(h>>16u))>>8u)*(1./16777216.);
+  return col;
 }
-float lattice3(ivec3 p){
- uint k=uint(p.x)*73856093u^uint(p.y)*19349663u^uint(p.z)*83492791u;
- return particleHash(k,0x7c000000u);
+// 場面 0: 青緑の闇に漂う塵とぼけ（参照 5・6）
+vec3 sceneDust(vec2 uv,float t){
+  vec3 bg=mix(TEAL_BG[2],TEAL_BG[3]*1.6,smoothstep(-.7,.9,uv.y+.5*fbm(uv*1.1+t*.02)));
+  bg+=vec3(.004,.02,.035)*clump(uv*.6,t,9);
+  vec3 c=bg+particles(uv,t,1,7,.5,vec2(.012,.004),0,1.4)*(.8+.6*sm.y+1.6*beat(3.));
+  return c;
 }
-// 整数格子のハッシュ値を smoothstep で三線形補間した 3 次元 value noise（0..1）
-float vnoise3(vec3 x){
- vec3 f=floor(x),w=fract(x);w=w*w*(3.-2.*w);ivec3 i=ivec3(f);
- float a=mix(mix(lattice3(i),lattice3(i+ivec3(1,0,0)),w.x),mix(lattice3(i+ivec3(0,1,0)),lattice3(i+ivec3(1,1,0)),w.x),w.y);
- float b=mix(mix(lattice3(i+ivec3(0,0,1)),lattice3(i+ivec3(1,0,1)),w.x),mix(lattice3(i+ivec3(0,1,1)),lattice3(i+ivec3(1,1,1)),w.x),w.y);
- return mix(a,b,w.z);
+// 場面 1: 白い核を包む金の粒子殻（参照 1）。粒の細かい殻に暗いひび、外へ散る金の塵
+// 細かい粉: 画面空間の細かい格子に 1 粒ずつ、鋭い点（ぼけない）
+float powder(vec2 uv,float t,float scale,int seed,float dens){
+  vec2 p=uv*scale; ivec2 c=ivec2(floor(p)); float s=0.;
+  for(int dy=-1;dy<=1;dy++)for(int dx=-1;dx<=1;dx++){
+    ivec2 cc=c+ivec2(dx,dy); float h=h1(cc,seed);
+    if(h>dens)continue;
+    vec2 q=vec2(cc)+h2(cc,seed+3);
+    float d=length(p-q)/scale*res.y;
+    s+=exp(-d*d*.22)*(.4+1.2*h1(cc,seed+7));
+  }
+  return s;
+}
+// 場面 1: 白い核を包む金の粒子殻（参照 1）
+vec3 sceneShell(vec2 uv,float t){
+  float r=length(uv); float a=atan(uv.y,uv.x);
+  vec2 dir=uv/max(r,1e-4);
+  float R=.25*(1.+.07*sm.x+.03*sin(t*.4)+.05*beat(4.));
+  // 不規則な形: 方向で半径と厚みが変わる（多重の揺らぎ）
+  float n1=fbm(dir*1.3+vec2(t*.02,0.)), n2=fbm(dir*3.1+5.);
+  float Rr=R*(1.+.28*(n1-.5)+.12*(n2-.5));
+  float th=.07+.06*fbm(dir*2.2+9.);
+  float sh=(r-Rr)/th;
+  // 殻の濃さ: 内側はゆるやかに、外側は粉になって散る
+  float body=sh<0.?exp(-sh*sh*2.2):exp(-sh*1.3);
+  // 暗いひびの網（2 つの揺らぎの等値線）と煙
+  vec2 q=uv*7.+vec2(t*.02);
+  float v1=fbm(q+fbm(q*1.5)*1.2);
+  float crack=smoothstep(.1,.0,abs(v1-.5))*.9+smoothstep(.07,.0,abs(fbm(q*1.9+3.)-.5))*.45;
+  float smoke=fbm(uv*4.+vec2(0.,t*.05));
+  float grainF=powder(uv,t,260.,11,.85)+.6*powder(uv,t,520.,12,.9);
+  float lump=smoothstep(.25,.75,fbm(uv*5.5+vec2(3.,t*.04)));
+  float m=body*(.25+.75*lump)*(.5+.5*smoke)*(1.-min(crack,1.)*.9);
+  vec3 c=mix(SHELL[0],SHELL[4],clamp(smoke*1.2+grainF*.15-.2,0.,1.))*m*1.1;
+  c+=mix(SHELL[3],SHELL[5],.3)*grainF*body*(.2+.4*lump)*.45;
+  // 内側は焦げた茶の煙
+  c+=SHELL[0]*.18*smoothstep(Rr,0.,r)*smoothstep(.3,.8,smoke);
+  // 小さな白い核とまぶしさ
+  c+=vec3(1.,.96,.88)*(exp(-r*r/.00022)*4.+exp(-r/.03)*.35)*(1.+.8*sm.x+1.5*beat(5.));
+  // 外へ散る細かい粉（殻から離れるほど疎ら）
+  float spray=powder(uv,t,300.,21,.35)*exp(-max(sh,0.)*1.1)*smoothstep(-.5,.3,sh)*(.4+.8*fbm(dir*4.+2.));
+  c+=mix(SHELL[3],SHELL[4],.5)*spray*1.1;
+  c+=SHELL[2]*powder(uv,t,180.,23,.04)*.2;
+  return c;
+}
+
+// 場面 2: 泡の浮く太陽面（参照 11）。画面の右上に大きな球、縁は暗く、表面に明るい泡と暗い粒、下に地平の影
+vec3 sceneSun(vec2 uv,float t){
+  vec2 C=vec2(.5,.38); float R=.8;
+  vec2 d=uv-C; float r=length(d);
+  vec3 c=vec3(0.);
+  if(r<R){
+    float mu=sqrt(max(0.,1.-r*r/(R*R)));
+    vec2 sp=d/R*(1.+.4*(1.-mu));                 // 球面に貼る座標（縁で詰まる）
+    float conv=fbm(sp*4.+vec2(t*.03,-t*.02)), conv2=fbm(sp*11.-t*.05);
+    float k=clamp(-.1+1.1*conv+.25*conv2-.2*(1.-mu),0.,1.);
+    c=mix(SUN[0]*.7,SUN[4],k)*(.25+.6*pow(mu,.7))*.9;
+    c+=SUN[6]*pow(max(0.,conv2-.55),2.)*1.2*mu;
+    // 表面の泡（明るいぼけ）と暗い粒
+    vec3 bub=particles(uv*.45,t,5,4,.22,vec2(-.002,.003),1,3.2);
+    c+=(bub+SUN[6]*dot(bub,vec3(.3))*.8)*smoothstep(R,R*.85,r)*(.6+.8*sm.x+.8*beat(3.));
+    c*=1.-.6*powder(uv,t,90.,31,.12)*smoothstep(R,R*.6,r);
+  }
+  // 縁の光
+  c+=SUN[4]*exp(-abs(r-R)*40.)*.5;
+  // 地平の影（草の輪郭）
+  float gy=-.4+.02*fbm(vec2(uv.x*8.,0.))+.012*pow(vnoise(vec2(uv.x*140.,0.)),3.);
+  c*=smoothstep(gy-.003,gy+.006,uv.y);
+  return c;
+}
+vec3 sparks2(vec2 uv,float t,vec2 src,float spread,float speed,float grav,float life,int seed,float gain,int pal,float dtE,float thick,float jit);
+float dashField(vec2 uv,vec2 src,float t,float cols,float spd,float len,int seed,float dens,out float hc);
+// 火花（光跡）: 発生点 src から上向きの円錐へ、毎秒 rate 個。重力で曲がり、温度で白→黄→橙→赤
+vec3 sparks(vec2 uv,float t,vec2 src,float spread,float speed,float grav,float life,int seed,float gain,int pal){
+  return sparks2(uv,t,src,spread,speed,grav,life,seed,gain,pal,.07,1.,.04);
+}
+vec3 sparks2(vec2 uv,float t,vec2 src,float spread,float speed,float grav,float life,int seed,float gain,int pal,float dtE,float thick,float jit){
+  vec3 col=vec3(0.); float px=1./res.y;
+  const int NS=220;
+  for(int i=0;i<NS;i++){
+    float fi=float(i);
+    float per=life*(.7+.6*h1(ivec2(i,seed),1));
+    float ph=h1(ivec2(i,seed),2)*per;
+    float tt=t+ph; float k=floor(tt/per); float a=tt-k*per;   // この火花の年齢
+    ivec2 key=ivec2(i,int(k));
+    float ang=1.5708+(h1(key,seed+3)-.5)*spread;
+    float v=speed*(.4+.9*h1(key,seed+4))*(1.+.6*sm.x);
+    vec2 v0=vec2(cos(ang),sin(ang))*v;
+    vec2 p0=src+(h2(key,seed+5)-.5)*jit;
+    // 長時間露光: 年齢 a-dt から a までの区間を線分として描く
+    float dt=dtE*(.5+h1(key,seed+8));
+    vec2 pa=p0+v0*max(a-dt,0.)+vec2(0.,-grav)*.5*max(a-dt,0.)*max(a-dt,0.);
+    vec2 pb=p0+v0*a+vec2(0.,-grav)*.5*a*a;
+    vec2 ab=pb-pa; float l2=max(dot(ab,ab),1e-9);
+    float h=clamp(dot(uv-pa,ab)/l2,0.,1.);
+    float dd=length(uv-pa-ab*h);
+    float w=px*thick*(1.2+1.5*h1(key,seed+6));
+    float core=exp(-dd*dd/(w*w));
+    if(core<1e-3)continue;
+    float heat=1.-a/per;
+    vec3 cl=pal==0?(heat>.75?mix(SPARK[3],SPARK[4],(heat-.75)*4.):heat>.4?mix(SPARK[1],SPARK[3],(heat-.4)/.35):mix(SPARK[0]*.6,SPARK[1],heat/.4))
+                  :mix(STREAK[int(h1(key,seed+7)*7.)%7],vec3(.85,.95,1.),heat*.5);
+    col+=cl*core*gain*(.3+1.2*heat)*smoothstep(0.,.02,a);
+  }
+  return col;
+}
+// 場面 3: 火花の噴出と金のぼけ（参照 12・4）
+vec3 sceneSparks(vec2 uv,float t){
+  vec2 src=vec2(.02,-.02);
+  vec3 c=vec3(.015,.006,.002);
+  // 火の霞（発生点のまわり）
+  float fire=pow(fbm(uv*4.5+vec2(0.,-t*.6)+fbm(uv*9.)*.6),2.6)*exp(-length((uv-src)*vec2(1.6,.8))*2.6)*1.6;
+  c+=mix(SPARK[0],SPARK[4],fire*fire*2.)*fire*2.2*(1.+.8*sm.x);
+  c+=sparks2(uv,t,src+vec2(0.,.05),6.283,.8,.3,.8,3,1.4*(.4+2.6*beat(2.5)),0,.03,1.6,.5);
+  c+=sparks2(uv,t*1.3,src,6.283,.45,.2,1.1,4,1.,0,.02,1.2,.8);
+  c+=particles(uv,t,17,5,.5,vec2(.0,.02),1,1.2)*vec3(1.,.55,.2)*exp(-length(uv-src)*1.2)*(1.+1.5*beat(2.5));
+  c+=sparks2(uv,t*.8,src+vec2(.1,.2),6.283,.3,.1,1.4,5,.8,0,.025,1.4,.9);
+  {float hc; float rr=length(uv-src); float k=dashField(uv,src,t,500.,.5,1.2,81,(.03+.18*exp(-rr*3.))*(.3+1.4*clump(uv,t,4)),hc); c+=mix(SPARK[1],SPARK[4],hc)*k*1.1*smoothstep(.04,.12,rr);}
+  // 金のぼけの雲（手前、ピントの外）
+  vec3 gb=particles(uv*.8+vec2(.1,0.),t,7,6,.55,vec2(.006,.012),1,1.3);
+  c+=gb*smoothstep(1.1,.1,length(uv-vec2(.15,.05)));
+  return c;
+}
+
+// 放射状の光跡の場: 発生点 src から外へ流れる短い光跡を、極座標（角度 × log 半径）の格子に 1 本ずつ置く。
+// 数千本を一定の計算量で描ける。cols は角度方向の密度、spd は外へ流れる速さ、len は光跡の長さ（log 半径）
+float dashField(vec2 uv,vec2 src,float t,float cols,float spd,float len,int seed,float dens,out float hc){
+  vec2 d=uv-src; float r=max(length(d),1e-3);
+  float th=atan(d.x,d.y);                 // 0 が真上
+  float lr=log(r)*cols/6.283;
+  vec2 q=vec2(th*cols/6.283,lr-t*spd*cols/6.283);
+  ivec2 c=ivec2(floor(q)); float s=0.; hc=0.;
+  for(int dy=-1;dy<=1;dy++)for(int dx=0;dx<=0;dx++){
+    ivec2 cc=c+ivec2(dx,dy); float h=h1(cc,seed);
+    if(h>dens)continue;
+    vec2 o=h2(cc,seed+1);
+    float ax=(q.x-float(cc.x)-o.x)*6.283/cols*r;            // 線からの横のずれ（画面の長さ）
+    float ay=q.y-float(cc.y)-o.y;                             // 線に沿った位置（格子単位）
+    float L=len*(.5+h1(cc,seed+2));
+    float along=smoothstep(0.,.15*L,ay+L)*smoothstep(0.,.08,-ay)*step(ay,0.);
+    float w=(.6+1.*h1(cc,seed+3))/res.y;
+    float k=exp(-ax*ax/(w*w))*along*(.4+1.2*h1(cc,seed+4));
+    if(k>s){s=k;hc=h1(cc,seed+5);}
+  }
+  return s;
+}
+// 場面 4: 青い粒子の光跡（参照 7・8）。中央下から上へ広がる流れと、降る帳と横の光の帯
+vec3 sceneStreams(vec2 uv,float t){
+  vec3 c=mix(STREAK[0]*.06,STREAK[1]*.12,smoothstep(-.6,.6,uv.y));
+  // 2 本の明るい柱（虹色のにじみ）と、その間と外の疎らな光跡
+  vec2 src=vec2(0.,-1.1);
+  float th=atan(uv.x-src.x,uv.y-src.y);
+  float colm=exp(-pow((th+.2)/.11,2.))+exp(-pow((th-.18)/.11,2.));
+  for(int L=0;L<3;L++){
+    float hc; float fl=float(L);
+    vec2 wob=vec2(fbm(uv*3.+t*.2)-.5,0.)*.06;
+    float k=dashField(uv+wob,src+vec2(.03*fl,0.),t,1600.-fl*400.,.9+.3*fl,1.1+fl*.5,71+L,.05+.55*colm,hc);
+    vec3 cl=mix(STREAK[int(hc*4.)%4],vec3(.8,.95,1.),.25+.35*hc);
+    c+=cl*k*(.35+.9*colm)*(1.-.25*fl)*(1.+.6*sm.z+1.2*beat(3.))*smoothstep(.25,.6,length(uv-src));
+  }
+  // 柱の虹色のにじみ
+  vec3 irid=.5+.5*cos(6.283*(uv.y*1.5+vec3(0.,.33,.67))+th*8.);
+  c+=mix(STREAK[2],irid,.18)*colm*.22*smoothstep(-.9,.4,uv.y)*(.6+.5*fbm(vec2(th*20.,uv.y*3.-t)));
+  // 横の光の帯
+  float band=exp(-pow((uv.y+.18+.03*sin(uv.x*3.+t))/.05,2.));
+  c+=STREAK[6]*band*(.03+.05*fbm(vec2(uv.x*4.-t*.3,0.)))*(1.+sm.z+beat(3.));
+  c+=particles(uv,t,13,5,.4,vec2(0.,-.03),0,.8)*vec3(.6,.8,1.2);
+  return c;
+}
+// 場面 6: ミントの光（参照 15）。露出の飛んだ淡い緑に、暗い塵が流れる
+vec3 sceneMint(vec2 uv,float t){
+  vec3 c=mix(MINT[0],MINT[2],fbm(uv*2.+t*.05))*.62;
+  c=mix(vec3(dot(c,vec3(.3,.59,.11))),c,1.6);
+  c+=MINT[3]*.6*sparks2(uv,t*.5,vec2(-.9,-.6),1.4,.6,0.,3.,61,1.,1,.05,1.6,1.2);
+  c-=vec3(.08,.05,.07)*powder(uv+vec2(t*.02,-t*.01),t,220.,51,.35);
+  {float hc; float k=dashField(uv,vec2(-1.2,-.9),t,500.,.3,.8,91,.1*(.3+fbm(uv*2.)),hc); c+=MINT[3]*k*.6;}
+  return c;
+}
+vec3 sceneOf(int scene,vec2 uv,float time,float ts);
+void main(){
+  vec2 uv=(gl_FragCoord.xy-.5*res)/res.y;
+  vec3 c=sceneOf(scene,uv,time,tA);
+  if(mixW>0.)c=mix(c,sceneOf(sceneB,uv,time,tB),mixW);
+  float warm=float(scene==1||scene==2||scene==3)*(1.-mixW)+float(sceneB==1||sceneB==2||sceneB==3)*mixW;
+  vec2 fu=rot(camRoll)*uv;
+  c+=particles(fu,time,401,4,.16,vec2(0.),warm>.5?1:0,.55)*mix(vec3(.8,1.,1.1),vec3(1.2,.9,.6),warm);
+  c*=1.+.45*beat(4.)*(.4+loud);
+  vec2 ndc=gl_FragCoord.xy/res*2.-1.;
+  c*=1.-VIGNETTE*dot(ndc*.8,ndc*.8); if(any(isnan(c))||any(isinf(c)))c=vec3(0.); frag=vec4(min(c,vec3(60.))*EXPOSURE,1.);
+}
+vec2 camera(int scene,vec2 uv,float ts){
+  uv=rot(camRoll)*uv;
+  if(scene==0)return uv;
+  if(scene==4)return rot(.05*ts)*(uv+vec2(0.,-.35+.09*ts));                 // 流れを追って振り上げる
+  if(scene==6)return uv+vec2(.08,.04)*ts;
+  if(scene==1)return rot(.14*ts+.2)*uv/(.75+.16*ts);                         // 遠くから殻へ寄りながら回り込む
+  if(scene==3)return rot(-.08*ts)*uv/(.8+.2*ts);                             // 噴出へ突っ込む
+  if(scene==2)return uv/(1.+.05*ts)+vec2(.13*ts-.35,.03*ts);                 // 表面を横へなめる
+  return uv;
+}
+vec3 sceneOf(int scene,vec2 uv0,float time,float ts){
+  vec2 uv=camera(scene,uv0,ts);
+  vec3 c;
+  if(scene==1)c=sceneShell(uv,time);
+  else if(scene==2)c=sceneSun(uv,time);
+  else if(scene==3)c=sceneSparks(uv,time);
+  else if(scene==4)c=sceneStreams(uv,time);
+  else if(scene==6)c=sceneMint(uv,time);
+  else c=sceneDust(uv,time);
+  return c;
 }
 `;
-const WORLD_QUANTUM_POINT_VERTEX = `#version 300 es
-precision highp float;
-precision highp int;
-precision highp sampler2D;
-${WORLD_QUANTUM_GLSL}
-${WORLD_QUANTUM_HASH_GLSL}
-const float PI=3.141592653589793;
-const float DEG=PI/180.;
-// 乱数の用途ごとの系列（イベント通番と衝突しない上位ビット）
-const uint SER_BUNDLE=0x7a000000u,SER_FIL=0x7a100000u,SER_SHELL=0x7b000000u;
-const int FIL_TOTAL=FIL_BUNDLES*FIL_PER_BUNDLE*FIL_SAMPLES;
-const int SHELL_END=FIL_TOTAL+SHELL_COUNT;
-uniform vec4 bands[32];
-uniform vec4 weights; // filaments、star、sparks、teal
-uniform vec3 camPos,camForward,camRight,camUp;
-uniform vec2 projection; // aspect、tan(fov/2)
-uniform vec4 timing; // t、波の位相、殻の膨張係数B、露出
-uniform vec4 view; // s1080、focus
-uniform vec4 filPulse[2]; // 4スロット (serial,t0)
-uniform vec4 sparkOrigin[SPARK_BURSTS]; // xyz、t0
-uniform float sparkSerial[SPARK_BURSTS];
-out vec3 pointColor;
-out float pointSizeNorm;
-void dropPoint(){gl_Position=vec4(2.,2.,2.,1.);gl_PointSize=1.;pointColor=vec3(0.);pointSizeNorm=1.;}
-vec3 rotX(vec3 p,float a){float c=cos(a),s=sin(a);return vec3(p.x,p.y*c-p.z*s,p.y*s+p.z*c);}
-vec3 rotY(vec3 p,float a){float c=cos(a),s=sin(a);return vec3(p.x*c+p.z*s,p.y,-p.x*s+p.z*c);}
-vec3 sparkColor(float u){
- if(u<.33)return mix(SPARK_C0,SPARK_C1,u/.33);
- if(u<.66)return mix(SPARK_C1,SPARK_C2,(u-.33)/.33);
- return mix(SPARK_C2,SPARK_C3,clamp((u-.66)/.34,0.,1.));
 }
-vec3 goldColor(float h){
- if(h<GOLD_CUM0)return GOLD0;if(h<GOLD_CUM1)return GOLD1;if(h<GOLD_CUM2)return GOLD2;if(h<GOLD_CUM3)return GOLD3;return GOLD4;
-}
-void main(){
- int v=gl_VertexID;vec3 P;vec3 col;float t=timing.x;
- if(v<FIL_TOTAL){
-  if(weights.x<MIN_WEIGHT){dropPoint();return;}
-  int j=v%FIL_SAMPLES,fi=(v/FIL_SAMPLES)%FIL_PER_BUNDLE,b=v/(FIL_SAMPLES*FIL_PER_BUNDLE);
-  uint ub=uint(b),uf=uint(b*FIL_PER_BUNDLE+fi);
-  float R=FIL_R_MIN+FIL_R_SPAN*particleHash(ub,SER_BUNDLE+1u);
-  float alpha=(particleHash(ub,SER_BUNDLE+2u)-.5)*FIL_TILT*DEG;
-  float beta=particleHash(ub,SER_BUNDLE+3u)*2.*PI;
-  float omega=(FIL_OMEGA_MIN+FIL_OMEGA_SPAN*particleHash(ub,SER_BUNDLE+4u))*((b&1)==0?1.:-1.);
-  float th0=particleHash(ub,SER_BUNDLE+5u)*2.*PI;
-  float m=FIL_WAVE_M_MIN+floor(particleHash(ub,SER_BUNDLE+6u)*FIL_WAVE_M_SPAN);
-  float amp=FIL_WAVE_A_MIN+FIL_WAVE_A_SPAN*particleHash(ub,SER_BUNDLE+7u);
-  float o=(particleHash(uf,SER_FIL+1u)-.5)*FIL_BUNDLE_W,ro=(particleHash(uf,SER_FIL+2u)-.5)*FIL_RADIAL_W;
-  float phi=particleHash(uf,SER_FIL+3u)*.6;
-  col=mix(FIL_EDGE_LIN,FIL_CORE_LIN,particleHash(uf,SER_FIL+4u));
-  int band=(b*5+fi*4)%32;float lv=bands[band].y;
-  float u=float(j)/float(FIL_SAMPLES-1);
-  float th=th0+omega*t+u*FIL_SPAN;
-  float wave=amp*(1.+FIL_WAVE_BAND*lv)*sin(m*th-timing.y+phi);
-  vec3 local=vec3((R+ro)*cos(th),o+wave,(R+ro)*sin(th));
-  P=rotY(rotX(local,alpha),beta);
-  float pulse=0.;
-  for(int k=0;k<FIL_PULSE_SLOTS;k++){
-   vec4 q=filPulse[k>>1];vec2 sl=(k&1)==0?q.xy:q.zw;
-   float age=t-sl.y;
-   if(age>=0.&&age<=FIL_PULSE_SECONDS&&particleHash(uf,uint(sl.x))<FIL_PULSE_FRACTION){
-    float s=age*FIL_PULSE_SPEED;
-    if(s<=1.){float d=(u-s)/FIL_PULSE_WIDTH;pulse+=FIL_PULSE_GAIN*exp(-.5*d*d)*(1.-age/FIL_PULSE_SECONDS);}
-   }
-  }
-  col*=FIL_GAIN*pow(max(sin(PI*u),0.),.8)*(BAND_BASE+BAND_GAIN*lv)*(1.+pulse)*weights.x;
- }else if(v<SHELL_END){
-  if(weights.y<MIN_WEIGHT){dropPoint();return;}
-  uint ui=uint(v-FIL_TOTAL);
-  float h1=particleHash(ui,SER_SHELL+1u),h2=particleHash(ui,SER_SHELL+2u),h3=particleHash(ui,SER_SHELL+3u);
-  float h4=particleHash(ui,SER_SHELL+4u),h5=particleHash(ui,SER_SHELL+5u),h6=particleHash(ui,SER_SHELL+6u);
-  float z=2.*h1-1.,ph=2.*PI*h2,sq=sqrt(max(0.,1.-z*z));vec3 dir=vec3(sq*cos(ph),z,sq*sin(ph));
-  bool spray=h3<SHELL_SPRAY;
-  float r=spray?SHELL_R*(SHELL_SPRAY_MIN+SHELL_SPRAY_SPAN*h4):SHELL_R*(1.+SHELL_JITTER*(h4-.5));
-  float B=timing.z;
-  r*=1.+(B-1.)*(.6+.8*h5);
-  P=rotY(dir*r,SHELL_SPIN*t);
-  vec3 seedOffset=vec3(float(seed%1024u)*.37);
-  float vein=max(CRACK_FLOOR,smoothstep(0.,CRACK_WIDTH,abs(vnoise3(dir*CRACK_FREQ+seedOffset)-.5)));
-  int band=int((dir.y*.5+.5)*31.99);
-  float gain=SHELL_GAIN*(BAND_BASE+BAND_GAIN*bands[band].y)*vein*weights.y;
-  if(spray)gain*=SHELL_SPRAY_GAIN;
-  if(B>1.)gain*=1.-.6*(B-1.)/BURST_GROW;
-  col=goldColor(h6)*gain;
- }else{
-  if(weights.z<MIN_WEIGHT){dropPoint();return;}
-  int k=v-SHELL_END;
-  int tap=k%SPARK_TAPS,pi=(k/SPARK_TAPS)%SPARK_PER_BURST,bu=k/(SPARK_TAPS*SPARK_PER_BURST);
-  vec4 so=sparkOrigin[bu];uint ser=uint(sparkSerial[bu])*16u,up=uint(pi);
-  float a=t-so.w-float(tap)*SPARK_SHUTTER/float(SPARK_TAPS);
-  float life=SPARK_LIFE_MIN+SPARK_LIFE_SPAN*particleHash(up,ser+1u);
-  if(a<0.||a>=life){dropPoint();return;}
-  float z=2.*particleHash(up,ser+2u)-1.,ph=2.*PI*particleHash(up,ser+3u),sq=sqrt(max(0.,1.-z*z));vec3 dir=vec3(sq*cos(ph),z,sq*sin(ph));
-  float hs=particleHash(up,ser+4u),speed=SPARK_SPEED_MIN+(SPARK_SPEED_MAX-SPARK_SPEED_MIN)*hs*hs;
-  P=so.xyz+dir*speed*(1.-exp(-SPARK_DRAG*a))/SPARK_DRAG+vec3(0.,-.5*SPARK_GRAVITY*a*a,0.);
-  float hb=particleHash(up,ser+5u);
-  if(hb<SPARK_BOKEH)P-=camForward*(SPARK_BOKEH_NEAR+particleHash(up,ser+6u));
-  float u=a/life;
-  col=sparkColor(u)*SPARK_GAIN*pow(1.-u,1.5)*weights.z/float(SPARK_TAPS);
- }
- vec3 rel=P-camPos;float zv=dot(rel,camForward);
- if(zv<=NEAR_Z){dropPoint();return;}
- gl_Position=vec4(dot(rel,camRight)/(projection.x*projection.y),dot(rel,camUp)/projection.y,0.,zv);
- float s1080=view.x,coc=COC_K*s1080*abs(zv-view.y)/zv,base=BASE_SIZE*s1080;
- float size=min(MAX_POINT*s1080,sqrt(base*base+coc*coc));
- gl_PointSize=size;pointSizeNorm=size/s1080;
- pointColor=col*(base/size)*(base/size)*timing.w;
-}`;
-const WORLD_QUANTUM_POINT_FRAGMENT = `#version 300 es
+// 設計 §4.1 のヘッダー（version・precision）。sampler2D の精度宣言は全 WORLD シェーダーの監査（UW-47）に合わせる
+const WORLD_QUANTUM_FRAGMENT = `#version 300 es
 precision highp float;
 precision highp int;
 precision highp sampler2D;
-in vec3 pointColor;
-in float pointSizeNorm;
-out vec4 frag;
-void main(){
- float r=length(gl_PointCoord*2.-1.);
- if(r>1.){frag=vec4(0.);return;}
- float gauss=exp(-4.5*r*r);
- float disc=.30*(1.-smoothstep(.82,1.,r))*(.85+.25*smoothstep(.55,.95,r));
- frag=vec4(pointColor*mix(gauss,disc,smoothstep(4.,14.,pointSizeNorm)),0.);
-}`;
-const WORLD_QUANTUM_BACKGROUND_FRAGMENT = `#version 300 es
-precision highp float;
-precision highp int;
-precision highp sampler2D;
-${WORLD_QUANTUM_GLSL}
-${WORLD_QUANTUM_HASH_GLSL}
-in vec2 vUv;
-uniform vec4 weights; // filaments、star、sparks、teal
-uniform vec3 camForward,camRight,camUp;
-uniform vec2 projection; // aspect、tan(fov/2)
-uniform vec4 timing; // t、キック包絡、殻の膨張係数B、露出
-uniform vec4 screen; // 幅px、高さpx、s1080、focalPx
-uniform vec3 core; // corePx.x、corePx.y、coreR
-out vec4 frag;
-void main(){
- float aspect=projection.x,tanH=projection.y,t=timing.x;
- vec2 q=(vUv-.5)*vec2(aspect,1.);
- vec3 teal=mix(GROUND_TEAL_EDGE_LIN,GROUND_TEAL_CENTER_LIN,exp(-1.6*dot(q,q)*4.));
- vec3 beams=vec3(0.);
- for(int j=0;j<BEAM_COUNT;j++){
-  float cx=.5+.35*sin(.05*t+float(j)*2.1),d=(vUv.x-cx)/BEAM_WIDTH;
-  beams+=BEAM_COLOR_LIN*BEAM_GAIN*exp(-.5*d*d);
- }
- vec3 ground=mix(GROUND_BLACK_LIN,teal+beams,weights.w);
- // 星：光線方向の 3D 格子。セルごとに確率 STAR_PROB で 1 個（セル内ずれ ±.3）
- vec2 ndc=vUv*2.-1.;
- vec3 ray=normalize(camForward+ndc.x*aspect*tanH*camRight+ndc.y*tanH*camUp);
- vec3 cell=floor(ray*STAR_GRID);
- ivec3 ic=ivec3(cell);
- uint ck=uint(ic.x)*73856093u^uint(ic.y)*19349663u^uint(ic.z)*83492791u;
- vec3 stars=vec3(0.);
- if(particleHash(ck,0x7d000000u)<STAR_PROB){
-  vec3 jit=vec3(particleHash(ck,0x7d000001u),particleHash(ck,0x7d000002u),particleHash(ck,0x7d000003u));
-  vec3 sdir=normalize(cell+.5+(jit-.5)*.6);
-  float dpx=length(ray-sdir)*screen.w,rpx=STAR_RADIUS_PX*screen.z,hh=particleHash(ck,0x7d000004u);
-  stars=STAR_COLOR_LIN*hh*hh*hh*STAR_GAIN*exp(-(dpx/rpx)*(dpx/rpx));
- }
- // 核：白に近い暖色。膨らむと弱まり、縮むと強まる
- float d=length(gl_FragCoord.xy-core.xy);
- float Bcore=1./max(timing.z,.3);
- vec3 coreLight=CORE_GAIN*(1.+CORE_KICK*timing.y)*(exp(-(d/core.z)*(d/core.z))+CORE_HALO*exp(-d/(core.z*6.)))*CORE_COLOR_LIN*weights.y*Bcore;
- frag=vec4((ground+stars*(1.-weights.w)+coreLight)*timing.w,1.);
-}`;
+${worldQuantumShaderBody()}`;
+// 帯域群（テッセラクトと同じ）: [開始帯域, 終了帯域（含む）]
+const WORLD_QUANTUM_GROUPS = Object.freeze([Object.freeze([0, 3]), Object.freeze([4, 13]), Object.freeze([14, 23]), Object.freeze([24, 31])]);
+const WORLD_QUANTUM_UNIFORM_NAMES = Object.freeze(['res', 'time', 'scene', 'sceneB', 'mixW', 'camZ', 'tA', 'tB', 'camV', 'camPan', 'camRoll', 'lvl', 'sm', 'age', 'loud']);
 class WorldQuantumAnalyzer extends WorldBandAnalyzer {
   constructor() {
     super(); this.id = 'g-quantum'; this.label = '量子のビジョン';
-    this.statelessRender = true; // フレーム間のGPU履歴を持たない（設計 §1）。
-    this.camera = new Float32Array(4); this.cameraFrom = new Float64Array(6); this.cameraTarget = new Float64Array(6); this.cameraShot = new Float64Array(6);
-    this.camPos = new Float32Array(3); this.camForward = new Float32Array(3); this.camRight = new Float32Array(3); this.camUp = new Float32Array(3);
-    this.weights = new Float64Array(4); this.weightsFrom = new Float64Array(4); this.weightsTarget = new Float64Array(4); this.weightsU = new Float32Array(4);
-    this.filPulse = new Float32Array(8); this.sparkOrigin = new Float32Array(WORLD_QUANTUM.SPARK_BURSTS * 4); this.sparkSerials = new Float32Array(WORLD_QUANTUM.SPARK_BURSTS);
-    this.timing = new Float32Array(4); this.view = new Float32Array(4); this.screen = new Float32Array(4); this.corePx = new Float32Array(3);
+    this.statelessRender = true; // フレーム間のGPU履歴を持たない
+    // 音の状態（シェーダーへ渡す。毎フレーム再利用し、確保しない）
+    this.lvl = new Float32Array(4); this.sm = new Float32Array(4); this.age = new Float32Array(4);
+    this.lastOn = new Float64Array(4);
+    // 場面の予定表（曲が変わったときに 1 回だけ確保・作成）
+    this.schedStart = new Float64Array(8); this.schedScene = new Uint8Array(8); this.schedCount = 0; this.schedScore = null;
     this.reset();
   }
   reset() {
-    super.reset(); if (!this.camera) return;
-    this.camera.fill(0); this.cameraFrom.fill(0); this.cameraTarget.fill(0); this.cameraShot.fill(0);
-    this.camPos.fill(0); this.camForward.fill(0); this.camRight.fill(0); this.camUp.fill(0);
-    this.weights.fill(0); this.weightsFrom.fill(0); this.weightsTarget.fill(0); this.weightsU.fill(0);
-    this.filPulse.fill(0); for (let i = 0; i < WORLD_QUANTUM.FIL_PULSE_SLOTS; i++) this.filPulse[i * 2 + 1] = WORLD_QUANTUM.DISCARD_AGE;
-    this.sparkOrigin.fill(0); for (let i = 0; i < WORLD_QUANTUM.SPARK_BURSTS; i++) this.sparkOrigin[i * 4 + 3] = WORLD_QUANTUM.DISCARD_AGE;
-    this.sparkSerials.fill(0);
-    this.timing.fill(0); this.view.fill(0); this.screen.fill(0); this.corePx.fill(0);
-    this.section = null; this.sectionChangedSec = 0; this.sceneChangedSec = 0; this.yaw = 0; this.wavePhase = 0;
-    this.shellFactor = 1; this.shellFrom = 1; this.filSerial = 0; this.sparkSerial = 0;
-    this.lastKick = -100; this.lastEventSec = -1; this.seed = 0; this.exposure = 0; this.kind = 'intro';
+    super.reset(); if (!this.lvl) return;
+    this.lvl.fill(0); this.sm.fill(0); this.age.fill(WORLD_QUANTUM.AGE_MAX); this.lastOn.fill(-100);
+    this.loud = 0; this.lastEventSec = -1; this.lastBeatSec = -100; this.lastBeatIndex = 0; this.previewDownbeatIndex = 0;
+    this.hit = 0; this.push = 0; this.camV = 0; this.camZ = 0; this.panX = 0; this.panY = 0; this.camRoll = 0;
+    this.sceneA = 0; this.sceneB = 0; this.mixW = 0; this.tA = 0; this.tB = 0;
+    this.schedScore = null; // 次の step で予定表を作り直す（確保済みの配列は再利用する）
   }
   init(gpu) {
-    super.init(gpu);
-    this.program = gpu.program(WORLD_QUANTUM_POINT_FRAGMENT, WORLD_QUANTUM_POINT_VERTEX);
-    const names = ['bands[0]', 'weights', 'camPos', 'camForward', 'camRight', 'camUp', 'projection', 'timing', 'view', 'filPulse[0]', 'sparkOrigin[0]', 'sparkSerial[0]', 'seed'];
-    this.pointLoc = {}; for (const n of names) this.pointLoc[n] = gpu.texture(this.program, n);
-    this.backgroundProgram = gpu.program(WORLD_QUANTUM_BACKGROUND_FRAGMENT);
-    const bgNames = ['weights', 'camForward', 'camRight', 'camUp', 'projection', 'timing', 'screen', 'core', 'seed'];
-    this.bgLoc = {}; for (const n of bgNames) this.bgLoc[n] = gpu.texture(this.backgroundProgram, n);
+    super.init(gpu); this.program = gpu.program(WORLD_QUANTUM_FRAGMENT);
+    for (const name of WORLD_QUANTUM_UNIFORM_NAMES) this[name + 'Loc'] = gpu.texture(this.program, name);
   }
-  // 区間ごとの目標（重み・殻の膨張係数B）と、現在値から目標へのSCENE_FADE秒のsmoothstep。
-  _updateScene(s, t, progress) {
-    const c = WORLD_QUANTUM, target = this.weightsTarget;
-    worldQuantumSceneWeights(s.kind, s.variation, target);
-    const bTarget = worldQuantumShellFactor(s.kind, t, s.startSec, progress);
-    if (s !== this.section) {
-      if (this.section) { this.weightsFrom.set(this.weights); this.shellFrom = this.shellFactor; this.sceneChangedSec = t; }
-      else { this.weightsFrom.set(target); this.shellFrom = bTarget; this.sceneChangedSec = t - c.SCENE_FADE; }
-    }
-    const x = Math.max(0, Math.min(1, (t - this.sceneChangedSec) / c.SCENE_FADE)), e = x * x * (3 - 2 * x);
-    for (let i = 0; i < 4; i++) this.weights[i] = this.weightsFrom[i] + (target[i] - this.weightsFrom[i]) * e;
-    this.shellFactor = this.shellFrom + (bTarget - this.shellFrom) * e;
+  // 曲の区間から予定表を作る（曲が変わったときだけ。配列は足りないときだけ確保し直す）
+  _buildSchedule(score) {
+    const sections = score && score.sections ? score.sections : [], cap = sections.length * 3 + 2;
+    if (this.schedStart.length < cap) { this.schedStart = new Float64Array(cap); this.schedScene = new Uint8Array(cap); }
+    this.schedCount = worldQuantumBuildSchedule(sections, this.schedStart, this.schedScene);
+    if (this.schedCount === 0) { this.schedStart[0] = 0; this.schedScene[0] = WORLD_QUANTUM_SCENE.DUST; this.schedCount = 1; }
+    this.schedScore = score;
+  }
+  _fire(g, t) {
+    if (t - this.lastOn[g] < WORLD_QUANTUM.REFRACTORY) return;
+    this.lastOn[g] = t; if (g === 0) this.hit = 1;
   }
   step(input) {
     this.update(input);
-    const c = WORLD_QUANTUM, t = input.tSec, s = input.engine.score.sections[input.engine.sectionIndex];
-    this.seed = input.engine.score.seed; this.kind = s.kind;
-    const p = Math.max(0, Math.min(1, (t - s.startSec) / Math.max(.001, s.endSec - s.startSec))), progress = p * p * (3 - 2 * p);
-    const row = WORLD_QUANTUM_CAMERA[s.kind] || WORLD_QUANTUM_CAMERA.intro, target = this.cameraTarget, shot = this.cameraShot;
-    for (let i = 0; i < 6; i++) target[i] = row[i * 2] + (row[i * 2 + 1] - row[i * 2]) * progress;
-    // 奇数variation（3以上）で yaw速度と roll の符号を反転する。
-    if (s.variation >= 3 && s.variation % 2 === 1) { target[1] = -target[1]; target[3] = -target[3]; }
-    target[2] *= Math.PI / 180; target[3] *= Math.PI / 180; target[4] *= Math.PI / 180;
-    this._updateScene(s, t, progress);
-    if (s !== this.section) {
-      if (this.section) this.cameraFrom.set(shot); else this.cameraFrom.set(target);
-      this.sectionChangedSec = this.section ? s.startSec : s.startSec - c.CAMERA_EASE_SECONDS; this.section = s;
+    const c = WORLD_QUANTUM, t = input.tSec, dt = input.dt, f = input.features, engine = input.engine, b = this.bandUniforms;
+    if (engine.score !== this.schedScore) this._buildSchedule(engine.score);
+    // 音の状態（§5）
+    for (let g = 0; g < 4; g++) {
+      const g0 = WORLD_QUANTUM_GROUPS[g][0], g1 = WORLD_QUANTUM_GROUPS[g][1];
+      let sum = 0;
+      for (let i = g0; i <= g1; i++) sum += b[i * 4];
+      const v = sum / (g1 - g0 + 1); this.lvl[g] = v;
+      const tau = v > this.sm[g] ? c.LEVEL_ATTACK : c.LEVEL_RELEASE;
+      this.sm[g] += (v - this.sm[g]) * (1 - Math.exp(-dt / tau));
     }
-    const x = Math.max(0, Math.min(1, (t - this.sectionChangedSec) / c.CAMERA_EASE_SECONDS)), ease = x * x * (3 - 2 * x);
-    for (let i = 0; i < 6; i++) shot[i] = this.cameraFrom[i] + (target[i] - this.cameraFrom[i]) * ease;
-    const loud = input.features.loudness.level;
-    this.yaw += shot[1] * Math.max(c.SPEED_MIN, Math.min(c.SPEED_MAX, 1 + c.SPEED_LOUD_GAIN * (loud - .5))) * input.dt;
-    this.wavePhase += c.FIL_WAVE_NU * (1 + c.FIL_WAVE_LOUD * loud) * input.dt;
-    this.camera[0] = shot[0]; this.camera[1] = shot[2]; this.camera[2] = this.yaw; this.camera[3] = shot[3];
-    this._updateCameraBasis();
+    const x = Math.max(0, Math.min(1, (f.loudness.level - c.LOUD_LO) / (c.LOUD_HI - c.LOUD_LO)));
+    this.loud += (x - this.loud) * (1 - Math.exp(-dt / (x > this.loud ? c.LOUD_ATTACK : c.LOUD_RELEASE)));
+    // 立ち上がり。同じ t での再呼び出しでは二重に数えない
+    this.hit = 0;
     if (t !== this.lastEventSec) {
-      const flags = input.features.onset.flags;
-      if (flags & 1) { this.lastKick = t; if (this.weights[2] > c.SPARK_MIN_WEIGHT) this._spawnBurst(t); }
-      if (flags & 4) {
-        const serial = ++this.filSerial, slot = serial % c.FIL_PULSE_SLOTS;
-        this.filPulse[slot * 2] = serial; this.filPulse[slot * 2 + 1] = t;
+      if (engine.preview) {
+        if (engine.beatIndex !== this.lastBeatIndex) { this._fire(0, t); this._fire(1, t); this.lastBeatIndex = engine.beatIndex; }
+        const db = engine.score.downbeats; let crossed = false;
+        while (this.previewDownbeatIndex < db.length && db[this.previewDownbeatIndex] <= t) { this.previewDownbeatIndex++; crossed = true; }
+        if (crossed) { this._fire(2, t); this._fire(3, t); }
+      } else {
+        // 拍があるあいだは拍だけで 4 群を立てる。拍が BEAT_HOLD 秒ないときだけ、帯域ごとの立ち上がりを使う
+        if (f.tempo.beatFlag) { this.lastBeatSec = t; for (let g = 0; g < 4; g++) this._fire(g, t); }
+        else if (t - this.lastBeatSec > c.BEAT_HOLD) { const flags = f.onset.flags; for (let g = 0; g < 4; g++) if (flags & (1 << g)) this._fire(g, t); }
       }
       this.lastEventSec = t;
     }
-    this.exposure = c.EXPOSURE_BASE * (c.EXPOSURE_FLOOR + c.EXPOSURE_GAIN * loud);
+    for (let g = 0; g < 4; g++) this.age[g] = Math.min(c.AGE_MAX, t - this.lastOn[g]);
+    this._stepCamera(t, dt);
+    this._stepScene(t);
   }
-  // キックで火花のバーストを 1 つ作る。drop かつ star の重みが .5 以上なら殻の上、それ以外は半径 1.6 の球内。
-  _spawnBurst(t) {
-    const c = WORLD_QUANTUM, serial = ++this.sparkSerial, slot = serial % c.SPARK_BURSTS, o = slot * 4, seed = this.seed;
-    const z = 2 * worldAttractorHash(1, serial, seed) - 1, ph = 2 * Math.PI * worldAttractorHash(2, serial, seed), sq = Math.sqrt(Math.max(0, 1 - z * z));
-    const dx = sq * Math.cos(ph), dy = z, dz = sq * Math.sin(ph);
-    const r = this.kind === 'drop' && this.weights[1] >= .5 ? c.SHELL_R * this.shellFactor : c.BURST_BALL_R * Math.cbrt(worldAttractorHash(3, serial, seed));
-    this.sparkOrigin[o] = dx * r; this.sparkOrigin[o + 1] = dy * r; this.sparkOrigin[o + 2] = dz * r; this.sparkOrigin[o + 3] = t;
-    this.sparkSerials[slot] = serial;
+  // 前進・パン・回転（§6.1）
+  _stepCamera(t, dt) {
+    const c = WORLD_QUANTUM, hit = this.hit;
+    this.push += (hit - this.push) * (1 - Math.exp(-dt / (hit > this.push ? c.PUSH_ATTACK : c.PUSH_RELEASE)));
+    const target = c.CAM_BASE + c.CAM_LOUD * this.loud + c.CAM_PUSH * this.push;
+    this.camV += (target - this.camV) * (1 - Math.exp(-dt / c.CAM_TAU));
+    this.camZ += this.camV * dt;
+    this.panX += Math.sin(t * c.PAN_RATE_X) * (c.PAN_X + c.PAN_X_LOUD * this.loud) * dt;
+    this.panY += Math.cos(t * c.PAN_RATE_Y + c.PAN_PHASE_Y) * (c.PAN_Y + c.PAN_Y_LOUD * this.loud) * dt;
+    this.camRoll = c.ROLL_SWAY * Math.sin(t * c.ROLL_SWAY_RATE) + c.ROLL_RATE * t;
   }
-  // g-attractor と同じ式でカメラ位置と前/右/上（roll適用済み）を計算する。配列は再利用する。
-  _updateCameraBasis() {
-    const dist = this.camera[0], pitch = this.camera[1], yaw = this.camera[2], roll = this.camera[3];
-    const cp = Math.cos(pitch), cx = dist * cp * Math.cos(yaw), cy = dist * Math.sin(pitch), cz = dist * cp * Math.sin(yaw);
-    const il = 1 / Math.hypot(cx, cy, cz), fx = -cx * il, fy = -cy * il, fz = -cz * il;
-    const ir = 1 / Math.hypot(fz, fx), rx = -fz * ir, ry = 0, rz = fx * ir;
-    const ux = ry * fz - rz * fy, uy = rz * fx - rx * fz, uz = rx * fy - ry * fx;
-    const cr = Math.cos(roll), sr = Math.sin(roll);
-    this.camPos[0] = cx; this.camPos[1] = cy; this.camPos[2] = cz;
-    this.camForward[0] = fx; this.camForward[1] = fy; this.camForward[2] = fz;
-    this.camRight[0] = cr * rx + sr * ux; this.camRight[1] = cr * ry + sr * uy; this.camRight[2] = cr * rz + sr * uz;
-    this.camUp[0] = -sr * rx + cr * ux; this.camUp[1] = -sr * ry + cr * uy; this.camUp[2] = -sr * rz + cr * uz;
+  // 今の場面と溶かす量（§6.3）。start <= t を満たす最後の行を二分探索で求める
+  _stepScene(t) {
+    const st = this.schedStart, sc = this.schedScene, n = this.schedCount, fade = WORLD_QUANTUM.FADE;
+    let lo = 0, hi = n - 1;
+    while (lo < hi) { const mid = (lo + hi + 1) >> 1; if (st[mid] <= t) lo = mid; else hi = mid - 1; }
+    const i = lo;
+    this.sceneA = sc[i]; this.sceneB = sc[i]; this.mixW = 0; this.tA = t - st[i]; this.tB = 0;
+    if (i + 1 < n && t > st[i + 1] - fade) {
+      const x = (t - (st[i + 1] - fade)) / fade;
+      this.sceneB = sc[i + 1]; this.mixW = x * x * (3 - 2 * x); this.tB = t - (st[i + 1] - fade);
+    }
   }
   render(input) {
-    const g = this.gpu, gl = g.gl, c = WORLD_QUANTUM, w = input.target.width, h = input.target.height;
-    const aspect = w / h, tanH = Math.tan(this.cameraShot[4] * .5), s1080 = h / 1080, focalPx = h / (2 * tanH);
-    const t = input.tSec, kick = Math.exp(-Math.max(0, t - this.lastKick) / c.KICK_SECONDS);
-    for (let i = 0; i < 4; i++) this.weightsU[i] = this.weights[i];
-    // 核の画面位置と半径（原点を投影。カメラは原点を向くので中心になる）
-    const rx = -this.camPos[0], ry = -this.camPos[1], rz = -this.camPos[2];
-    const zc = rx * this.camForward[0] + ry * this.camForward[1] + rz * this.camForward[2];
-    this.corePx[0] = w * .5 + focalPx * (rx * this.camRight[0] + ry * this.camRight[1] + rz * this.camRight[2]) / zc;
-    this.corePx[1] = h * .5 + focalPx * (rx * this.camUp[0] + ry * this.camUp[1] + rz * this.camUp[2]) / zc;
-    this.corePx[2] = c.CORE_RADIUS * focalPx / this.camera[0];
-    this.screen[0] = w; this.screen[1] = h; this.screen[2] = s1080; this.screen[3] = focalPx;
-    // 背景パス（地・星・核）。ブレンドなしで全面を上書きする。
-    const b = this.bgLoc;
-    gl.disable(gl.BLEND);
-    g.bind(this.backgroundProgram, input.target);
-    gl.uniform4fv(b.weights, this.weightsU); gl.uniform3fv(b.camForward, this.camForward); gl.uniform3fv(b.camRight, this.camRight); gl.uniform3fv(b.camUp, this.camUp);
-    gl.uniform2f(b.projection, aspect, tanH);
-    this.timing[0] = t; this.timing[1] = kick; this.timing[2] = this.shellFactor; this.timing[3] = this.exposure;
-    gl.uniform4fv(b.timing, this.timing); gl.uniform4fv(b.screen, this.screen); gl.uniform3fv(b.core, this.corePx); gl.uniform1ui(b.seed, this.seed);
-    g.draw();
-    // 点スプライト 1 回の加算描画
-    const l = this.pointLoc;
+    const g = this.gpu, gl = g.gl;
     g.bind(this.program, input.target);
-    gl.uniform4fv(l['bands[0]'], this.bandUniforms); gl.uniform4fv(l.weights, this.weightsU);
-    gl.uniform3fv(l.camPos, this.camPos); gl.uniform3fv(l.camForward, this.camForward); gl.uniform3fv(l.camRight, this.camRight); gl.uniform3fv(l.camUp, this.camUp);
-    gl.uniform2f(l.projection, aspect, tanH);
-    this.timing[1] = this.wavePhase; // 点パスでは波の位相
-    this.view[0] = s1080; this.view[1] = this.cameraShot[5];
-    gl.uniform4fv(l.timing, this.timing); gl.uniform4fv(l.view, this.view);
-    gl.uniform4fv(l['filPulse[0]'], this.filPulse); gl.uniform4fv(l['sparkOrigin[0]'], this.sparkOrigin); gl.uniform1fv(l['sparkSerial[0]'], this.sparkSerials);
-    gl.uniform1ui(l.seed, this.seed);
-    gl.enable(gl.BLEND); gl.blendFunc(gl.ONE, gl.ONE);
-    gl.drawArrays(gl.POINTS, 0, c.FIL_BUNDLES * c.FIL_PER_BUNDLE * c.FIL_SAMPLES + c.SHELL_COUNT + c.SPARK_BURSTS * c.SPARK_PER_BURST * c.SPARK_TAPS);
-    gl.disable(gl.BLEND);
+    gl.uniform2f(this.resLoc, input.target.width, input.target.height); gl.uniform1f(this.timeLoc, input.tSec);
+    gl.uniform1i(this.sceneLoc, this.sceneA); gl.uniform1i(this.sceneBLoc, this.sceneB); gl.uniform1f(this.mixWLoc, this.mixW);
+    gl.uniform1f(this.camZLoc, this.camZ); gl.uniform1f(this.tALoc, this.tA); gl.uniform1f(this.tBLoc, this.tB);
+    gl.uniform1f(this.camVLoc, this.camV); gl.uniform2f(this.camPanLoc, this.panX, this.panY); gl.uniform1f(this.camRollLoc, this.camRoll);
+    gl.uniform4fv(this.lvlLoc, this.lvl); gl.uniform4fv(this.smLoc, this.sm); gl.uniform4fv(this.ageLoc, this.age);
+    gl.uniform1f(this.loudLoc, this.loud);
+    g.draw();
   }
 }
-if (typeof module !== 'undefined' && module.exports) { module.exports = { WorldQuantumAnalyzer, WORLD_QUANTUM, WORLD_QUANTUM_SCENES, WORLD_QUANTUM_CAMERA, worldQuantumSceneWeights, worldQuantumShellFactor }; }
+if (typeof module !== 'undefined' && module.exports) { module.exports = { WorldQuantumAnalyzer, WORLD_QUANTUM, WORLD_QUANTUM_SCENE, WORLD_QUANTUM_COLORS, WORLD_QUANTUM_COLORS_LINEAR, WORLD_QUANTUM_FRAGMENT, worldQuantumBuildSchedule }; }

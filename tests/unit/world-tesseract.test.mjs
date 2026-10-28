@@ -176,12 +176,12 @@ test('UW-T-05 preview: 拍で群 0・1、小節頭で群 2・3',()=>{
   s.engine.beatIndex=2;stepAt(s,3,.016);assert.deepEqual([...a.cnt],[2,2,1,1]);
   console.log('UW-T-05 ok');
 });
-test('UW-T-06 量子のビジョンは available:false・UI 一覧に出ない',()=>{
+test('UW-T-06 量子のビジョン v2 は available:true・UI 一覧に出る',()=>{
   const types=r.get('WORLD_ANALYZER_TYPES');
-  assert.deepEqual(types.find(t=>t.id==='g-quantum'),{id:'g-quantum',label:'量子のビジョン',key:5,available:false});
-  assert.equal(types.filter(t=>t.available).length,4);
+  assert.deepEqual(types.find(t=>t.id==='g-quantum'),{id:'g-quantum',label:'量子のビジョン',key:5,available:true});
+  assert.equal(types.filter(t=>t.available).length,5);
   const reg=fs.readFileSync(new URL('../../js/renderer-registry.js',import.meta.url),'utf8');
-  assert.ok(!reg.includes("'g-quantum': {"));assert.ok(reg.includes("'g-tesseract': {"));
+  assert.ok(reg.includes("'g-quantum': {"));assert.ok(reg.includes("'g-tesseract': {"));
   console.log('UW-T-06 ok');
 });
 test('UW-T-07 拍と不応期: 非プレビューの拍で4群すべて・同じ群は REFRACTORY 以内に数えない',()=>{

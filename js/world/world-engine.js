@@ -350,6 +350,7 @@ class WorldEngine {
     this.post.tesseract = this.type.id === 'g-tesseract';
     this.post.quantum = this.type.id === 'g-quantum';
     this.post.fluid2 = this.type.id === 'g-fluid';
+    this.post.grainFrame = Math.round(this.latestSec * 60); // フィルム粒子を毎フレーム変える（拍子に依存しない）
     this.post.kick = this.post.gargantua ? this.type.music[0] : 0;
     this.post.exposureMultiplier = this.post.gargantua ? this.type.exposureMultiplier : 1;
     this.post.render(this.scene);

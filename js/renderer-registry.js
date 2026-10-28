@@ -98,7 +98,10 @@ const RENDERER_REGISTRY = {
     label: 'テッセラクト', group: 'GPU', gpu: true, stateful: false,
     capabilities: { gpu: true },
   },
-  // g-quantum（量子のビジョン）は作り直しまで UI 一覧から外す（エンジンの型は残す）
+  'g-quantum': {
+    label: '量子のビジョン', group: 'GPU', gpu: true, stateful: false,
+    capabilities: { gpu: true },
+  },
 };
 
 // タイプ一覧を group 順で返す（UI の optgroup 構築用）

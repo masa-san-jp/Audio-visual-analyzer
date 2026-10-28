@@ -38,10 +38,10 @@ function setup() {
 
 test('UW-94 WORLD-34 割当のない数字キーは例外なく無視し、選択中のタイプを変えない', () => {
   const { app, press } = setup();
-  const assigned = new Set(types.filter(t => t.available).map(t => t.key)); // available:false のキー（量子 5）は割当なしと同じ扱い
+  const assigned = new Set(types.map(t => t.key));
   const unassigned = [1, 2, 3, 4, 5, 6, 7, 8, 9].filter(n => !assigned.has(n));
   // 先に最後のタイプを選び、割当なしのキーで変わらないことを確かめる。
-  const last = types.filter(t => t.available).pop();
+  const last = types[types.length - 1];
   press('Digit' + last.key);
   assert.equal(app.engine.type.id, last.id);
   for (const n of unassigned) {
