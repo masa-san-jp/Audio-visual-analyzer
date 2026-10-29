@@ -30,7 +30,7 @@
 |---|---|---|
 | 描画ロジックの複製 | `offline-exporter.js` の `_renderStateless` / `_applyPhysics` / `_clearFrame` / `_sliceLayer` が、`visualizer-core.js` の対応する処理（`_renderStateless` / `_applyPhysics` / `_clearWithAfterimage` / `AudioEngine.getLayerData`）のコピー（コメントに「実時間駆動できないため複製」と明記） | 片方だけ直すとプレビューと書き出しの見た目がずれる |
 | 色相連続変化の不一致 | ライブ: `_huePhase += speed * 0.5`（1フレームごと）。オフライン: `+= speed * 0.5 * (dtMs / 16.7)` | 120Hz ディスプレイではライブの色相変化が書き出しの2倍速になる |
-| テストがリポジトリにない | `log.md` に記録されたテストスクリプト（`test-mp4-demuxer.mjs`、`phase14-e2e.mjs` 等）が存在しない | 外注実装者が回帰を確認できない |
+| テストがリポジトリにない | `log.md` に記録されたテストスクリプト（`test-mp4-demuxer.mjs`、`phase14-e2e.mjs` 等）が存在しない | 実装者が回帰を確認できない |
 
 ---
 

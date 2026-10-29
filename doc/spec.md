@@ -916,7 +916,7 @@ Phase 6.1（表現調整）: 実機レビューを受けて各タイプを改善
 | 16 | 音楽特徴ストリーム（MFS）。ライブ・書き出しの解析を AudioWorklet に一本化し、AnalyserNode はフォールバックとして残す | `doc/20260928-plan-phase16-music-feature-stream.md` |
 | 18 | ソングマップと自動演出 | `doc/20260928-plan-phase18-song-map-and-auto-director.md` |
 
-- 実装は外注で行う。作業ルールは `doc/20260928-implementation-guide-for-contractors.md` に従う
+- 実装時の作業ルールは `doc/20260928-implementation-guide-for-contractors.md` に従う
 - Phase 17（モジュレーション）・19（WebGL2）・20（MIDI・タイムライン）・21（出力強化・9:16）は構想段階
 
 ---
