@@ -6,6 +6,13 @@
 
 https://youtube.com/shorts/dywUYpVFatw?feature=share
 
+## リリース
+
+更新内容は [GitHub のリリース](https://github.com/masa-san-jp/Audio-visual-analyzer/releases) にまとめています。
+
+- **v2.26：** 量子のビジョン v2。映画『オッペンハイマー』の量子のビジョンを、実写のレンズの質感でできた場面のモンタージュとして描きます。
+- **v2.25：** テッセラクト v2。映画『インターステラー』の 5 次元空間を、光の糸の束の格子として描きます。
+
 ## セットアップ
 
 本プロジェクトは HTML / CSS / JavaScript のみで構成されており、`npm install` などは不要です。
