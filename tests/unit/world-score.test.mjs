@@ -253,7 +253,7 @@ test('UW-67 WORLD-22 gargantua: renderAt(45)の2701CPU更新・uniform/イベン
       eventIndex: engine.eventIndex, beatIndex: engine.beatIndex, sectionIndex: engine.sectionIndex,
       lastKick: engine.lastKick, kickCount: engine.kickCount, azim: type.azim, exposure: type.exposureMultiplier };
   }
-  // フラグを無効化した参照経路は修正前と同じ全ステップ描画。
+  // フラグを無効化した参照経路は全ステップを描画する。
   type.statelessRender = false; await engine.renderAt(45); const reference = state();
   assert.equal(renders, 2701); renders = 0; type.statelessRender = true;
   await engine.renderAt(45); assert.equal(renders, 1); assert.equal(engine.frame, 2701);

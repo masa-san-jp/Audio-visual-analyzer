@@ -10,11 +10,11 @@
 //      完全黒→非ゼロはInfinityとして記録し、窓内フレーム0枚は失敗。
 // WORLD-7: §2.6に従い旧環境の検査を抽象状態・粒子・軌跡へ移行。
 //      被覆は合成前後HDR輝度差>1e-4（暗部丸めを除外）の画素率、ブルーム／履歴の広がりを含めない。
-//      各section中央＋参照7時刻（112秒outroを含む）を等重みで平均し5〜25%。最大被覆上限は撤回。
-//      同じ測定で生の粒子輝度積分寄与を報告。建築の優勢率／sparks≤8%は新方針で撤回。
+//      各section中央＋参照7時刻（112秒outroを含む）を等重みで平均し5〜25%。最大被覆の上限は設けない。
+//      同じ測定で生の粒子輝度積分寄与を報告。建築の優勢率／sparks≤8%は検査しない。
 //      BW-4-shellは粒子位置固定で殻の経過のみを変更し0.4秒以降HDR差0を検査。
 //      BW-4-introは光の霧／粒子の進行による増光。BW-5-lightは直接kickのHDR増光。
-//      BW-3-coverage/BW-4-sparks/BW-4-accentを撤回。白飛び≤2%・三色役割交換は保持。
+//      BW-3-coverage/BW-4-sparks/BW-4-accentは検査しない。白飛び≤2%・三色役割交換は保持。
 //      BW-7: 3×3占有（Y>.005の画素が各tileの1%以上、6tile以上）、再登場の画素差、
 //      実2Dカメラの恒等変換との差、camera固定・kick無し0.15秒の物質移動を検査。
 //      動きは平均粒子速度≥.1世界単位/秒、RGB差合計>3の画素≥1%。intro平均Y=.02〜.05。
@@ -83,7 +83,7 @@ child.on('close',code=>process.exit(code ?? 0));\n`);
   const result = await chrome.evaluate('runWorldMeasurement(window.__worldVisualResult)', { timeoutMs: 900000 });
   const analyzer = await chrome.evaluate('runWorldAnalyzerMeasurement()', { timeoutMs: 900000 });
   Object.assign(result, analyzer);
-  // §2.8: W/BWはg-fluidの回帰として保持。旧SDF併描／全タイプ26万粒という解釈のみ撤回。
+  // §2.8: W/BWはg-fluidの回帰として保持。旧SDF併描／全タイプ26万粒は前提にしない。
   result.applicability = { legacy: 'W/BWはg-fluidへ適用（閾値維持）', obsolete: ['W-3のSDF併描: §2.6で撤回', 'W-3/BW-6-coverageを全タイプへ強制: §2.8で独立形態へ置換'], replacement: '新形態はG-1〜G-4。W-3はWORLD-38でg-fluid v2の格子・塵・HDRの検査へ置換（BW-3-hero/BW-6-coverageは撤去）' };
   result.environment = hardware; result.consoleErrors = chrome.errors;
   if (!hardware.hardware) {

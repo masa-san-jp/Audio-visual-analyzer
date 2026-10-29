@@ -268,7 +268,6 @@ vec3 sceneOf(int scene,vec2 uv0,float time,float ts){
   else if(scene==2)c=sceneSun(uv,time);
   else if(scene==3)c=sceneSparks(uv,time);
   else if(scene==4)c=sceneStreams(uv,time);
-  else if(scene==5)c=sceneRipples(uv,time);
   else if(scene==6)c=sceneMint(uv,time);
   else c=sceneDust(uv,time);
   return c;

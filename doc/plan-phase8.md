@@ -107,7 +107,7 @@ Phase 9.2（AudioWorklet移行）── 最後（緊急度低）
   - 映像コーデック候補に `avc1.640028` 等を追加（`recorder.js` の `RECORDER_MIME_CANDIDATES` に準じた優先順位）し、`VideoEncoder.isConfigSupported` で MP4/WebM を自動選択（MP4優先→WebM フォールバック、`recorder.js` の方針を踏襲）
   - 音声コーデックも `mp4a.40.2`（AAC）候補を追加し、`AudioEncoder.isConfigSupported` で判定
   - 選択したコンテナに応じて `WebmMuxer` / `Mp4Muxer` を切り替え、保存拡張子（`.mp4`/`.webm`）も連動させる
-- **DoD**: MP4対応環境で `.mp4` が生成され、`<video>` 要素で再生・シークできる。非対応環境は WebM にフォールバックする。Node構造テスト + Chromium E2E（既存 `offline-export-e2e.mjs` と同パターン）で検証
+- **DoD**: MP4対応環境で `.mp4` が生成され、`<video>` 要素で再生・シークできる。非対応環境は WebM にフォールバックする。Node構造テスト + Chromium E2E（既存のオフライン書き出し E2E と同パターン）で検証
 
 ### 9.2 AudioWorklet ベース解析への移行
 
@@ -118,7 +118,7 @@ Phase 9.2（AudioWorklet移行）── 最後（緊急度低）
   - `js/fft.js`: 複素FFT（Radix-2 Cooley-Tukey）+ Blackman窓（Web Audio 仕様準拠）+ `smoothingTimeConstant` の指数移動平均（dB領域）+ dB→byte マッピング（`minDecibels`/`maxDecibels` 既定 -100/-30）。**ライブの `AnalyserNode` と出力が実用上一致することを Node テストで検証**（既知の正弦波入力でピークbinの位置・振幅を確認）
   - `js/analysis-worklet.js`: `AudioWorkletProcessor` 実装。`process()` でPCMをリングバッファへ蓄積し、`fftSize` 分たまるごとに `fft.js` で解析、結果を `port.postMessage`（Transferable）でメインスレッドへ送る
 - **変更**: `offlineCtx.audioWorklet.addModule('js/analysis-worklet.js')` → `AudioWorkletNode` 経由でメッセージ受信に置き換え
-- **DoD**: 同一音源で ScriptProcessorNode版と AudioWorklet版の出力が実用上一致する（既存の `offline-export-e2e.mjs`/variants テストが同様に通過）。優先度低のため、他フェーズ完了後に着手する
+- **DoD**: 同一音源で ScriptProcessorNode版と AudioWorklet版の出力が実用上一致する（既存のオフライン書き出し E2E とその設定違いのテストが同様に通過）。優先度低のため、他フェーズ完了後に着手する
 
 ---
 
@@ -146,7 +146,7 @@ Phase 9.2（AudioWorklet移行）── 最後（緊急度低）
 
 ## 5. 完了定義
 
-- Phase 8: 5項目すべてが個別に動作し、`node --check` 全ファイルパス、既存回帰（foundation/smoke/browser-check）に影響なし
+- Phase 8: 5項目すべてが個別に動作し、`node --check` 全ファイルパス、既存の回帰テストに影響なし
 - Phase 9.1: MP4構造テスト（Node）+ Chromium E2E がパスし、MP4/WebM 両方の出力を確認
 - Phase 9.2: AudioWorklet版とScriptProcessorNode版の出力比較テストがパス
 - Phase 10.1: 動画合成のライブ・録画確認、既存の音声専用フローに回帰なし

@@ -1,4 +1,4 @@
-// MFS テスト用ドライバ — MfsExtractor 統合前に、計画書 §5.1 / §5.3 どおりホップ分割・Hann 窓・FFT で
+// MFS テスト用ドライバ — MfsExtractor を通さずに、計画書 §5.1 / §5.3 どおりホップ分割・Hann 窓・FFT で
 // 振幅スペクトル A を作り、MfsOnset（と MfsTempo）を駆動する（tests/ 専用。アプリ本体は参照しない）。
 import { loadClassic } from './load-classic.mjs';
 

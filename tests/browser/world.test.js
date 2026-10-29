@@ -129,7 +129,7 @@ async function worldV5Probe(w) {
   const engine = w.engine, u = engine.gpu.uniforms, samples = [];
   for (const section of w.score.sections.filter(s => s.kind === 'drop')) {
     const tSec = (section.startSec + section.endSec) / 2; await w.renderAt(tSec);
-    // §2.6: dropのhistory weightは0。trailPixelsの必須判定は撤回し、直接のkick発光を測る。
+    // §2.6: dropのhistory weightは0。trailPixelsは必須にせず、直接のkick発光を測る。
     const before = worldReadHdr(engine), features = new MfsFrameView(); features.raw[MFS_LAYOUT.ONSET_FLAGS] = 1;
     engine._step(tSec, features, 1 / 60); engine._draw(); const flared = engine.capture(), after = worldReadHdr(engine);
     let flareEnergy = 0;

@@ -8,7 +8,7 @@ const SAMPLE_RATES = [48000, 44100];
 const N = MFS_CONST.FFT_SIZE;
 const H = MFS_CONST.HOP_SIZE;
 
-// MfsExtractor 未実装のため、tests/lib/mfs-drive.mjs（計画書 §5.1 / §5.3 どおりのホップ分割・FFT）で MfsOnset を駆動する。
+// MfsExtractor を通さず単体で検査するため、tests/lib/mfs-drive.mjs（計画書 §5.1 / §5.3 どおりのホップ分割・FFT）で MfsOnset を駆動する。
 // 戻り値: 群ごとのオンセット時刻の配列（tSec = ホップ完了時刻）
 function runOnsets(signal) {
   const onset = new MfsOnset(signal.sampleRate, N);

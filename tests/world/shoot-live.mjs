@@ -189,7 +189,7 @@ function world17Geometry(engine,state){
     if(gl.getError())throw new Error('geometry GL error');return {pixels,width:target.width,height:target.height,view:world17View(state.camera,state.view2)};
   }finally {g.releaseTarget(target);}
 }
-// world12/13Shootをこのticketの計測経路へ差し替える（製品と他ticketのテストファイルは編集しない）。
+// world12/13Shootをこの撮影用の計測経路へ実行時に差し替える（製品と他のテストファイルは変更しない）。
 async function world12Shoot(typeId,tSec){
   const w=__world,app=w.app,e=w.engine,audio=w.audio,c=WORLD17_CHECKS,gargantua=typeId==='g-gargantua';
   if(!['g-gargantua','g-fluid'].includes(typeId))throw new RangeError('未実装のタイプ');

@@ -12,17 +12,17 @@ const WORLD_QUANTUM = Object.freeze({
   // 音の状態（テッセラクトと同じ。§5）
   LEVEL_ATTACK: .048, LEVEL_RELEASE: .26, LOUD_ATTACK: .065, LOUD_RELEASE: .4, LOUD_LO: .33, LOUD_HI: .93,
   AGE_MAX: 9, REFRACTORY: .12, BEAT_HOLD: 2,
-  EXPOSURE: 1.47,                // 試作の後処理（ACES の前に ×1.1）と、エンジンの後処理（×.75）の差を埋める
+  EXPOSURE: 1.47,                // ACES の前の露出。エンジンの後処理（×.75）で暗くなる分を補う
   VIGNETTE: .4,
   GRAIN: .035,                   // フィルム粒子（後処理で毎フレーム更新。§7）
   HALATION: .25,                 // 明るい所のまわりの暖色のにじみ（後処理。§7）
   BLOOM_THRESHOLD: .02, BLOOM_STRENGTH: .55,
-  SPARK_COUNT: 128,              // 火花の群ごとの本数（3 群。試作は 220 本 × 3 群）
+  SPARK_COUNT: 128,              // 火花の群ごとの本数（3 群）
   SPARK_GRID: 48, SPARK_GRID_MIN: -2.4, SPARK_GRID_CELL: .1,   // 火花を登録する升目（場面の座標で [MIN, MIN+GRID*CELL]²）
   SPARK_GRID_CAP: 32,            // 1 升に登録する火花の上限
   SPARK_GRID_MARGIN: .03,        // 線分の外接矩形を広げる幅（最も太い線のにじみが届く距離より広い）
-  RENDER_SCALE: .67,
-  FADE_SCALE: .5,                // 溶かしの間（2 場面を描く）の内部解像度。動いている間なので粗さは目立たない             // 内部の描画解像度（出力に対する比）。ぼけと粒子の柔らかい絵なので、縮めて描いて拡大する
+  RENDER_SCALE: .67,             // 内部の描画解像度（出力に対する比）。ぼけと粒子の柔らかい絵なので、縮めて描いて拡大する
+  FADE_SCALE: .5,                // 溶かしの間（2 場面を描く）の内部解像度。動いている間なので粗さは目立たない
   PX_MIN: .5                     // 線・点の幅の下限（内部の描画画素）。これより細い線は太らせ、明るさを幅の比で下げる
 });
 // 場面の番号（シェーダーの scene。5 は欠番＝水面、不使用）
@@ -65,7 +65,7 @@ function worldQuantumBuildSchedule(sections, starts, scenes) {
   }
   return n;
 }
-// 火花の 3 群（試作の sparks2 の引数）: 時間の倍率, 発生点, 広がり, 速さ, 重力, 寿命, seed, 明るさ, 露光時間, 太さ, 発生点のばらつき
+// 火花の 3 群の引数: 時間の倍率, 発生点, 広がり, 速さ, 重力, 寿命, seed, 明るさ, 露光時間, 太さ, 発生点のばらつき
 const WORLD_QUANTUM_SPARK_BURSTS = Object.freeze([
   Object.freeze([1, .02, .03, 6.283, .8, .3, .8, 3, 1.4, .03, 1.6, .5]),
   Object.freeze([1.3, .02, -.02, 6.283, .45, .2, 1.1, 4, 1, .02, 1.2, .8]),
@@ -578,7 +578,7 @@ class WorldQuantumAnalyzer extends WorldBandAnalyzer {
       gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, this.sparkGrid.width, this.sparkGrid.height, gl.RGBA, gl.FLOAT, this.sparkGridData);
     }
     // 溶かしの間は次の場面を別の描画先へ描き、拡大のときに混ぜる（後段の処理は線形なので、1 本で mix するのと同じ絵。
-    // GPU の blend で重ねると、この GPU では描画時間が 6 倍になった）
+    // GPU の blend で重ねると、M4 Max で描画時間が 6 倍になった）
     const fading = this.mixW > 0, a = fading ? this.fadeA : this.low;
     this._pass(input, this.sceneA, this.tA, a);
     if (fading) this._pass(input, this.sceneB, this.tB, this.fadeB);

@@ -295,9 +295,9 @@ function songDownbeats(beatHops, oL, rows, L) {
   return idx;
 }
 
-// ── buildSongMap（骨格）──
-// T18-03 時点では ①〜⑤ の結果（SongMap v1 のうち beats までのフィールド）を返す。
-// ⑥〜⑨（bars・sections）と validateSongMap は関数末尾で呼び出す。
+// ── buildSongMap ──
+// ①〜⑤ で SongMap v1 のうち beats までのフィールドを求め、
+// ⑥〜⑨（bars・sections）と validateSongMap を関数末尾で呼び出す。
 function buildSongMap(rows, meta) {
   const sampleRate = meta.sampleRate;
   const durationSec = meta.durationSec;

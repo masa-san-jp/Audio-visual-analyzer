@@ -2,7 +2,7 @@
 // 目的 — 実Canvasで合成色・動画背景・黒白・縦横比・リセットを確認する — Phase 18 計画書 §6.7（T18-08 補足）。
 
 async function t1808LoadDirectorScripts() {
-  // T18-09 が index.html を配線する前でも file:// のハーネスだけで実行できる。
+  // index.html を使わず、file:// のハーネスだけで実行できる。
   const scripts = [];
   if (typeof DIRECTOR_SCENES === 'undefined') scripts.push('director-scenes.js');
   if (typeof directorStateAt === 'undefined') scripts.push('director-timeline.js');

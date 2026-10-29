@@ -251,7 +251,7 @@ test('U18-13 タイムライン形状・main の閾値・カット・フェー�
   for (const [bpm, duration] of [[300, 0.25], [30, 1]]) {
     assert.equal(compileDirectorTimeline({ ...map, bpm }, options).segments[1].transitionIn.duration, duration);
   }
-  // コンパイルだけを検証。状態評価のフラッシュ減衰は T18-08 が担当する。
+  // コンパイルだけを検証。状態評価のフラッシュ減衰は director-state.test.mjs（U18-18）で検証する。
   const packed = { ...map, sections: map.sections.map((s, i) => ({ ...s, kind: 'drop', startSec: i * 0.5 })) };
   assert.deepEqual(compileDirectorTimeline(packed, options).flashes, [0.5, 2.5]);
 });

@@ -16,7 +16,7 @@ const WORLD_ATTRACTOR = Object.freeze({
 });
 // 色の回転用 cos(2.1)、sin(2.1)。頂点シェーダーでは定数として使い、三角関数を呼ばない。
 const WORLD_ATTRACTOR_COS2 = Math.cos(2.1), WORLD_ATTRACTOR_SIN2 = Math.sin(2.1);
-// §13：係数を ±0.15 動かしても被覆率が 8 割以上保たれる頑丈な形（robust-search.mjs で探索）
+// §13：係数を ±0.15 動かしても被覆率が 8 割以上保たれる頑丈な形（係数の探索で選んだもの）
 const WORLD_ATTRACTOR_SHAPES = Object.freeze({
   L: Object.freeze([2.033,2.008,1.71,-1.528]), H: Object.freeze([-1.742,-1.414,-1.97,1.772]),
   J: Object.freeze([-1.956,-1.329,1.601,-1.739]), F: Object.freeze([-1.746,1.81,.931,-1.827]),

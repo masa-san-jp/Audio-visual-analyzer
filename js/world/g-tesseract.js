@@ -11,14 +11,14 @@ const WORLD_TESSERACT = Object.freeze({
   PATH_NODES: 4096,              // 道の折れ点の数
   LEVEL_ATTACK: .048, LEVEL_RELEASE: .26,          // 帯域群のなめらかな音量の時定数（秒）
   LOUD_ATTACK: .065, LOUD_RELEASE: .4,             // 全体音量の時定数（秒）
-  LOUD_LO: .33, LOUD_HI: .93,    // loudness.level を 0..1 へ写す範囲。128 BPM のテスト曲で静か .40→.12、ドロップ .67→.57（試作の loud）
+  LOUD_LO: .33, LOUD_HI: .93,    // loudness.level を 0..1 へ写す範囲。128 BPM のテスト曲で静か .40→.12、ドロップ .67→.57
   ENERGY_TAU: .54, CENTROID_TAU: 1.09,
   PHASE_BASE: .015, PHASE_GAIN: .12, PHASE_RATE: 4, PHASE_TIMBRE: .6,
   AGE_MAX: 9, REFRACTORY: .12,   // 同じ群の立ち上がりを数えない間隔（秒）
   BEAT_HOLD: 2,                  // 最後の拍からこの秒数のあいだは拍だけで明滅させる（帯域ごとの立ち上がりは使わない）
   EXPOSURE: 1.8,
   VIGNETTE: .35,
-  FLASH_GAIN: 1.6,                // 拍の明滅の強さ（試作の値に掛ける。エンジンは試作より暗く、明滅が埋もれたため）
+  FLASH_GAIN: 1.6,                // 拍の明滅の強さ（エンジンの後処理で暗くなり、明滅が埋もれないように強める）
   BLOOM_THRESHOLD: .05, BLOOM_STRENGTH: .7
 });
 // 色（sRGB）。JS で linear にしてから GLSL 定数にする（設計 §3）。
