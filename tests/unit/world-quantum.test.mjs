@@ -33,6 +33,8 @@ function commandGl() {
   for(const name of ['bindVertexArray','bindBuffer','bufferData','bindBufferBase','compileShader','deleteShader','attachShader',
     'linkProgram','uniformBlockBinding','texParameteri','viewport','clearColor','blitFramebuffer','enable','blendFunc','disable',
     'deleteTexture','deleteFramebuffer','deleteProgram','deleteBuffer','deleteVertexArray','texSubImage2D','drawBuffers','bufferSubData'])gl[name]=()=>{};
+  // 量子のビジョンの int scene（場面番号）を sampler と取り違えないよう、sampler2D と宣言された名前だけを読取textureとして扱う
+  gl.attachShader=(p,shader)=>{p.source=(p.source||'')+shader.source;};
   gl.shaderSource=(shader,source)=>{shader.source=source;};
   gl.texStorage2D=(target,levels,format,w,h)=>calls.push({storage:format,w,h});
   gl.getExtension=name=>name==='EXT_disjoint_timer_query_webgl2'?null:{};
@@ -46,7 +48,7 @@ function commandGl() {
   };
   gl.uniform1i=(loc,v)=>{
     values.set(loc,v);
-    if(['state','stateA','stateB','source','scene','history','bloom0','bloom1','bloom2','bloom3','exposure','flow','dye','velocity'].includes(loc.name)){
+    if(new RegExp('uniform\\s+(?:\\w+\\s+)?sampler2D\\s+'+loc.name+'\\b').test(loc.p.source||'')&&['state','stateA','stateB','source','scene','history','bloom0','bloom1','bloom2','bloom3','exposure','flow','dye','velocity'].includes(loc.name)){
       if(!samplers.has(loc.p))samplers.set(loc.p,new Map());samplers.get(loc.p).set(loc.name,v);
     }
   };
@@ -83,7 +85,7 @@ test('UW-Q-01 定数・色・シェーダー本文・登録',()=>{
   const expected={FADE:2.5,MINT_LEAD:3,DROP_SPLIT:3,CAM_BASE:.14,CAM_LOUD:.5,CAM_PUSH:.45,CAM_TAU:.35,PUSH_ATTACK:.08,PUSH_RELEASE:.6,
     PAN_RATE_X:.23,PAN_X:.05,PAN_X_LOUD:.2,PAN_RATE_Y:.17,PAN_PHASE_Y:1,PAN_Y:.04,PAN_Y_LOUD:.14,ROLL_SWAY:.25,ROLL_SWAY_RATE:.09,ROLL_RATE:.02,
     LEVEL_ATTACK:.048,LEVEL_RELEASE:.26,LOUD_ATTACK:.065,LOUD_RELEASE:.4,LOUD_LO:.33,LOUD_HI:.93,AGE_MAX:9,REFRACTORY:.12,BEAT_HOLD:2,
-    EXPOSURE:1.47,VIGNETTE:.4,GRAIN:.035,HALATION:.25,BLOOM_THRESHOLD:.02,BLOOM_STRENGTH:.55};
+    EXPOSURE:1.47,VIGNETTE:.4,GRAIN:.035,HALATION:.25,BLOOM_THRESHOLD:.02,BLOOM_STRENGTH:.55,RENDER_SCALE:.67,PX_MIN:.8};
   assert.deepEqual(C,expected);assert.ok(Object.isFrozen(C));
   const col=r.get('WORLD_QUANTUM_COLORS');
   assert.deepEqual([...col.TEAL],['#1D5953','#266B61','#44A69B','#3B796E','#A3D3BE','#1A6287','#39A1B8','#93B0BA']);
@@ -245,7 +247,9 @@ test('UW-Q GLモックで init/step/render が通り、stepで新しい配列を
   engine._draw();assert.equal(engine.post.quantum,true);assert.equal(engine.post.tesseract,false);
   assert.equal(engine.post.grainFrame,Math.round(engine.latestSec*60));
   assert.ok(gl.calls.some(c=>c.uniform===engine.post.thresholdLoc&&c.value===C.BLOOM_THRESHOLD));
-  assert.ok(gl.calls.some(c=>c.uniform&&c.uniform.name==='res'&&c.value[0]===1280&&c.value[1]===720));
+  // 内部の描画先は出力の RENDER_SCALE 倍。拡大の program が出力へ描く
+  assert.ok(gl.calls.some(c=>c.uniform&&c.uniform.name==='res'&&c.value[0]===Math.ceil(1280*C.RENDER_SCALE)&&c.value[1]===Math.ceil(720*C.RENDER_SCALE)));
+  assert.ok(count(a.upsample)>=1);
   assert.ok(gl.calls.some(c=>c.uniform&&c.uniform.name==='time'));
   assert.equal(count(engine.post.exposureProgram),0);
   assert.deepEqual([g.textures.length,g.fbos.length,g.programs.length],resources);

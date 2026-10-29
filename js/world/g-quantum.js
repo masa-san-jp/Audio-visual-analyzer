@@ -16,7 +16,10 @@ const WORLD_QUANTUM = Object.freeze({
   VIGNETTE: .4,
   GRAIN: .035,                   // フィルム粒子（後処理で毎フレーム更新。§7）
   HALATION: .25,                 // 明るい所のまわりの暖色のにじみ（後処理。§7）
-  BLOOM_THRESHOLD: .02, BLOOM_STRENGTH: .55
+  BLOOM_THRESHOLD: .02, BLOOM_STRENGTH: .55,
+  SPARK_COUNT: 48,               // 火花の群ごとの本数（2 群）
+  RENDER_SCALE: .67,             // 内部の描画解像度（出力に対する比）。ぼけと粒子の柔らかい絵なので、縮めて描いて拡大する
+  PX_MIN: .8                     // 線・点の幅の下限（内部の描画画素）。これより細い線は太らせ、明るさを幅の比で下げる
 });
 // 場面の番号（シェーダーの scene。5 は欠番＝水面、不使用）
 const WORLD_QUANTUM_SCENE = Object.freeze({ DUST: 0, SHELL: 1, SUN: 2, SPARKS: 3, STREAMS: 4, MINT: 6 });
@@ -67,10 +70,12 @@ uniform int scene; uniform int sceneB; uniform float mixW;   // 今の場面、�
 uniform float camZ; uniform float tA; uniform float tB;       // 前進量（層）、今の場面と次の場面の経過秒
 uniform float camV; uniform vec2 camPan; uniform float camRoll;
 uniform vec4 lvl; uniform vec4 sm; uniform vec4 age; uniform float loud;
+const int SPARKS=${2 * C.SPARK_COUNT}; uniform vec4 spA[SPARKS]; uniform vec4 spB[SPARKS];   // 火花の線分と性質（CPU で計算）
 const float EXPOSURE=${C.EXPOSURE.toFixed(8)}; const float VIGNETTE=${C.VIGNETTE.toFixed(8)};
 const vec3 TEAL[8]=vec3[](${VEC3_LIST(LIN.TEAL)}); const vec3 TEAL_BG[4]=vec3[](${VEC3_LIST(LIN.TEAL_BG)}); const vec3 SHELL[6]=vec3[](${VEC3_LIST(LIN.SHELL)}); const vec3 SUN[7]=vec3[](${VEC3_LIST(LIN.SUN)});
 const vec3 SPARK[5]=vec3[](${VEC3_LIST(LIN.SPARK)}); const vec3 GOLDB[5]=vec3[](${VEC3_LIST(LIN.GOLDB)}); const vec3 STREAK[7]=vec3[](${VEC3_LIST(LIN.STREAK)}); const vec3 MINT[5]=vec3[](${VEC3_LIST(LIN.MINT)});
-const float PXREF=1440.;
+const float PXREF=1440.; const float PX_MIN=${C.PX_MIN.toFixed(8)};
+float PX=1./PXREF, PXE=1.;    // 線・点の幅の単位（main で決める）と、太らせた分の明るさの補正
 uint hu(uint x){x^=x>>16;x*=0x7feb352du;x^=x>>15;x*=0x846ca68bu;x^=x>>16;return x;}
 float h1(ivec2 c,int s){return float(hu(uint(c.x)*73856093u^uint(c.y)*19349663u^uint(s)*83492791u))/4294967295.;}
 vec2 h2(ivec2 c,int s){return vec2(h1(c,s),h1(c,s+101));}
@@ -93,7 +98,7 @@ mat2 rot(float a){float c=cos(a),s=sin(a);return mat2(c,-s,s,c);}
 float beat(float k){return exp(-age.x*k);}
 float clump(vec2 uv,float t,int seed){return smoothstep(.42,.72,fbm3(uv*1.4+vec2(float(seed)*3.1,t*.03)));}
 vec3 particles(vec2 uv,float t,int seed,int nl,float dens,vec2 drift,int pal,float gain){
-  vec3 col=vec3(0.); float px=1./PXREF;
+  vec3 col=vec3(0.); float px=PX;
   for(int i=0;i<8;i++){
     if(i>=nl)break;
     float zr=(float(i)+.5)/float(nl)+camZ;
@@ -148,8 +153,8 @@ float powder(vec2 uv,float t,float scale,int seed,float dens){
     ivec2 cc=c+ivec2(dx,dy); float h=h1(cc,seed);
     if(h>dens)continue;
     vec2 q=vec2(cc)+h2(cc,seed+3);
-    float d=length(p-q)/scale*PXREF;
-    s+=exp(-d*d*.22)*(.4+1.2*h1(cc,seed+7));
+    float d=length(p-q)/scale/PX;
+    s+=exp(-d*d*.22)*(.4+1.2*h1(cc,seed+7))*PXE*PXE;
   }
   return s;
 }
@@ -210,41 +215,26 @@ vec3 sceneSun(vec2 uv,float t){
   c*=smoothstep(gy-.003,gy+.006,uv.y);
   return c;
 }
-vec3 sparks2(vec2 uv,float t,vec2 src,float spread,float speed,float grav,float life,int seed,float gain,int pal,float dtE,float thick,float jit);
 float dashField(vec2 uv,vec2 src,float t,float cols,float spd,float len,int seed,float dens,out float hc);
-// 火花（光跡）: 発生点 src から上向きの円錐へ、毎秒 rate 個。重力で曲がり、温度で白→黄→橙→赤
-vec3 sparks(vec2 uv,float t,vec2 src,float spread,float speed,float grav,float life,int seed,float gain,int pal){
-  return sparks2(uv,t,src,spread,speed,grav,life,seed,gain,pal,.07,1.,.04);
-}
-vec3 sparks2(vec2 uv,float t,vec2 src,float spread,float speed,float grav,float life,int seed,float gain,int pal,float dtE,float thick,float jit){
-  vec3 col=vec3(0.); float px=1./PXREF;
-  const int NS=48;
-  for(int i=0;i<NS;i++){
-    float fi=float(i);
-    vec2 hi=h4(ivec2(i,seed),1).xy;
-    float per=life*(.7+.6*hi.x);
-    float ph=hi.y*per;
-    float tt=t+ph; float k=floor(tt/per); float a=tt-k*per;   // この火花の年齢
-    ivec2 key=ivec2(i,int(k));
-    vec4 ka=h4(key,seed+3), kb=h4(key,seed+5);
-    float ang=1.5708+(ka.x-.5)*spread;
-    float v=speed*(.4+.9*ka.y)*(1.+.6*sm.x);
-    vec2 v0=vec2(cos(ang),sin(ang))*v;
-    vec2 p0=src+(kb.xy-.5)*jit;
-    // 長時間露光: 年齢 a-dt から a までの区間を線分として描く
-    float dt=dtE*(.5+ka.z);
-    vec2 pa=p0+v0*max(a-dt,0.)+vec2(0.,-grav)*.5*max(a-dt,0.)*max(a-dt,0.);
-    vec2 pb=p0+v0*a+vec2(0.,-grav)*.5*a*a;
-    vec2 ab=pb-pa; float l2=max(dot(ab,ab),1e-9);
+// 火花（長時間露光の光跡）: 軌道は CPU が毎フレーム計算する（WORLD_QUANTUM.SPARK_COUNT 本 × 2 群）。
+// spA = 線分の両端、spB = (太さの倍率, 温度, 明るさ, 線分の半分の長さ)。前半の群は拍で強まる。
+// 線分から離れた画素は先に飛ばす（近くの画素どうしで同じ判定になるので、GPU でも分岐が安い）
+vec3 sparkField(vec2 uv){
+  vec3 col=vec3(0.); float kick=.4+2.6*beat(2.5);
+  for(int i=0;i<SPARKS;i++){
+    vec2 pa=spA[i].xy, ab=spA[i].zw-pa;
+    float w=PX*spB[i].x;
+    if(length(uv-pa-.5*ab)>spB[i].w+3.*w)continue;
+    float l2=max(dot(ab,ab),1e-9);
     float h=clamp(dot(uv-pa,ab)/l2,0.,1.);
     float dd=length(uv-pa-ab*h);
-    float w=px*thick*(1.2+1.5*ka.w);
     float core=exp(-dd*dd/(w*w));
-    if(core<1e-3)continue;
-    float heat=1.-a/per;
-    vec3 cl=pal==0?(heat>.75?mix(SPARK[3],SPARK[4],(heat-.75)*4.):heat>.4?mix(SPARK[1],SPARK[3],(heat-.4)/.35):mix(SPARK[0]*.6,SPARK[1],heat/.4))
-                  :mix(STREAK[int(kb.z*7.)%7],vec3(.85,.95,1.),heat*.5);
-    col+=cl*core*gain*(.3+1.2*heat)*smoothstep(0.,.02,a);
+    float heat=spB[i].y;
+    // 冷めた赤 → 橙 → 黄 → 白に近い金（分岐なし。GPU では分岐と途中抜けのほうが遅い）
+    vec3 cl=mix(SPARK[0]*.6,SPARK[1],clamp(heat/.4,0.,1.));
+    cl=mix(cl,SPARK[3],clamp((heat-.4)/.35,0.,1.));
+    cl=mix(cl,SPARK[4],clamp((heat-.75)*4.,0.,1.));
+    col+=cl*core*spB[i].z*PXE*(i<SPARKS/2?kick:1.);
   }
   return col;
 }
@@ -255,8 +245,7 @@ vec3 sceneSparks(vec2 uv,float t){
   // 火の霞（発生点のまわり）
   float fire=pow(fbm(uv*4.5+vec2(0.,-t*.6)+fbm3(uv*9.)*.6),2.6)*exp(-length((uv-src)*vec2(1.6,.8))*2.6)*1.6;
   c+=mix(SPARK[0],SPARK[4],fire*fire*2.)*fire*2.2*(1.+.8*sm.x);
-  c+=sparks2(uv,t,src+vec2(0.,.05),6.283,.8,.3,.8,3,1.4*(.4+2.6*beat(2.5)),0,.03,1.6,.5);
-  c+=sparks2(uv,t*1.3,src,6.283,.45,.2,1.1,4,1.,0,.02,1.2,.8);
+  c+=sparkField(uv);
   c+=particles(uv,t,17,5,.5,vec2(.0,.02),1,1.2)*vec3(1.,.55,.2)*exp(-length(uv-src)*1.2)*(1.+1.5*beat(2.5));
   {float hc; float rr=length(uv-src); float k=dashField(uv,src,t*.8,320.,.35,.9,85,.06+.25*exp(-rr*2.),hc); c+=mix(SPARK[2],SPARK[4],hc)*k*1.2*(.5+1.5*beat(2.5))*smoothstep(.03,.1,rr);}
   {float hc; float rr=length(uv-src); float k=dashField(uv,src,t,500.,.5,1.2,81,(.03+.18*exp(-rr*3.))*(.3+1.4*clump(uv,t,4)),hc); c+=mix(SPARK[1],SPARK[4],hc)*k*1.1*smoothstep(.04,.12,rr);}
@@ -282,8 +271,8 @@ float dashField(vec2 uv,vec2 src,float t,float cols,float spd,float len,int seed
     float ay=q.y-float(cc.y)-o.y;                             // 線に沿った位置（格子単位）
     float L=len*(.5+h1(cc,seed+2));
     float along=smoothstep(0.,.15*L,ay+L)*smoothstep(0.,.08,-ay)*step(ay,0.);
-    float w=(.6+1.*h1(cc,seed+3))/PXREF;
-    float k=exp(-ax*ax/(w*w))*along*(.4+1.2*h1(cc,seed+4));
+    float w=(.6+1.*h1(cc,seed+3))*PX;
+    float k=exp(-ax*ax/(w*w))*along*(.4+1.2*h1(cc,seed+4))*PXE;
     if(k>s){s=k;hc=h1(cc,seed+5);}
   }
   return s;
@@ -322,6 +311,7 @@ vec3 sceneMint(vec2 uv,float t){
 }
 vec3 sceneOf(int scene,vec2 uv,float time,float ts);
 void main(){
+  PX=max(1./PXREF,PX_MIN/res.y); PXE=1./(PXREF*PX);
   vec2 uv=(gl_FragCoord.xy-.5*res)/res.y;
   vec3 c=sceneOf(scene,uv,time,tA);
   if(mixW>0.)c=mix(c,sceneOf(sceneB,uv,time,tB),mixW);
@@ -363,6 +353,50 @@ precision highp float;
 precision highp int;
 precision highp sampler2D;
 ${worldQuantumShaderBody()}`;
+// 縮めて描いた絵を出力の大きさへ線形補間で広げる
+const WORLD_QUANTUM_UPSAMPLE_FRAGMENT = `#version 300 es
+precision highp float;
+precision highp int;
+precision highp sampler2D;
+in vec2 vUv;
+uniform sampler2D source;
+out vec4 frag;
+void main(){frag=texture(source,vUv);}`;
+// シェーダーの hu・h4 と同じ整数ハッシュ。火花の性質を CPU で同じ乱数から作る
+function worldQuantumHu(x) {
+  x ^= x >>> 16; x = Math.imul(x, 0x7feb352d) >>> 0; x ^= x >>> 15; x = Math.imul(x, 0x846ca68b) >>> 0; x ^= x >>> 16; return x >>> 0;
+}
+function worldQuantumH4(cx, cy, s, out) {
+  const x = worldQuantumHu((Math.imul(cx, 73856093) ^ Math.imul(cy, 19349663) ^ Math.imul(s, 83492791)) >>> 0);
+  out[0] = ((x & 255) + .5) / 256; out[1] = (((x >>> 8) & 255) + .5) / 256; out[2] = (((x >>> 16) & 255) + .5) / 256; out[3] = ((x >>> 24) + .5) / 256;
+  return out;
+}
+// 火花の 2 群（試作の sparks2 の引数）: 時間の倍率, 発生点, 広がり, 速さ, 重力, 寿命, seed, 明るさ, 露光時間, 太さ, 発生点のばらつき
+const WORLD_QUANTUM_SPARK_BURSTS = Object.freeze([
+  Object.freeze([1, .02, .03, 6.283, .8, .3, .8, 3, 1.4, .03, 1.6, .5]),
+  Object.freeze([1.3, .02, -.02, 6.283, .45, .2, 1.1, 4, 1, .02, 1.2, .8])
+]);
+// 時刻 t の火花の線分（a）と性質（b）を埋める。smx は低域の平滑レベル（速さを上げる）
+function worldQuantumSparks(t, smx, a, b, hA, hB) {
+  const n = WORLD_QUANTUM.SPARK_COUNT;
+  for (let g = 0; g < 2; g++) {
+    const [tm, sx, sy, spread, speed, grav, life, seed, gain, dtE, thick, jit] = WORLD_QUANTUM_SPARK_BURSTS[g], tg = t * tm;
+    for (let i = 0; i < n; i++) {
+      const o = (g * n + i) * 4;
+      worldQuantumH4(i, seed, 1, hA);
+      const per = life * (.7 + .6 * hA[0]), tt = tg + hA[1] * per, k = Math.floor(tt / per), age = tt - k * per;
+      worldQuantumH4(i, k, seed + 3, hA); worldQuantumH4(i, k, seed + 5, hB);
+      const ang = 1.5708 + (hA[0] - .5) * spread, v = speed * (.4 + .9 * hA[1]) * (1 + .6 * smx);
+      const vx = Math.cos(ang) * v, vy = Math.sin(ang) * v, px = sx + (hB[0] - .5) * jit, py = sy + (hB[1] - .5) * jit;
+      // 長時間露光: 年齢 age-dt から age までの区間を線分にする
+      const a0 = Math.max(age - dtE * (.5 + hA[2]), 0);
+      a[o] = px + vx * a0; a[o + 1] = py + vy * a0 - grav * .5 * a0 * a0;
+      a[o + 2] = px + vx * age; a[o + 3] = py + vy * age - grav * .5 * age * age;
+      const heat = 1 - age / per, x = Math.min(1, age / .02);
+      b[o] = thick * (1.2 + 1.5 * hA[3]); b[o + 1] = heat; b[o + 2] = gain * (.3 + 1.2 * heat) * x * x * (3 - 2 * x); b[o + 3] = .5 * Math.hypot(a[o + 2] - a[o], a[o + 3] - a[o + 1]);
+    }
+  }
+}
 // 帯域群（テッセラクトと同じ）: [開始帯域, 終了帯域（含む）]
 const WORLD_QUANTUM_GROUPS = Object.freeze([Object.freeze([0, 3]), Object.freeze([4, 13]), Object.freeze([14, 23]), Object.freeze([24, 31])]);
 const WORLD_QUANTUM_UNIFORM_NAMES = Object.freeze(['res', 'time', 'scene', 'sceneB', 'mixW', 'camZ', 'tA', 'tB', 'camV', 'camPan', 'camRoll', 'lvl', 'sm', 'age', 'loud']);
@@ -373,6 +407,8 @@ class WorldQuantumAnalyzer extends WorldBandAnalyzer {
     // 音の状態（シェーダーへ渡す。毎フレーム再利用し、確保しない）
     this.lvl = new Float32Array(4); this.sm = new Float32Array(4); this.age = new Float32Array(4);
     this.lastOn = new Float64Array(4);
+    this.spA = new Float32Array(WORLD_QUANTUM.SPARK_COUNT * 8); this.spB = new Float32Array(WORLD_QUANTUM.SPARK_COUNT * 8);
+    this.hashA = new Float64Array(4); this.hashB = new Float64Array(4);
     // 場面の予定表（曲が変わったときに 1 回だけ確保・作成）
     this.schedStart = new Float64Array(8); this.schedScene = new Uint8Array(8); this.schedCount = 0; this.schedScore = null;
     this.reset();
@@ -388,6 +424,16 @@ class WorldQuantumAnalyzer extends WorldBandAnalyzer {
   init(gpu) {
     super.init(gpu); this.program = gpu.program(WORLD_QUANTUM_FRAGMENT);
     for (const name of WORLD_QUANTUM_UNIFORM_NAMES) this[name + 'Loc'] = gpu.texture(this.program, name);
+    this.spALoc = gpu.texture(this.program, 'spA[0]'); this.spBLoc = gpu.texture(this.program, 'spB[0]');
+    this.upsample = gpu.program(WORLD_QUANTUM_UPSAMPLE_FRAGMENT); this.sourceLoc = gpu.texture(this.upsample, 'source');
+    this.resize(gpu.gl.canvas.width, gpu.gl.canvas.height);
+  }
+  // 内部の描画先（出力の RENDER_SCALE 倍）。大きさが変わったときだけ作り直す
+  resize(w, h) {
+    const width = Math.max(1, Math.ceil(w * WORLD_QUANTUM.RENDER_SCALE)), height = Math.max(1, Math.ceil(h * WORLD_QUANTUM.RENDER_SCALE));
+    if (this.low && this.low.width === width && this.low.height === height) return;
+    if (this.low) this.gpu.releaseTarget(this.low);
+    this.low = this.gpu.target(width, height);
   }
   // 曲の区間から予定表を作る（曲が変わったときだけ。配列は足りないときだけ確保し直す）
   _buildSchedule(score) {
@@ -460,14 +506,20 @@ class WorldQuantumAnalyzer extends WorldBandAnalyzer {
   }
   render(input) {
     const g = this.gpu, gl = g.gl;
-    g.bind(this.program, input.target);
-    gl.uniform2f(this.resLoc, input.target.width, input.target.height); gl.uniform1f(this.timeLoc, input.tSec);
+    g.bind(this.program, this.low);
+    gl.uniform2f(this.resLoc, this.low.width, this.low.height); gl.uniform1f(this.timeLoc, input.tSec);
     gl.uniform1i(this.sceneLoc, this.sceneA); gl.uniform1i(this.sceneBLoc, this.sceneB); gl.uniform1f(this.mixWLoc, this.mixW);
     gl.uniform1f(this.camZLoc, this.camZ); gl.uniform1f(this.tALoc, this.tA); gl.uniform1f(this.tBLoc, this.tB);
     gl.uniform1f(this.camVLoc, this.camV); gl.uniform2f(this.camPanLoc, this.panX, this.panY); gl.uniform1f(this.camRollLoc, this.camRoll);
     gl.uniform4fv(this.lvlLoc, this.lvl); gl.uniform4fv(this.smLoc, this.sm); gl.uniform4fv(this.ageLoc, this.age);
     gl.uniform1f(this.loudLoc, this.loud);
+    // 火花の場面が映っているときだけ軌道を計算する（時刻だけで決まるので、途中の描画を省いても同じ絵）
+    if (this.sceneA === WORLD_QUANTUM_SCENE.SPARKS || this.sceneB === WORLD_QUANTUM_SCENE.SPARKS) {
+      worldQuantumSparks(input.tSec, this.sm[0], this.spA, this.spB, this.hashA, this.hashB);
+      gl.uniform4fv(this.spALoc, this.spA); gl.uniform4fv(this.spBLoc, this.spB);
+    }
     g.draw();
+    g.bind(this.upsample, input.target); g.sampler(this.sourceLoc, 0, this.low); g.draw();
   }
 }
-if (typeof module !== 'undefined' && module.exports) { module.exports = { WorldQuantumAnalyzer, WORLD_QUANTUM, WORLD_QUANTUM_SCENE, WORLD_QUANTUM_COLORS, WORLD_QUANTUM_COLORS_LINEAR, WORLD_QUANTUM_FRAGMENT, worldQuantumBuildSchedule }; }
+if (typeof module !== 'undefined' && module.exports) { module.exports = { WorldQuantumAnalyzer, WORLD_QUANTUM, WORLD_QUANTUM_SCENE, WORLD_QUANTUM_COLORS, WORLD_QUANTUM_COLORS_LINEAR, WORLD_QUANTUM_FRAGMENT, worldQuantumBuildSchedule, worldQuantumSparks }; }
