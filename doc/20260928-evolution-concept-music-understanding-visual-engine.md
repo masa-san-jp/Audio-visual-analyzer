@@ -1,7 +1,7 @@
 # Audio Visual Analyzer 超進化構想書
 
 - Date: `2026-09-28`
-- Status: **承認済み（2026-09-28、D1〜D6 すべて推奨案で決定）。Phase 15・16・18 は実装計画書を作成済み**
+- Status: **確定（2026-09-28、D1〜D6 は推奨案を採用）。Phase 15・16・18 は実装計画書を作成済み**
 - 対象: `doc/spec.md` v2.5（Phase 14.2 完了時点）
 
 ---
@@ -209,7 +209,7 @@ D1〜D6 はすべて推奨案で決定した。以下を唯一の正（SSOT）�
 
 | 文書 | 内容 |
 |---|---|
-| `doc/20260928-implementation-guide-for-contractors.md` | 作業ルール・規約・完了の定義 |
+| `doc/20260928-implementation-guide.md` | 作業ルール・規約・完了の定義 |
 | `doc/20260928-plan-phase15-test-foundation-and-frame-pipeline.md` | Phase 15 |
 | `doc/20260928-plan-phase16-music-feature-stream.md` | Phase 16 |
 | `doc/20260928-plan-phase18-song-map-and-auto-director.md` | Phase 18 |

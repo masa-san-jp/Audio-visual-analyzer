@@ -3,7 +3,7 @@
 - Document version: `v1.0`
 - Date: `2026-09-28`
 - 前提: Phase 15 完了（テスト基盤・`FramePipeline`）
-- 作業ルール: `doc/20260928-implementation-guide-for-contractors.md`（以下「ガイド」）
+- 作業ルール: `doc/20260928-implementation-guide.md`（以下「ガイド」）
 - 目的: 解析を「8bit スペクトル＋単純ビート検出」から、**聴感帯域・オンセット・テンポ/拍位相・ステレオ・音色・和音・ラウドネス**を含む特徴ストリームへ格上げする。ライブ再生とオフライン書き出しは**同じ AudioWorklet・同じコード**で解析する（決定事項 D4）
 
 ---

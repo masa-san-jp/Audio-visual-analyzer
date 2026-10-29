@@ -3,7 +3,7 @@
 - Document version: `v1.0`
 - Date: `2026-09-28`
 - 前提: Phase 14.2 完了（`main` @ `d71a5c5`）
-- 作業ルール: `doc/20260928-implementation-guide-for-contractors.md`（以下「ガイド」）
+- 作業ルール: `doc/20260928-implementation-guide.md`（以下「ガイド」）
 - 目的: Phase 16・18 の大規模改修を安全に行うための土台を作る
   1. **テスト基盤**: Node 標準機能と Chrome だけで動く自動テスト一式をリポジトリに収める（決定事項 D5）
   2. **FramePipeline**: ライブ表示（`js/visualizer-core.js`）とオフライン書き出し（`js/offline-exporter.js`）に**複製されている描画ロジックを1つに統合**し、「プレビュー＝書き出し」をコードで保証する（D4 の前提）

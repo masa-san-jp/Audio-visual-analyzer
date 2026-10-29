@@ -916,7 +916,7 @@ Phase 6.1（表現調整）: 実機レビューを受けて各タイプを改善
 | 16 | 音楽特徴ストリーム（MFS）。ライブ・書き出しの解析を AudioWorklet に一本化し、AnalyserNode はフォールバックとして残す | `doc/20260928-plan-phase16-music-feature-stream.md` |
 | 18 | ソングマップと自動演出 | `doc/20260928-plan-phase18-song-map-and-auto-director.md` |
 
-- 実装時の作業ルールは `doc/20260928-implementation-guide-for-contractors.md` に従う
+- 実装時の作業ルールは `doc/20260928-implementation-guide.md` に従う
 - Phase 17（モジュレーション）・19（WebGL2）・20（MIDI・タイムライン）・21（出力強化・9:16）は構想段階
 
 ---
@@ -965,7 +965,7 @@ Phase 6.1（表現調整）: 実機レビューを受けて各タイプを改善
 初版で挙げた候補（プリセット保存・JSON入出力・動画合成・画質/FPS指定録画・レイヤーブレンド・マイク入力・フルスクリーン・ショートカット）は Phase 8〜11 で、3スロット再生キューは Phase 12、モバイルレイアウトは Phase 13、動画デコード高速化（WebM/MP4）は Phase 14 ですべて実装済み。現時点の残候補:
 
 - モバイルでの録画品質改善（`MediaRecorder` のブラウザ実装差に依存するため対応範囲は限定的）
-- 進化構想（Phase 15〜21）: §20「Phase 16〜18: 承認済みの開発計画」を参照
+- 進化構想（Phase 15〜21）: §20「Phase 16〜18: 確定した開発計画」を参照
 
 ---
 
