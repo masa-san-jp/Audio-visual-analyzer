@@ -382,9 +382,9 @@ async function unitChecks(){
     const r=loadClassic(['js/world/gl-util.js','js/world/score.js','js/world/analyzer-types.js','js/world/g-gargantua.js']);
     const c=r.get('WORLD_GARGANTUA'),A=r.get('WorldGargantuaAnalyzer'),a=new A();
     for(const [name,value] of Object.entries({MAX_CROSSINGS:3,STREAK_RADIAL:60,STREAK_ANGULAR:3,STREAK_TIME:.03,
-      FBM_OCTAVES:4,FBM_FREQUENCY:2.03,LOD_HEIGHT:540,STREAK_FLOOR:.15,DISK_HDR:3,INTENSITY_POWER:.8,DISK_OUTER:20,OUTER_FADE:12,BAND_OUTER:14,
+      FBM_OCTAVES:4,FBM_FREQUENCY:2.03,LOD_HEIGHT:540,STREAK_FLOOR:.15,DISK_HDR:5.2,INTENSITY_POWER:.65,DISK_OUTER:20,OUTER_FADE:12,BAND_OUTER:14,
       GRAZE_MIN:.05,TURN_START:1.2,TURN_MAX_LOG:6.3,NOISE_MEAN:.5,
-      STAR_PROBABILITY:.03,STAR_RADIUS_PX:.6,STAR_POWER:18,STAR_HDR:6,VEIL_GAIN:.10}))assert.equal(c[name],value,name);
+      STAR_PROBABILITY:.03,STAR_RADIUS_PX:.6,STAR_POWER:18,STAR_HDR:6,VEIL_GAIN:.18}))assert.equal(c[name],value,name);
     assert.equal(a.setQuality,undefined);assert.equal(a.flowQuality,undefined);
     const shader=r.get('WORLD_GARGANTUA_FRAGMENT');assert.ok(!/SLAB_|DISK_LAYER|history|EMA|BEAM_|blackbody|SPIKE_|STAR_HALO/.test(shader));
     console.log('UW-55 plane=1 crossings=3 octaves=4 frequency=2.03 starFloor=0 starPeak=6 veil=.10');
