@@ -122,10 +122,10 @@ export function world17Arcs(capture,geometry,horizon){
     pass:tail>0&&upper.length>0&&upperPeak>WORLD17_CHECKS.ARC_THRESHOLD&&lowerPeak>WORLD17_CHECKS.ARC_THRESHOLD&&
       upperRatio>=WORLD17_CHECKS.ARC_UPPER_RATIO};
 }
-// 数値条件だけの判定。§10.8で更新した弧の柔らかな外縁・全画面の滲み・映画参照との一致は目視する。
+// 数値条件だけの判定。§10.8で更新した弧の柔らかな外縁・全画面の滲み・参照画像との一致は目視する。
 export function world17Acceptance(snapshot){
   const dimensions=snapshot?.width===WORLD17_CHECKS.WIDTH&&snapshot?.height===WORLD17_CHECKS.HEIGHT;
-  return {snapshot,manualChecks:['上下の弧が明るく、上弧の外側が柔らかく減衰している','画面全体の柔らかい光の滲み','映画スチルと同じ系統の見た目'],
+  return {snapshot,manualChecks:['上下の弧が明るく、上弧の外側が柔らかく減衰している','画面全体の柔らかい光の滲み','参照画像と同じ系統の見た目'],
     pass:!!(dimensions&&snapshot.requestedSec===WORLD17_CHECKS.ARC_TIME&&snapshot.stars?.pass&&snapshot.arcs?.pass)};
 }
 async function world17Seek(audio,t){

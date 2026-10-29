@@ -1,4 +1,4 @@
-// 目的 — 光の糸の束でできたマーフの部屋の格子（テッセラクト v2）— doc/20261027-design-tesseract-v2.md
+// 目的 — 光の糸の束でできた部屋の格子（テッセラクト v2）— doc/20261027-design-tesseract-v2.md
 const WORLD_TESSERACT = Object.freeze({
   FOV: 80,                       // 縦の画角（度）
   SPEED_BASE: 6, SPEED_LOUD: 9, SPEED_SCALE: .8,   // 前進の速さ = SPEED_SCALE*(SPEED_BASE+SPEED_LOUD*loud) [単位/秒]
