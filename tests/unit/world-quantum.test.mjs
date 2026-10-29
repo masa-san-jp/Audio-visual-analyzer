@@ -85,7 +85,7 @@ test('UW-Q-01 定数・色・シェーダー本文・登録',()=>{
   const expected={FADE:2.5,MINT_LEAD:3,DROP_SPLIT:3,CAM_BASE:.14,CAM_LOUD:.5,CAM_PUSH:.45,CAM_TAU:.35,PUSH_ATTACK:.08,PUSH_RELEASE:.6,
     PAN_RATE_X:.23,PAN_X:.05,PAN_X_LOUD:.2,PAN_RATE_Y:.17,PAN_PHASE_Y:1,PAN_Y:.04,PAN_Y_LOUD:.14,ROLL_SWAY:.25,ROLL_SWAY_RATE:.09,ROLL_RATE:.02,
     LEVEL_ATTACK:.048,LEVEL_RELEASE:.26,LOUD_ATTACK:.065,LOUD_RELEASE:.4,LOUD_LO:.33,LOUD_HI:.93,AGE_MAX:9,REFRACTORY:.12,BEAT_HOLD:2,
-    EXPOSURE:1.47,VIGNETTE:.4,GRAIN:.035,HALATION:.25,BLOOM_THRESHOLD:.02,BLOOM_STRENGTH:.55,SPARK_COUNT:48,RENDER_SCALE:.67,PX_MIN:.8};
+    EXPOSURE:1.47,VIGNETTE:.4,GRAIN:.035,HALATION:.25,BLOOM_THRESHOLD:.02,BLOOM_STRENGTH:.55,SPARK_COUNT:128,SPARK_GRID:48,SPARK_GRID_MIN:-2.4,SPARK_GRID_CELL:.1,SPARK_GRID_CAP:32,SPARK_GRID_MARGIN:.03,RENDER_SCALE:.67,FADE_SCALE:.5,PX_MIN:.5};
   assert.deepEqual(C,expected);assert.ok(Object.isFrozen(C));
   const col=r.get('WORLD_QUANTUM_COLORS');
   assert.deepEqual([...col.TEAL],['#1D5953','#266B61','#44A69B','#3B796E','#A3D3BE','#1A6287','#39A1B8','#93B0BA']);
@@ -102,7 +102,7 @@ test('UW-Q-01 定数・色・シェーダー本文・登録',()=>{
   assert.ok(shader.startsWith('#version 300 es'));assert.ok(!shader.includes('${'));
   for(const fn of ['sceneDust(','sceneShell(','sceneSun(','sceneSparks(','sceneStreams(','sceneMint(','vec2 camera(','vec3 sceneOf(','vec3 particles('])assert.ok(shader.includes(fn),fn);
   assert.ok(!shader.includes('sceneRipples'));assert.ok(!shader.includes('WATER'));
-  for(const u of ['uniform vec2 res','uniform float time','uniform int scene; uniform int sceneB; uniform float mixW','uniform float camZ; uniform float ts','#define QSCENE 0','vec3 sparkField(','uniform vec4 spA[SPARKS]','uniform float camV; uniform vec2 camPan; uniform float camRoll','uniform vec4 lvl; uniform vec4 sm; uniform vec4 age; uniform float loud'])assert.ok(shader.includes(u),u);
+  for(const u of ['uniform vec2 res','uniform float time','uniform int scene; uniform int sceneB; uniform float mixW','uniform float camZ; uniform float ts','#define QSCENE 0','vec3 sparkField(','uniform sampler2D sparkTex','uniform float camV; uniform vec2 camPan; uniform float camRoll','uniform vec4 lvl; uniform vec4 sm; uniform vec4 age; uniform float loud'])assert.ok(shader.includes(u),u);
   assert.match(shader,/const float EXPOSURE=1\.47000000;/);assert.match(shader,/const float VIGNETTE=0\.40000000;/);
   assert.ok(shader.includes('c*=1.-VIGNETTE*dot(ndc*.8,ndc*.8)')&&shader.includes('frag=vec4(min(c,vec3(60.))*EXPOSURE,1.)'));
   for(const n of ['TEAL[8]','TEAL_BG[4]','SHELL[6]','SUN[7]','SPARK[5]','GOLDB[5]','STREAK[7]','MINT[5]'])assert.ok(shader.includes('const vec3 '+n+'=vec3[]('),n);
