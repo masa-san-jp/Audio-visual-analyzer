@@ -1,9 +1,9 @@
 # GPU タイプの本体統合 設計 v1
 
-- 作成：2026-10-10。設計は Opus、実装は impl-sonnet。
+- 作成：2026-10-10。
 - 状態：SSOT。
-- 目的：オーナーの指示「統合から」。world.html（試作）と index.html（本体）に UI が分かれている状態をなくし、**index.html だけ**にする。
-- 前提の調査（Explore、2026-10-10）：
+- 目的：world.html（試作）と index.html（本体）に UI が分かれている状態をなくし、**index.html だけ**にする。
+- 前提の調査（2026-10-10）：
   - 本体はすべて 2D canvas で描く。`#canvas` は 1 枚。
   - タイプは `RENDERER_REGISTRY`、描画は `FramePipeline`、毎フレームの駆動は `VisualizerCore._loop` が担う。
   - 書き出しは `OfflineExporter`。WorldExporter はこれを継承している。
@@ -100,8 +100,8 @@ GPU タイプのときの表示を次のように決める。
 ## 8. 受け入れ条件
 
 - `node tests/run.mjs --unit` が全件合格する（既存の 2D のテストとゴールデンも含む）。
-- integration.test.js と、移した world* のブラウザテストが、実 GPU（`CHROME_PATH=~/worktrees/avz-tools/chrome-gpu.sh`、`--headed`）で合格する。実行は Opus が行う。
-- Opus が index.html を撮影して判定する：
+- integration.test.js と、移した world* のブラウザテストが、実 GPU（`--headed`）で合格する。
+- index.html を撮影して判定する：
   - 2D タイプの見た目が変わっていない。
   - GPU の 3 タイプが表示される。
   - 設定の表示が切り替わる。

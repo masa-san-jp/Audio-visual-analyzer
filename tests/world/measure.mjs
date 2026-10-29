@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // 目的 — ヘッド付きmacOS Chromeでテスト専用の tests/browser/harness/world.htmlを実再生しW/BWとG-1〜G-4を報告する — SSOT §1.3・§2.8
-// 実行: node tests/world/measure.mjs（CHROME_PATHも使用可）。Chromeを起動できるレビュアー専用。
+// 実行: node tests/world/measure.mjs（CHROME_PATHも使用可）。実 GPU の Chrome を起動して測る。
 // 計測上の判断（閾値はSSOTのまま）:
 // W-1: セクション中央のHDR全画素のmin/max。ゼロ除算だけ1e-6で保護し、生min/maxも記録。
 // W-2: SSOTどおりsRGBのYを4×4平均（線形化しない）。Gaussianは半径ceil(3σ)、

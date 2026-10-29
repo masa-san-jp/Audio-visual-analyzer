@@ -4,7 +4,7 @@
 const SETTINGS_IO_VERSION = 1;
 const SETTINGS_IO_PRESET_KEY = 'avz.presets.v1';
 
-// T18-11: 2026-10-04 オーナー決定で削除。旧保存データの互換判定にのみ使う。
+// T18-11 で削除したタイプ。旧保存データの互換判定にのみ使う。
 const REMOVED_ANALYZER_TYPES = new Set(['particles', 'ripple', 'flow', 'metaball', 'flower', 'voronoi']);
 
 function serializeSettings(settings) {

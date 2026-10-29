@@ -1,6 +1,6 @@
 // @page app
 // 目的 — index.html に統合した GPU タイプ（g-fluid / g-gargantua / g-attractor）の動作確認 — doc/20261010-design-integration-v1.md §6。
-// 実 GPU（CHROME_PATH=~/worktrees/avz-tools/chrome-gpu.sh --headed）で実行する。WebGL2 が無い環境では INT-02 以降が失敗する。
+// 実 GPU の Chrome で実行する。WebGL2 が無い環境では INT-02 以降が失敗する。
 function intWav(signal) {
   const channels = signal.channels, frames = channels[0].length, align = channels.length * 4;
   const bytes = new Uint8Array(44 + frames * align), view = new DataView(bytes.buffer);

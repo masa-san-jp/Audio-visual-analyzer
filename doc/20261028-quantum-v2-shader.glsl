@@ -1,5 +1,5 @@
 // g-quantum v2 のフラグメントシェーダー本文（設計 doc/20261028-design-quantum-v2.md §4）。
-// 試作 scratchpad/proto/q1.html の FS から、水面の場面（オーナー指示で不使用）を除いたもの。
+// 試作の FS から、水面の場面（不使用）を除いたもの。
 // この前に、設計 §4.1 のヘッダー（#version・precision・uniform・色の定数）を置く。
 uint hu(uint x){x^=x>>16;x*=0x7feb352du;x^=x>>15;x*=0x846ca68bu;x^=x>>16;return x;}
 float h1(ivec2 c,int s){return float(hu(uint(c.x)*73856093u^uint(c.y)*19349663u^uint(s)*83492791u))/4294967295.;}

@@ -9,7 +9,7 @@
   var FRAME_COUNT = 60;
   var SAMPLE_FRAMES = [19, 39, 59];
   var THUMB_BLOCK = 10;
-  var NON_EMPTY_MIN_STDDEV = 0.1; // 計画書 §3.6.3（2026-09-30 オーナー決定で 1.0 → 0.1）
+  var NON_EMPTY_MIN_STDDEV = 0.1; // 計画書 §3.6.3（1.0 → 0.1）
   var goldenCases = createGoldenCases();
 
   function base64FromBytes(bytes) {
