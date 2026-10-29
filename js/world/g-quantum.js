@@ -67,7 +67,7 @@ function worldQuantumShaderBody() {
 uniform vec2 res;               // 描画先の幅・高さ（画素）
 uniform float time;             // 曲の時刻（秒）
 uniform int scene; uniform int sceneB; uniform float mixW;   // 今の場面、次の場面、溶かす量（0..1）
-uniform float camZ; uniform float tA; uniform float tB;       // 前進量（層）、今の場面と次の場面の経過秒
+uniform float camZ; uniform float ts;    // 前進量（層）、この描画の場面の経過秒
 uniform float camV; uniform vec2 camPan; uniform float camRoll;
 uniform vec4 lvl; uniform vec4 sm; uniform vec4 age; uniform float loud;
 const int SPARKS=${2 * C.SPARK_COUNT}; uniform vec4 spA[SPARKS]; uniform vec4 spB[SPARKS];   // 火花の線分と性質（CPU で計算）
@@ -246,7 +246,7 @@ vec3 sceneSparks(vec2 uv,float t){
   float fire=pow(fbm(uv*4.5+vec2(0.,-t*.6)+fbm3(uv*9.)*.6),2.6)*exp(-length((uv-src)*vec2(1.6,.8))*2.6)*1.6;
   c+=mix(SPARK[0],SPARK[4],fire*fire*2.)*fire*2.2*(1.+.8*sm.x);
   c+=sparkField(uv);
-  c+=particles(uv,t,17,5,.5,vec2(.0,.02),1,1.2)*vec3(1.,.55,.2)*exp(-length(uv-src)*1.2)*(1.+1.5*beat(2.5));
+  c+=particles(uv,t,17,3,.5,vec2(.0,.02),1,1.2)*vec3(1.,.55,.2)*exp(-length(uv-src)*1.2)*(1.+1.5*beat(2.5));
   {float hc; float rr=length(uv-src); float k=dashField(uv,src,t*.8,320.,.35,.9,85,.06+.25*exp(-rr*2.),hc); c+=mix(SPARK[2],SPARK[4],hc)*k*1.2*(.5+1.5*beat(2.5))*smoothstep(.03,.1,rr);}
   {float hc; float rr=length(uv-src); float k=dashField(uv,src,t,500.,.5,1.2,81,(.03+.18*exp(-rr*3.))*(.3+1.4*clump(uv,t,4)),hc); c+=mix(SPARK[1],SPARK[4],hc)*k*1.1*smoothstep(.04,.12,rr);}
   // 金のぼけの雲（手前、ピントの外）
@@ -313,8 +313,7 @@ vec3 sceneOf(int scene,vec2 uv,float time,float ts);
 void main(){
   PX=max(1./PXREF,PX_MIN/res.y); PXE=1./(PXREF*PX);
   vec2 uv=(gl_FragCoord.xy-.5*res)/res.y;
-  vec3 c=sceneOf(scene,uv,time,tA);
-  if(mixW>0.)c=mix(c,sceneOf(sceneB,uv,time,tB),mixW);
+  vec3 c=sceneOf(QSCENE,uv,time,ts);   // 場面は program ごとに固定（使わない場面のコードを持たないため速い）
   float warm=float(scene==1||scene==2||scene==3)*(1.-mixW)+float(sceneB==1||sceneB==2||sceneB==3)*mixW;
   vec2 fu=rot(camRoll)*uv;
   c+=particles(fu,time,401,4,.16,vec2(0.),warm>.5?1:0,.55)*mix(vec3(.8,1.,1.1),vec3(1.2,.9,.6),warm);
@@ -348,20 +347,25 @@ vec3 sceneOf(int scene,vec2 uv0,float time,float ts){
 `;
 }
 // 設計 §4.1 のヘッダー（version・precision）。sampler2D の精度宣言は全 WORLD シェーダーの監査（UW-47）に合わせる
+// QSCENE は場面ごとの program を作るときに置き換える（worldQuantumSceneSource）
 const WORLD_QUANTUM_FRAGMENT = `#version 300 es
 precision highp float;
 precision highp int;
 precision highp sampler2D;
+#define QSCENE 0
 ${worldQuantumShaderBody()}`;
-// 縮めて描いた絵を出力の大きさへ線形補間で広げる
+// 縮めて描いた絵を出力の大きさへ線形補間で広げる。溶かしの間は次の場面の絵を mixW の割合で混ぜる
 const WORLD_QUANTUM_UPSAMPLE_FRAGMENT = `#version 300 es
 precision highp float;
 precision highp int;
 precision highp sampler2D;
 in vec2 vUv;
 uniform sampler2D source;
+uniform sampler2D sourceB;
+uniform float mixW;
 out vec4 frag;
-void main(){frag=texture(source,vUv);}`;
+void main(){frag=vec4(mix(texture(source,vUv).rgb,texture(sourceB,vUv).rgb,mixW),1.);}`;
+function worldQuantumSceneSource(id) { return WORLD_QUANTUM_FRAGMENT.replace('#define QSCENE 0', '#define QSCENE ' + id); }
 // シェーダーの hu・h4 と同じ整数ハッシュ。火花の性質を CPU で同じ乱数から作る
 function worldQuantumHu(x) {
   x ^= x >>> 16; x = Math.imul(x, 0x7feb352d) >>> 0; x ^= x >>> 15; x = Math.imul(x, 0x846ca68b) >>> 0; x ^= x >>> 16; return x >>> 0;
@@ -399,7 +403,7 @@ function worldQuantumSparks(t, smx, a, b, hA, hB) {
 }
 // 帯域群（テッセラクトと同じ）: [開始帯域, 終了帯域（含む）]
 const WORLD_QUANTUM_GROUPS = Object.freeze([Object.freeze([0, 3]), Object.freeze([4, 13]), Object.freeze([14, 23]), Object.freeze([24, 31])]);
-const WORLD_QUANTUM_UNIFORM_NAMES = Object.freeze(['res', 'time', 'scene', 'sceneB', 'mixW', 'camZ', 'tA', 'tB', 'camV', 'camPan', 'camRoll', 'lvl', 'sm', 'age', 'loud']);
+const WORLD_QUANTUM_UNIFORM_NAMES = Object.freeze(['res', 'time', 'scene', 'sceneB', 'mixW', 'camZ', 'ts', 'camV', 'camPan', 'camRoll', 'lvl', 'sm', 'age', 'loud']);
 class WorldQuantumAnalyzer extends WorldBandAnalyzer {
   constructor() {
     super(); this.id = 'g-quantum'; this.label = '量子のビジョン';
@@ -422,18 +426,37 @@ class WorldQuantumAnalyzer extends WorldBandAnalyzer {
     this.schedScore = null; // 次の step で予定表を作り直す（確保済みの配列は再利用する）
   }
   init(gpu) {
-    super.init(gpu); this.program = gpu.program(WORLD_QUANTUM_FRAGMENT);
-    for (const name of WORLD_QUANTUM_UNIFORM_NAMES) this[name + 'Loc'] = gpu.texture(this.program, name);
-    this.spALoc = gpu.texture(this.program, 'spA[0]'); this.spBLoc = gpu.texture(this.program, 'spB[0]');
+    super.init(gpu);
+    // 場面ごとの program。1 本にまとめると火花の場面でコードが大きくなりすぎ、GPU 時間が倍以上になった（設計 §8）
+    this.programs = [];
+    for (const id of Object.values(WORLD_QUANTUM_SCENE)) {
+      const program = gpu.program(worldQuantumSceneSource(id)), loc = {};
+      for (const name of WORLD_QUANTUM_UNIFORM_NAMES) loc[name] = gpu.texture(program, name);
+      loc.spA = gpu.texture(program, 'spA[0]'); loc.spB = gpu.texture(program, 'spB[0]');
+      this.programs[id] = { program, loc };
+    }
     this.upsample = gpu.program(WORLD_QUANTUM_UPSAMPLE_FRAGMENT); this.sourceLoc = gpu.texture(this.upsample, 'source');
+    this.sourceBLoc = gpu.texture(this.upsample, 'sourceB'); this.upMixLoc = gpu.texture(this.upsample, 'mixW');
     this.resize(gpu.gl.canvas.width, gpu.gl.canvas.height);
   }
-  // 内部の描画先（出力の RENDER_SCALE 倍）。大きさが変わったときだけ作り直す
+  _pass(input, id, ts, target) {
+    const g = this.gpu, gl = g.gl, p = this.programs[id], l = p.loc;
+    g.bind(p.program, target);
+    gl.uniform2f(l.res, this.low.width, this.low.height); gl.uniform1f(l.time, input.tSec);
+    gl.uniform1i(l.scene, this.sceneA); gl.uniform1i(l.sceneB, this.sceneB); gl.uniform1f(l.mixW, this.mixW);
+    gl.uniform1f(l.camZ, this.camZ); gl.uniform1f(l.ts, ts);
+    gl.uniform1f(l.camV, this.camV); gl.uniform2f(l.camPan, this.panX, this.panY); gl.uniform1f(l.camRoll, this.camRoll);
+    gl.uniform4fv(l.lvl, this.lvl); gl.uniform4fv(l.sm, this.sm); gl.uniform4fv(l.age, this.age);
+    gl.uniform1f(l.loud, this.loud);
+    if (id === WORLD_QUANTUM_SCENE.SPARKS) { gl.uniform4fv(l.spA, this.spA); gl.uniform4fv(l.spB, this.spB); }
+    g.draw();
+  }
+  // 内部の描画先（出力の RENDER_SCALE 倍。今の場面と、溶かしの間の次の場面）。大きさが変わったときだけ作り直す
   resize(w, h) {
     const width = Math.max(1, Math.ceil(w * WORLD_QUANTUM.RENDER_SCALE)), height = Math.max(1, Math.ceil(h * WORLD_QUANTUM.RENDER_SCALE));
     if (this.low && this.low.width === width && this.low.height === height) return;
-    if (this.low) this.gpu.releaseTarget(this.low);
-    this.low = this.gpu.target(width, height);
+    if (this.low) { this.gpu.releaseTarget(this.low); this.gpu.releaseTarget(this.lowB); }
+    this.low = this.gpu.target(width, height); this.lowB = this.gpu.target(width, height);
   }
   // 曲の区間から予定表を作る（曲が変わったときだけ。配列は足りないときだけ確保し直す）
   _buildSchedule(score) {
@@ -506,20 +529,16 @@ class WorldQuantumAnalyzer extends WorldBandAnalyzer {
   }
   render(input) {
     const g = this.gpu, gl = g.gl;
-    g.bind(this.program, this.low);
-    gl.uniform2f(this.resLoc, this.low.width, this.low.height); gl.uniform1f(this.timeLoc, input.tSec);
-    gl.uniform1i(this.sceneLoc, this.sceneA); gl.uniform1i(this.sceneBLoc, this.sceneB); gl.uniform1f(this.mixWLoc, this.mixW);
-    gl.uniform1f(this.camZLoc, this.camZ); gl.uniform1f(this.tALoc, this.tA); gl.uniform1f(this.tBLoc, this.tB);
-    gl.uniform1f(this.camVLoc, this.camV); gl.uniform2f(this.camPanLoc, this.panX, this.panY); gl.uniform1f(this.camRollLoc, this.camRoll);
-    gl.uniform4fv(this.lvlLoc, this.lvl); gl.uniform4fv(this.smLoc, this.sm); gl.uniform4fv(this.ageLoc, this.age);
-    gl.uniform1f(this.loudLoc, this.loud);
     // 火花の場面が映っているときだけ軌道を計算する（時刻だけで決まるので、途中の描画を省いても同じ絵）
-    if (this.sceneA === WORLD_QUANTUM_SCENE.SPARKS || this.sceneB === WORLD_QUANTUM_SCENE.SPARKS) {
-      worldQuantumSparks(input.tSec, this.sm[0], this.spA, this.spB, this.hashA, this.hashB);
-      gl.uniform4fv(this.spALoc, this.spA); gl.uniform4fv(this.spBLoc, this.spB);
-    }
-    g.draw();
-    g.bind(this.upsample, input.target); g.sampler(this.sourceLoc, 0, this.low); g.draw();
+    const sparks = this.sceneA === WORLD_QUANTUM_SCENE.SPARKS || this.sceneB === WORLD_QUANTUM_SCENE.SPARKS;
+    if (sparks) worldQuantumSparks(input.tSec, this.sm[0], this.spA, this.spB, this.hashA, this.hashB);
+    // 溶かしの間は次の場面を別の描画先へ描き、拡大のときに混ぜる（後段の処理は線形なので、1 本で mix するのと同じ絵。
+    // GPU の blend で重ねると、この GPU では描画時間が 6 倍になった）
+    this._pass(input, this.sceneA, this.tA, this.low);
+    const fading = this.mixW > 0;
+    if (fading) this._pass(input, this.sceneB, this.tB, this.lowB);
+    g.bind(this.upsample, input.target); g.sampler(this.sourceLoc, 0, this.low); g.sampler(this.sourceBLoc, 1, fading ? this.lowB : this.low);
+    gl.uniform1f(this.upMixLoc, fading ? this.mixW : 0); g.draw();
   }
 }
 if (typeof module !== 'undefined' && module.exports) { module.exports = { WorldQuantumAnalyzer, WORLD_QUANTUM, WORLD_QUANTUM_SCENE, WORLD_QUANTUM_COLORS, WORLD_QUANTUM_COLORS_LINEAR, WORLD_QUANTUM_FRAGMENT, worldQuantumBuildSchedule, worldQuantumSparks }; }
