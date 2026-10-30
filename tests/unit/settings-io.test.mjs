@@ -54,9 +54,9 @@ test('U15-01 settings-io: Phase 16 の autoGain・layerSplit の往復と、旧�
   assert.equal(wrongTypes.layerSplit, 'linear');
 });
 
-test('U15-01 T18-11: 削除6タイプは JSON・保存プリセットで bar に戻り、演出プールから除外される', async t => {
-  const removed = ['particles', 'ripple', 'flow', 'metaball', 'flower', 'voronoi'];
-  const remaining = ['bar', 'radial', 'spectrogram', 'terrain', 'tunnel', 'bar3d', 'ring3d', 'lissajous'];
+test('U15-01 T18-11: 削除10タイプは JSON・保存プリセットで bar に戻り、演出プールから除外される', async t => {
+  const removed = ['particles', 'ripple', 'flow', 'metaball', 'flower', 'voronoi', 'bar3d', 'ring3d', 'g-fluid', 'g-attractor'];
+  const remaining = ['bar', 'radial', 'spectrogram', 'terrain', 'tunnel', 'lissajous'];
   const storage = new Map();
   const { get: lookup } = loadClassic(['js/settings.js', 'js/settings-io.js', 'js/ui-controller.js'], {
     localStorage: {
@@ -85,5 +85,5 @@ test('U15-01 T18-11: 削除6タイプは JSON・保存プリセットで bar に
   assert.deepEqual(presets.map(preset => preset.name), names.sort());
   assert.ok(presets.every(preset => remaining.includes(preset.settings.analyzerType)));
   assert.equal(storage.get(lookup('SETTINGS_IO_PRESET_KEY')), before);
-  t.diagnostic('削除6タイプ × デシリアライズ・JSONファイル・保存読込・演出用読込、残存8タイプ保持、UI演出候補8件');
+  t.diagnostic('削除10タイプ × デシリアライズ・JSONファイル・保存読込・演出用読込、残存6タイプ保持、UI演出候補6件');
 });

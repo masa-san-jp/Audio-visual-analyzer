@@ -107,7 +107,7 @@ test('UW-Q-01 定数・色・シェーダー本文・登録',()=>{
   assert.ok(shader.includes('c*=1.-VIGNETTE*dot(ndc*.8,ndc*.8)')&&shader.includes('frag=vec4(min(c,vec3(60.))*EXPOSURE,1.)'));
   for(const n of ['TEAL[8]','TEAL_BG[4]','SHELL[6]','SUN[7]','SPARK[5]','GOLDB[5]','STREAK[7]','MINT[5]'])assert.ok(shader.includes('const vec3 '+n+'=vec3[]('),n);
   const types=r.get('WORLD_ANALYZER_TYPES');
-  assert.deepEqual(types[4],{id:'g-quantum',label:'量子のビジョン',key:5,available:true});
+  assert.deepEqual(types[2],{id:'g-quantum',label:'量子のビジョン',key:3,available:true});
   const a=new Analyzer();assert.equal(a.statelessRender,true);assert.equal(a.id,'g-quantum');assert.equal(a.label,'量子のビジョン');
   console.log('UW-Q-01 constants='+Object.keys(C).length);
 });
@@ -227,8 +227,8 @@ test('UW-Q-08 後処理: quantum 枝に grainFrame・ハレーション・粒子
   assert.ok(eng.includes('this.post.grainFrame = Math.round(this.latestSec * 60)'));
   console.log('UW-Q-08 ok');
 });
-test('UW-Q-09 キー 5 で量子のビジョンが選べる・UI 一覧に出る',()=>{
-  const types=r.get('WORLD_ANALYZER_TYPES'),q=types.find(t=>t.key===5);
+test('UW-Q-09 キー 3 で量子のビジョンが選べる・UI 一覧に出る',()=>{
+  const types=r.get('WORLD_ANALYZER_TYPES'),q=types.find(t=>t.key===3);
   assert.equal(q.id,'g-quantum');assert.equal(q.available,true);
   const reg=fs.readFileSync(new URL('../../js/renderer-registry.js',import.meta.url),'utf8');
   assert.ok(reg.includes("'g-quantum': {")&&reg.indexOf("'g-tesseract': {")<reg.indexOf("'g-quantum': {"));

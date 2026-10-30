@@ -60,37 +60,3 @@ avzGpuTest('BW-9-export', '6秒30fps・音声・180フレーム・t=3のrenderAt
     avzAssert.equal(await w.app.exporter.exportWorld(score,prepared),null);avzAssert.equal(w.app.exporter.blob,null);
   });
 }, {timeoutMs:180000,slow:true});
-avzGpuTest('BW-9-spectrum', '32帯域サイン掃引: 円環の対応する噴出口の輝度が最大', async () => {
-  await world9Page(async child => {
-    const bank=child.eval('new MfsMelBank(48000,2048)'),rate=48000,segment=.7;
-    const signal={sampleRate:rate,channels:[new Float32Array(rate*segment*32),new Float32Array(rate*segment*32)]};
-    for(let band=0;band<32;band++){
-      const sine=sigSine(rate,segment,bank.centerHz[band],.1);
-      for(let c=0;c<2;c++)signal.channels[c].set(sine.channels[c],Math.round(band*segment*rate));
-    }
-    child.__world9Sweep=new child.File([encodeWav16(signal)],'mel-sweep.wav',{type:'audio/wav',lastModified:1});
-    const result=await child.eval(`(async()=>{
-      const exporter=new WorldExporter(),prepared=await exporter.prepare(__world9Sweep,30);
-      const engine=__world.engine,score=compileWorldScore({bpm:120,durationSec:32*.7,beats:[],downbeatIndices:[],sections:[{startSec:0,endSec:32*.7,kind:'main',label:'sweep'}]},11);
-      const rows=[];
-      for(let band=0;band<32;band++){
-        engine.setScore(score);const f=new MfsFrameView().setPacked(prepared.featureFrames[Math.round((band*.7+.5)*30)]);
-        // 各測定は履歴をリセット。実MFS出力をそのまま使い、帯域を手で立てない。
-        engine._step(0,f,1/30);engine._draw();const capture=engine.capture(),u=engine.gpu.uniforms,lum=[];
-        for(let i=0;i<32;i++){
-          // 噴出口の位置（流体面）を画面ピクセルへ。q=(p-cam)/zoom（WORLD-38 g-fluid v2）。
-          const jet=[0,0];worldFluid2JetPosition(i,jet);const a=engine.type;
-          const x=Math.round((((jet[0]-a.cam[0])/a.zoom)/(1920/1080)*.5+.5)*1920),y=Math.round((((jet[1]-a.cam[1])/a.zoom)*.5+.5)*1080);
-          let sum=0;for(let dy=-2;dy<=2;dy++)for(let dx=-2;dx<=2;dx++){
-            const o=((y+dy)*1920+x+dx)*4;sum+=(.2126*capture.rgba[o]+.7152*capture.rgba[o+1]+.0722*capture.rgba[o+2])/255;
-          }lum.push(sum/25);
-        }
-        const featureWinner=Array.from(f.bandsSmooth).indexOf(Math.max(...f.bandsSmooth)),winner=lum.indexOf(Math.max(...lum));
-        rows.push({band,featureWinner,winner,luminance:lum[band],maximum:Math.max(...lum),glError:capture.glError});
-      }return rows;
-    })()`);
-    avzAssert.equal(result.length,32);
-    for(const row of result){avzAssert.equal(row.featureWinner,row.band,'MFS center band');avzAssert.equal(row.winner,row.band,'luminance winner '+JSON.stringify(row));avzAssert.equal(row.glError,0);}
-    console.log('BW-9-spectrum '+JSON.stringify(result));
-  });
-}, {timeoutMs:180000,slow:true});

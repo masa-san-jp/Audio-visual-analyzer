@@ -1,5 +1,5 @@
 // T4 トンネル — doc/spec-phase6.md §6.4
-// radial のリングが奥（中心）から手前（外周）へ湧き出て抜けていく擬似3Dトンネル。
+// radial のリングが奥（中心）から手前（外周）へ湧き出て抜けていくトンネル。
 // ステートフルレンダラー（背景クリアはコア側 _clearWithAfterimage が行う。selfClear ではない）。
 
 class TunnelRenderer {

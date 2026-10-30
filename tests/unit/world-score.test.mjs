@@ -96,7 +96,7 @@ function worldCommandGl() {
   for (const name of ['createVertexArray', 'createBuffer', 'createShader', 'createProgram', 'createTexture', 'createFramebuffer']) gl[name] = () => ({ id: id++ });
   for (const name of ['bindVertexArray', 'bindBuffer', 'bufferData', 'bindBufferBase', 'shaderSource', 'compileShader',
     'deleteShader', 'attachShader', 'linkProgram', 'uniformBlockBinding', 'texStorage2D', 'texParameteri', 'viewport',
-    'clearColor', 'clear', 'uniform2f', 'uniform1f', 'uniform3fv', 'uniform4fv', 'uniform1fv', 'uniform2fv', 'uniform1ui', 'blitFramebuffer', 'enable', 'blendFunc', 'disable',
+    'clearColor', 'clear', 'uniform2f', 'uniform1f', 'uniform3fv', 'uniform4fv', 'uniform1fv', 'uniform2fv', 'uniformMatrix3fv', 'uniform1ui', 'blitFramebuffer', 'enable', 'blendFunc', 'disable',
     'deleteTexture', 'deleteFramebuffer', 'deleteProgram', 'deleteBuffer', 'deleteVertexArray', 'texSubImage2D', 'drawBuffers']) gl[name] = () => {};
   gl.getExtension = name => name === 'EXT_disjoint_timer_query_webgl2' ? null : {};
   gl.getShaderParameter = gl.getProgramParameter = () => true;
@@ -128,34 +128,6 @@ function worldCommandGl() {
   };
   return gl;
 }
-test('UW-06 GPU命令: 流体射影24反復・円環・同時合成・MFS即時uniform・全境界', () => {
-  const gl = worldCommandGl(), canvas = { width: 1920, height: 1080, getContext: () => gl };
-  gl.canvas = canvas;
-  const runtime = loadClassic(['js/vis-utils.js', 'js/mfs-const.js', 'js/mfs-view.js', 'js/world/gl-util.js',
-    'js/world/fluid.js', 'js/world/particles.js', 'js/world/score.js', 'js/world/analyzer-types.js', 'js/world/g-fluid2.js', 'js/world/g-rings.js', 'js/world/g-galaxy.js', 'js/world/g-gargantua.js', 'js/world/g-attractor.js', 'js/world/g-tesseract.js', 'js/world/g-quantum.js', 'js/world/post.js', 'js/world/world-engine.js']);
-  const engine = new (runtime.get('WorldEngine'))(canvas), score = runtime.get('compileWorldScore')(fixture, 11);
-  const features = new (runtime.get('MfsFrameView'))(), layout = runtime.get('MFS_LAYOUT');
-  engine.setScore(score);
-  const first = score.sections.find(s => s.kind === 'drop');
-  features.raw[layout.ONSET_FLAGS] = 15; features.raw[layout.BEAT_FLAG] = 1;
-  engine.render(first.startSec, features, 1 / 60);
-  assert.equal(gl.calls.filter(c => c.program === engine.type.jacobiProgram).length, 24);
-  assert.equal(gl.calls.filter(c => c.type === gl.POINTS)[0].count, 12000);
-  assert.deepEqual(gl.lastUniforms.slice(8, 11), [1, 1, 1]); assert.equal(gl.lastUniforms[35], 31);
-  assert.equal(engine.responses[6] - engine.responses[0], 0);
-  assert.equal(gl.lastUniforms[11], 1); assert.ok(Math.abs(gl.lastUniforms[17]) === 0, '境界では中心力をモーフ開始');
-  assert.deepEqual(gl.lastUniforms.slice(24, 27), Array.from(new Float32Array(score.sections[1].primary)));
-  engine.setScore(score);
-  const preceding = score.sections.find(s => s.silenceSec < Infinity);
-  engine.render(preceding.silenceSec + .01, null, 1 / 60);
-  assert.equal(gl.lastUniforms[16], 0); assert.equal(gl.lastUniforms[39], 1); assert.equal(gl.lastUniforms[1], 0);
-  engine.render(score.durationSec, null, 0);
-  assert.equal(engine.events.filter(e => e.type === 'boundary' && e.firedFrame >= 0).length, fixture.sections.length);
-  assert.equal(engine.events.at(-1).type, 'end'); assert.ok(engine.events.at(-1).firedFrame >= 0);
-  assert.equal(engine.metrics().particleCount, 12000); assert.equal(engine.metrics().fluidWidth, 384);
-  console.log('UW-06 pressureIterations=24 dust=12000 fluid=384x216 boundaryCoverage=6/6 mockUniformLatencyFrames=0');
-});
-
 test('UW-07 曲の三色だけで全抽象状態を配色・種別をまたぐラベルの独立変奏', () => {
   const map = { ...fixture, sections: ['intro', 'break', 'outro', 'main', 'build', 'drop', 'drop', 'break'].map((kind, i) =>
     ({ startSec: i, endSec: i + 1, kind, label: 'A' })), durationSec: 8 };
@@ -172,7 +144,7 @@ test('UW-07 曲の三色だけで全抽象状態を配色・種別をまたぐ�
 function worldTestEngine() {
   const gl = worldCommandGl(), canvas = { width: 1920, height: 1080, getContext: () => gl }; gl.canvas = canvas;
   const runtime = loadClassic(['js/vis-utils.js', 'js/mfs-const.js', 'js/mfs-view.js', 'js/world/gl-util.js',
-    'js/world/fluid.js', 'js/world/particles.js', 'js/world/score.js', 'js/world/analyzer-types.js', 'js/world/g-fluid2.js', 'js/world/g-rings.js', 'js/world/g-galaxy.js', 'js/world/g-gargantua.js', 'js/world/g-attractor.js', 'js/world/g-tesseract.js', 'js/world/g-quantum.js', 'js/world/post.js', 'js/world/world-engine.js']);
+    'js/world/particles.js', 'js/world/score.js', 'js/world/analyzer-types.js', 'js/world/g-rings.js', 'js/world/g-galaxy.js', 'js/world/g-gargantua.js', 'js/world/g-tesseract.js', 'js/world/g-quantum.js', 'js/world/post.js', 'js/world/world-engine.js']);
   const engine = new (runtime.get('WorldEngine'))(canvas); engine.setScore(runtime.get('compileWorldScore')(fixture, 11));
   return { engine, gl };
 }
@@ -185,7 +157,6 @@ test('UW-08 renderAt: 0から固定60Hz・音声不要・逆向きと反復でun
   assert.deepEqual(Array.from(engine.gpu.uniforms), initial);
   await engine.renderAt(.105); assert.equal(engine.previewStep, 6); assert.equal(engine.latestSec, .105);
   await assert.rejects(engine.renderAt(-1), RangeError); await assert.rejects(engine.renderAt(NaN), RangeError);
-  assert.ok(gl.calls.some(c => c.type === gl.POINTS && c.count === 12000));
   assert.equal(engine.post.meter.at(-1).width, 1); assert.equal(engine.post.meter.at(-1).height, 1);
   console.log('UW-08 fixedSteps=6 dt=1/60 repeatUniformDifference=0 meterLevels=' + engine.post.meter.length);
 });
@@ -212,7 +183,7 @@ test('UW-66 WORLD-22 途中描画省略: statelessは1回・statefulは全N回�
   const { engine, type } = mockEngine(true);
   await engine.renderAt(.1);
   // 実際のselectType経路で混合を開始し、renderAtの再初期化を通さず前進する。
-  engine.selectType('g-fluid', true); engine.selectType(type.id);
+  engine.selectType('g-gargantua', true); engine.selectType(type.id);
   assert.equal(engine.fadeElapsed, 0); type.reset();
   engine.advanceTo(.2);
   assert.equal(type.steps, 6); assert.equal(type.renders, 6);
@@ -243,7 +214,7 @@ test('UW-66 WORLD-22 途中描画省略: statelessは1回・statefulは全N回�
 test('UW-67 WORLD-22 gargantua: renderAt(45)の2701CPU更新・uniform/イベント/カメラ状態を全描画と一致', async () => {
   const { engine } = worldTestEngine(); engine.selectType('g-gargantua', true);
   const type = engine.type, render = type.render; let renders = 0;
-  assert.equal(type.statelessRender, true); assert.equal(engine.types[0].statelessRender, undefined);
+  assert.equal(type.statelessRender, true);
   type.render = function (input) { renders++; render.call(this, input); };
   function state() {
     return { uniforms: engine.gpu.uniforms.slice(), camera: type.camera.slice(), music: type.music.slice(),
@@ -643,24 +614,24 @@ test('UW-33 WORLD-12 帯域と構図: 整形レベル・同時刻のモーフ連
   console.log('UW-33 shapedBand17='+expected+' repeatedTimeError=0 replayError=0 loopPaletteError=0');
 });
 
-test('UW-39 WORLD-13 タイプ契約: ブラックホールkey2・32帯域・半解像度・0.5秒切替',()=>{
+test('UW-39 WORLD-13 タイプ契約: ブラックホールkey1・32帯域・半解像度・0.5秒切替',()=>{
   const {engine}=worldTestEngine(),r=loadClassic(['js/mfs-const.js','js/mfs-view.js']),f=new(r.get('MfsFrameView'))(),L=r.get('MFS_LAYOUT');
   f.bandsSmooth[17]=.8;f.raw[L.LEVEL]=.7;f.raw[L.BEAT_FLAG]=1;
-  let fluidSteps=0;const fluid=engine.type,fluidStep=fluid.step.bind(fluid);fluid.step=input=>{if(input.dt>0)fluidSteps++;fluidStep(input);};
+  engine.selectType('g-tesseract',true);let inactiveSteps=0;const inactive=engine.type,inactiveStep=inactive.step.bind(inactive);inactive.step=input=>{if(input.dt>0)inactiveSteps++;inactiveStep(input);};
   engine._step(2,f,0);engine.selectType('g-gargantua');assert.equal(engine.fadeElapsed,0);
   const resources=[engine.gpu.textures.length,engine.gpu.fbos.length,engine.gpu.programs.length];
   engine._step(2.25,f,.25);assert.equal(engine.fadeElapsed,.25);
   assert.ok(Math.abs(engine.type.bandUniforms[17*4]-Math.pow((Math.fround(.8)-.12)/.7,.8))<1e-6);
   engine._step(2.5,f,.25);assert.equal(engine.fadeElapsed,.5);
   assert.equal(engine.type.half.width,960);assert.equal(engine.type.half.height,540);
-  assert.equal(fluidSteps,0);engine._draw();
+  assert.equal(inactiveSteps,0);engine._draw();
   assert.equal(engine.post.analyzerMode,1);assert.equal(engine.post.pulse,0);assert.equal(engine.post.gargantua,true);
   assert.deepEqual([engine.gpu.textures.length,engine.gpu.fbos.length,engine.gpu.programs.length],resources);
   for(const id of ['g-terrain','g-rings','g-galaxy'])assert.throws(()=>engine.selectType(id),RangeError);
   const types=loadClassic(['js/world/gl-util.js','js/world/analyzer-types.js']).get('WORLD_ANALYZER_TYPES');
-  assert.deepEqual(Array.from(types,t=>t.id),['g-fluid','g-gargantua','g-attractor','g-tesseract', 'g-quantum']);
-  assert.equal(types[1].key,2);assert.equal(types[1].label,'ブラックホール');
-  console.log(`UW-39 availableTypes=${types.filter(t=>t.available).length} annuli=32 internal=960x540 latencyFrames=0 fadeSec=.5 inactiveFluidSteps=0 GPUResourceGrowth=0`);
+  assert.deepEqual(Array.from(types,t=>t.id),['g-gargantua','g-tesseract','g-quantum']);
+  assert.equal(types[0].key,1);assert.equal(types[0].label,'ブラックホール');
+  console.log(`UW-39 availableTypes=${types.filter(t=>t.available).length} annuli=32 internal=960x540 latencyFrames=0 fadeSec=.5 inactiveSteps=0 GPUResourceGrowth=0`);
 });
 test('UW-40 WORLD-11 曲固有値: クロマ上位・BPM比例・重心/オンセット密度・入力不変',()=>{
   const r=loadClassic(['js/vis-utils.js','js/world/score.js']),variation=r.get('worldSongVariation');
@@ -687,7 +658,7 @@ test('UW-41 WORLD-11 計測: Pearsonの無変化拒否・輝度重み色ヒス�
 test('UW-43 WORLD-11 決定性: タイプ選択を保ってlive/renderAt/逆シークの位相と残光一致',async()=>{
   const {engine}=worldTestEngine(),L=loadClassic(['js/mfs-const.js']).get('MFS_LAYOUT');
   const frames=Array.from({length:31},(_,i)=>{const f=new Float32Array(L.LENGTH);f[L.BANDS_SMOOTH+4]=i/30;f[L.LEVEL]=.7;f[L.BEAT_FLAG]=i===15?1:0;f[L.ONSET_FLAGS]=i===15?5:0;return f;});
-  for(const typeId of ['g-fluid','g-gargantua']){
+  for(const typeId of ['g-tesseract','g-gargantua']){
     engine.selectType(typeId,true);engine.setScore(engine.score);engine.setTimeline(frames,30);
     engine.render(.11,null,.17);engine.render(1,null,.9);const expected=engine.type.bandUniforms.slice(),beats=engine.type.beats.slice();
     const camera=typeId==='g-gargantua'?engine.type.camera.slice():null,music=typeId==='g-gargantua'?engine.type.music.slice():null,spots=typeId==='g-gargantua'?engine.type.streaks.slice():null;
@@ -723,6 +694,5 @@ test('UW-46 WORLD-12 実音G-1計測: 32帯域の中央値・定数拒否・閾�
   const result=r.get('world12CorrelationReport')(records,'g-rings');assert.equal(result.median,1);assert.equal(result.pass,true);assert.equal(result.correlations.length,32);
   for(const row of records)row.levels.fill(1);const flat=r.get('world12CorrelationReport')(records,'g-galaxy');assert.equal(flat.median,0);assert.equal(flat.pass,false);
   assert.equal(r.get('world12Median')([.1,.5,.7,.9]),.6);
-  assert.equal(r.get('world12CorrelationReport')(records,'g-fluid').applicable,false);
   console.log('UW-46 PearsonMedian=1 constantMedian=0 constantRejected=true bands=32');
 });

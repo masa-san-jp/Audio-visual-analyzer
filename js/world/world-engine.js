@@ -14,7 +14,7 @@ class WorldEngine {
     this.canvas = canvas; this.seed = seed; this.gpu = new WorldGL(canvas);
     this.post = new WorldPost(this.gpu, canvas.width, canvas.height);
     this.scene = this.gpu.target(canvas.width, canvas.height);
-    this.types = [new WorldFluid2Analyzer(), new WorldGargantuaAnalyzer(), new WorldAttractorAnalyzer(), new WorldTesseractAnalyzer(), new WorldQuantumAnalyzer()];
+    this.types = [new WorldGargantuaAnalyzer(), new WorldTesseractAnalyzer(), new WorldQuantumAnalyzer()];
     for (let i = 0; i < this.types.length; i++) this.types[i].init(this.gpu);
     this.type = this.types[0]; this.fadeElapsed = .5; this.previousPostMode = 0;
     this.typeTarget = this.gpu.target(canvas.width, canvas.height); this.typeSnapshot = this.gpu.target(canvas.width, canvas.height);
@@ -279,7 +279,7 @@ class WorldEngine {
     // ライブ再生の追いつきでは、advanceState を持つタイプは最後以外のステップを状態更新だけにする。
     if (this._liveRender && i < steps && type.advanceState && this.fadeElapsed >= .5
       && i > steps - (type.warmFrames || Infinity)) return 'state';
-    // statelessRenderは末尾1枚、warmFrames（g-fluid／g-attractor）は指定窓を描く。
+    // statelessRenderは末尾1枚、warmFrames は指定窓を描く。
     // 時刻0だけの要求も従来どおり描画する。
     return steps === 0 || i > steps - (type.warmFrames || (type.statelessRender ? 1 : Infinity)) || this.fadeElapsed < .5;
   }
@@ -344,12 +344,10 @@ class WorldEngine {
     const p = this.fadeElapsed / .5, blend = p * p * (3 - 2 * p);
     // 詳細設計の各タイプで拍の露出・スケールを適用済み。旧postの二重pulseを止める。
     this.post.pulse = 0;
-    this.post.analyzerMode = this.previousPostMode * (1 - blend) + (this.type.id === 'g-fluid' ? 0 : 1) * blend;
+    this.post.analyzerMode = this.previousPostMode * (1 - blend) + blend;
     this.post.gargantua = this.type.id === 'g-gargantua';
-    this.post.attractor = this.type.id === 'g-attractor';
     this.post.tesseract = this.type.id === 'g-tesseract';
     this.post.quantum = this.type.id === 'g-quantum';
-    this.post.fluid2 = this.type.id === 'g-fluid';
     this.post.grainFrame = Math.round(this.latestSec * 60); // フィルム粒子を毎フレーム変える（拍子に依存しない）
     this.post.kick = this.post.gargantua ? this.type.music[0] : 0;
     this.post.exposureMultiplier = this.post.gargantua ? this.type.exposureMultiplier : 1;
@@ -403,11 +401,10 @@ class WorldEngine {
     const p95 = a => { a.sort((x, y) => x - y); return a.length ? a[Math.ceil(a.length * .95) - 1] : null; };
     // 旧世界流体・粒子は撤去済み（WORLD-38）。粒子数・格子はアクティブなタイプの値を返す。
     return { width: this.canvas.width, height: this.canvas.height, particleCount: this.type.particleCount || 0,
-      depthParticleCount: 0, focusedFluid: this.type.id === 'g-fluid',
+      depthParticleCount: 0,
       typeId: this.type.id, typeBlend: this.fadeElapsed / .5, analyzerParticleCount: this.type.particleCount || 0,
-      fluidWidth: this.type.velocityWidth || 0, fluidHeight: this.type.velocityHeight || 0,
       overscan: OVERSCAN, domainMargin: WORLD_DOMAIN_MARGIN,
-      dyeWidth: this.type.dyeWidth || 0, dyeHeight: this.type.dyeHeight || 0, hdrFormat: 'RGBA16F',
+      hdrFormat: 'RGBA16F',
       cpuP95Ms: p95(cpu), gpuP95Ms: p95(gpu), renderP95Ms: p95(duration), frameP95Ms: p95(intervals),
       timingSamples: duration.length, submittedFrames: this.timeCount, timerAvailable: !!this.timer,
       timerDisjoints: this.timerDisjoints, mfsFrames: this.mfsFrames, responseCount: this.responseCount,

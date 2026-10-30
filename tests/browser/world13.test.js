@@ -82,7 +82,6 @@ async function world13Performance(engine) {
   }finally {e.selectType(originalType,true);e.setScore(originalScore);e.setTimeline(originalTimeline,originalFps);}
 }
 async function world13Shoot(typeId,tSec) {
-  if(typeId==='g-fluid')return world12Shoot(typeId,tSec);
   if(typeId!=='g-gargantua')throw new RangeError('未実装のタイプ');
   const w=__world,app=w.app,e=w.engine,audio=w.audio;
   if(tSec<1.5||tSec>=w.score.durationSec)throw new RangeError('撮影時刻は1.5秒以上、曲長未満');

@@ -57,7 +57,7 @@ class WorldExporter extends OfflineExporter {
       }, error: error => { encoderError = error; } });
       videoEncoder.configure(video); audioEncoder.configure(audio);
       const canvas = document.createElement('canvas'); canvas.width = width; canvas.height = height;
-      engine = new WorldEngine(canvas, score.seed); engine.selectType(options.typeId || 'g-fluid', true); engine.setScore(score); engine.setTimeline(featureFrames, fps);
+      engine = new WorldEngine(canvas, score.seed); engine.selectType(options.typeId || 'g-gargantua', true); engine.setScore(score); engine.setTimeline(featureFrames, fps);
       // 終端のMFSフレームはシミュレーション用。6秒×30fpsは[0,6)の180枚だけを符号化する。
       for (let i = 0; i < frameCount; i++) {
         this._checkCancelled(); if (encoderError) throw encoderError;

@@ -1,5 +1,5 @@
 // @page app
-// 目的 — index.html に統合した GPU タイプ（g-fluid / g-gargantua / g-attractor）の動作確認 — doc/20261010-design-integration-v1.md §6。
+// 目的 — index.html に統合した GPU タイプ（g-gargantua / g-tesseract / g-quantum）の動作確認 — doc/20261010-design-integration-v1.md §6。
 // 実 GPU の Chrome で実行する。WebGL2 が無い環境では INT-02 以降が失敗する。
 function intWav(signal) {
   const channels = signal.channels, frames = channels[0].length, align = channels.length * 4;
@@ -69,12 +69,12 @@ avzGpuTest('INT-01', 'INT-01 GPU の 3 タイプが GPU グループに並び、
     const select = document.getElementById('analyzer-type');
     const group = Array.from(select.querySelectorAll('optgroup')).find(g => g.label === 'GPU');
     avzAssert.ok(group, 'GPU グループ');
-    avzAssert.deepEqual(Array.from(group.children).map(o => o.value), ['g-fluid', 'g-gargantua', 'g-attractor']);
+    avzAssert.deepEqual(Array.from(group.children).map(o => o.value), ['g-gargantua', 'g-tesseract', 'g-quantum']);
     avzAssert.equal(select.lastElementChild, group, 'GPU グループが最後');
     const gpu = document.getElementById('gpu-canvas'), main = document.getElementById('canvas');
     avzAssert.equal(gpu.hidden, true, '初期は非表示（WebGL 未作成）');
     avzAssert.equal(app.worldBridge.engine, null, '2D だけなら WebGL を作らない');
-    for (const id of ['g-fluid', 'g-gargantua', 'g-attractor']) {
+    for (const id of ['g-gargantua', 'g-tesseract', 'g-quantum']) {
       intSelectType(id);
       avzAssert.equal(app.visualizer.settings.analyzerType, id);
       avzAssert.equal(gpu.hidden, false, id);
@@ -102,7 +102,7 @@ avzGpuTest('INT-02', 'INT-02 曲の読み込み後に GPU タイプが描画さ�
   const app = window.__app;
   try {
     await intLoadSong(app);
-    intSelectType('g-fluid');
+    intSelectType('g-gargantua');
     await intUntil(() => app.worldBridge.ready, 120000, 'GPU 解析が完了しない');
     avzAssert.equal(document.getElementById('gpu-status').hidden, true, '解析表示は消える');
     document.getElementById('btn-play').click();
@@ -118,8 +118,8 @@ avzGpuTest('INT-02', 'INT-02 曲の読み込み後に GPU タイプが描画さ�
     await intWait(500);
     avzAssert.ok(intGpuPixelStats().mean >= 0);
     // 他の GPU タイプへ 0.5 秒のクロスフェードで切り替わる
-    intSelectType('g-gargantua');
-    avzAssert.equal(app.worldBridge.engine.type.id, 'g-gargantua');
+    intSelectType('g-tesseract');
+    avzAssert.equal(app.worldBridge.engine.type.id, 'g-tesseract');
   } finally { await intCleanup(app); }
 }, { timeoutMs: 180000, slow: true });
 
@@ -128,7 +128,7 @@ avzGpuTest('INT-03', 'INT-03 準備前は黒＋「GPU 解析中…」を表示�
   try {
     await app.ui._loadMediaFile(intSong(), 0);
     app.worldBridge.invalidate();
-    intSelectType('g-attractor');
+    intSelectType('g-tesseract');
     avzAssert.equal(document.getElementById('gpu-status').textContent, 'GPU 解析中…');
     await intUntil(() => app.worldBridge.ready, 120000);
     avzAssert.equal(document.getElementById('gpu-message').hidden, true);
@@ -138,7 +138,7 @@ avzGpuTest('INT-03', 'INT-03 準備前は黒＋「GPU 解析中…」を表示�
 avzGpuTest('INT-04', 'INT-04 GPU タイプ選択中の書き出しで mp4（または webm）が作れる', async function () {
   const app = window.__app;
   try {
-    intSelectType('g-fluid');
+    intSelectType('g-gargantua');
     const exporter = app.worldBridge.exporter;
     const input = document.getElementById('offline-file-input');
     const transfer = new DataTransfer(); transfer.items.add(intSong()); input.files = transfer.files;
@@ -161,7 +161,7 @@ avzTest('INT-05', 'INT-05 マイク入力中は GPU タイプを選べない（o
     app.micInput.active = true;
     app.ui._updateGpuOptions();
     const select = document.getElementById('analyzer-type');
-    for (const id of ['g-fluid', 'g-gargantua', 'g-attractor']) {
+    for (const id of ['g-gargantua', 'g-tesseract', 'g-quantum']) {
       const option = select.querySelector(`option[value="${id}"]`);
       avzAssert.equal(option.disabled, true, id);
       avzAssert.ok(option.title.length > 0, id + ' の理由');
@@ -169,7 +169,7 @@ avzTest('INT-05', 'INT-05 マイク入力中は GPU タイプを選べない（o
     avzAssert.equal(select.querySelector('option[value="bar"]').disabled, false);
     app.micInput.active = false;
     app.ui._updateGpuOptions();
-    avzAssert.equal(select.querySelector('option[value="g-fluid"]').disabled, false);
+    avzAssert.equal(select.querySelector('option[value="g-gargantua"]').disabled, false);
   } finally { await intCleanup(app); }
 });
 
@@ -186,7 +186,7 @@ avzTest('INT-06', 'INT-06 GPU タイプ選択中はディレクターの操作�
     for (let i = 0; i < 30; i++) {
       document.getElementById('btn-analyzer-randomize').click();
       avzAssert.ok(!app.visualizer.settings.analyzerType.startsWith('g-'), 'ランダムは GPU を選ばない');
-      intSelectType('g-fluid');
+      intSelectType('g-gargantua');
     }
     intSelectType('bar');
     for (const id of ids) avzAssert.equal(document.getElementById(id).disabled, false, id);
@@ -197,15 +197,15 @@ avzTest('INT-06', 'INT-06 GPU タイプ選択中はディレクターの操作�
 avzTest('INT-07', 'INT-07 プリセットに GPU タイプの ID を保存して復元できる', async function () {
   const app = window.__app;
   try {
-    intSelectType('g-attractor');
+    intSelectType('g-tesseract');
     document.getElementById('preset-name').value = 'int-gpu';
     document.getElementById('btn-preset-save').click();
     intSelectType('bar');
     const select = document.getElementById('preset-select');
     select.value = 'int-gpu';
     document.getElementById('btn-preset-load').click();
-    avzAssert.equal(app.visualizer.settings.analyzerType, 'g-attractor');
-    avzAssert.equal(document.getElementById('analyzer-type').value, 'g-attractor');
+    avzAssert.equal(app.visualizer.settings.analyzerType, 'g-tesseract');
+    avzAssert.equal(document.getElementById('analyzer-type').value, 'g-tesseract');
     avzAssert.equal(document.body.classList.contains('gpu-type'), true);
   } finally {
     const presetSelect = document.getElementById('preset-select');

@@ -61,18 +61,6 @@ const RENDERER_REGISTRY = {
     capabilities: { methods: ['line', 'dot'], layers: false, sliders: ['history', 'motion'] },
   },
 
-  // ── 擬似3D系（ステートフル） ──
-  bar3d: {
-    label: '擬似3Dバー', group: '擬似3D', stateful: true,
-    create: (canvas) => new Bar3dRenderer(canvas),
-    capabilities: { methods: [], layers: true, sliders: [] },
-  },
-  ring3d: {
-    label: '回転3Dリング', group: '擬似3D', stateful: true,
-    create: (canvas) => new Ring3dRenderer(canvas),
-    capabilities: { methods: ['bar', 'line', 'dot'], layers: true, sliders: ['motion'], physics: true },
-  },
-
   // ── 幾何系（ステートフル） ──
   lissajous: {
     label: 'オシロスコープ', group: '幾何', stateful: true,
@@ -82,16 +70,8 @@ const RENDERER_REGISTRY = {
 
   // ── GPU（WebGL2・WorldBridge が描画する。FramePipeline は描画せず、create も持たない） ──
   // 統合設計 doc/20261010-design-integration-v1.md §3。capabilities は gpu のみ（2D の項目は持たない）
-  'g-fluid': {
-    label: 'スペクトル流体', group: 'GPU', gpu: true, stateful: false,
-    capabilities: { gpu: true },
-  },
   'g-gargantua': {
     label: 'ブラックホール', group: 'GPU', gpu: true, stateful: false,
-    capabilities: { gpu: true },
-  },
-  'g-attractor': {
-    label: 'ストレンジアトラクター', group: 'GPU', gpu: true, stateful: false,
     capabilities: { gpu: true },
   },
   'g-tesseract': {
@@ -105,7 +85,7 @@ const RENDERER_REGISTRY = {
 };
 
 // タイプ一覧を group 順で返す（UI の optgroup 構築用）
-const RENDERER_GROUP_ORDER = ['基本', '時間軸', '擬似3D', '幾何', 'GPU'];
+const RENDERER_GROUP_ORDER = ['基本', '時間軸', '幾何', 'GPU'];
 
 // 2D タイプの ID 一覧（GPU 項目を除く。ランダム選択・ディレクターの母集団用）
 function listRenderer2DKeys() {

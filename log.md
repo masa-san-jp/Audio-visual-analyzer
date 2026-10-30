@@ -1,3 +1,26 @@
+## 2026-10-30（アナライザータイプの整理：擬似3D系・スペクトル流体・ストレンジアトラクターの削除）
+
+### 作業内容
+- 2Dタイプ `bar3d`（擬似3Dバー）・`ring3d`（回転3Dリング）を削除した。グループ「擬似3D」（`RENDERER_GROUP_ORDER`）も廃止。2Dタイプは 6 種類になった。
+  - 内蔵シーンから `builtin:ring3d`・`builtin:bar3d` を外した（calm 2・build 2・drop 2）。
+- GPUタイプ `g-fluid`（スペクトル流体）・`g-attractor`（ストレンジアトラクター）を削除した。残りは `g-gargantua`・`g-tesseract`・`g-quantum` の 3 種類。
+  - 数字キーを 1=ブラックホール・2=テッセラクト・3=量子のビジョンに振り直した（`js/world/analyzer-types.js`）。
+  - `WorldPost`（`post.js`）から流体・アトラクター専用の後処理枝・uniform・ブルーム定数を除いた。`WorldEngine` の既定タイプはブラックホール（先頭）になり、`WorldBridge`・`WorldExporter` の既定 typeId も `g-gargantua` にした。
+  - `WorldEngine.metrics()` から流体専用の項目（`focusedFluid`・`fluidWidth`・`fluidHeight`・`dyeWidth`・`dyeHeight`）を除いた。
+- 削除したファイル：`js/renderers/bar3d.js`・`js/renderers/ring3d.js`・`js/world/fluid.js`・`js/world/g-fluid2.js`・`js/world/g-attractor.js`、設計 `doc/20261010-design-fluid-v2.md`・`doc/20261008-design-attractor-v1.md`。`index.html` とテスト画面 `tests/browser/harness/world.html` の script タグも外した。
+- 保存設定・プリセット・JSON：`REMOVED_ANALYZER_TYPES` に `bar3d`・`ring3d`・`g-fluid`・`g-attractor` を加えた。これらを参照する旧データは `bar` に戻して読み込み、自動演出のマイプリセット候補からは除外する。
+- テスト：
+  - 削除：`world-fluid2.test.mjs`・`world-attractor.test.mjs`・`world31.test.js`・`world38.test.js`、UW-06（流体の GPU 命令）、BW-9-spectrum（流体の噴出口）、`W-3`（流体の格子）、ゴールデン基準値 bar3d・ring3d の 8 エントリ（ゴールデンは 42 → 34 ケース）。
+  - 更新：レジストリ・UI（GPU 3 項目、2D 6 タイプ）、内蔵シーン 6 件、削除タイプ 10 件の互換（settings-io・director-timeline）、キー（`world-keys`・`world-quantum`・`world-tesseract`）、`world-score`（既定がブラックホールになったため、UW-39・UW-43・UW-66・UW-67 を現行の 3 タイプに合わせた。GL モックに `uniformMatrix3fv` を追加）、`world-shaders`（UW-47 のシェーダー数を 36 から 19 に）、`world-exporter`・`world-kick`、ブラウザ側の `integration`・`regression`・`b16-05`・`b16-live`・`golden`・`world11`〜`world13`、`tests/world/shoot-live.mjs`・`measure.mjs`（対象タイプはブラックホールのみ）。
+  - `tests/world/output/live/g-fluid-*`（画像・JSON）を削除した。
+- 確認：`node tests/run.mjs --unit` 223 成功・0 失敗・1 スキップ、`node tests/world/shoot-live.mjs --unit` 10 成功・0 失敗、ブラウザ（`--browser`、実 GPU）は 58 件中 53 成功・5 失敗。5 失敗（BW-13-kick-gpu・BW-13-formulas・BW-14-screen・BW-14-periodic・BW-9-export）は変更前のコミットでも同じく失敗する。BW-11-export の書き出し対象は g-tesseract と g-gargantua。g-tesseract は細い光の糸が多く、H.264 の圧縮で復号画像との差が大きくなる（RMSE 0.057）ため、RMSE の上限を .07 とした（g-gargantua は .04 のまま）。
+
+### spec.md 変更
+- v2.27：2Dタイプを 6 種類に（§11.3・Phase 6 の記述・ディレクトリ構成）、GPUタイプをブラックホール・テッセラクト・量子のビジョンの 3 種類に（§1.1）。数字キーを 1〜3 に振り直し。削除したタイプの互換読込を §11.3 に列挙。
+
+### 備考
+- 旧計画書・旧設計書のうち、削除したタイプを扱う記述は当時の記録としてそのまま残した。
+
 ## 2026-10-29（GitHub リリースの作成）
 
 ### 作業内容

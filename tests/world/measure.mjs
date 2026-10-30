@@ -83,8 +83,8 @@ child.on('close',code=>process.exit(code ?? 0));\n`);
   const result = await chrome.evaluate('runWorldMeasurement(window.__worldVisualResult)', { timeoutMs: 900000 });
   const analyzer = await chrome.evaluate('runWorldAnalyzerMeasurement()', { timeoutMs: 900000 });
   Object.assign(result, analyzer);
-  // §2.8: W/BWはg-fluidの回帰として保持。旧SDF併描／全タイプ26万粒は前提にしない。
-  result.applicability = { legacy: 'W/BWはg-fluidへ適用（閾値維持）', obsolete: ['W-3のSDF併描: §2.6で撤回', 'W-3/BW-6-coverageを全タイプへ強制: §2.8で独立形態へ置換'], replacement: '新形態はG-1〜G-4。W-3はWORLD-38でg-fluid v2の格子・塵・HDRの検査へ置換（BW-3-hero/BW-6-coverageは撤去）' };
+  // §2.8: 旧SDF併描／全タイプ26万粒は前提にしない。
+  result.applicability = { obsolete: ['W-3のSDF併描: §2.6で撤回', 'W-3/BW-6-coverageを全タイプへ強制: §2.8で独立形態へ置換'], replacement: '新形態はG-1〜G-4（BW-3-hero/BW-6-coverage/W-3は撤去）' };
   result.environment = hardware; result.consoleErrors = chrome.errors;
   if (!hardware.hardware) {
     result['G-4'].pass = false; result['G-4'].reason = '実GPUを確認できません';

@@ -98,7 +98,7 @@ test('UW-T-01 定数・色・シェーダー本文・登録',()=>{
   assert.ok(!shader.includes('${'));assert.match(shader,/const float EXPOSURE=1\.80000000;/);assert.match(shader,/const float FLASH_GAIN=1\.60000000;/);assert.match(shader,/const float VIGNETTE=0\.35000000;/);
   assert.equal((shader.match(/vec3\(/g)||[]).length>=28,true);
   const types=r.get('WORLD_ANALYZER_TYPES');
-  assert.deepEqual(types[3],{id:'g-tesseract',label:'テッセラクト',key:4,available:true});
+  assert.deepEqual(types[1],{id:'g-tesseract',label:'テッセラクト',key:2,available:true});
   const a=new Analyzer();assert.equal(a.statelessRender,true);assert.equal(a.id,'g-tesseract');assert.equal(a.label,'テッセラクト');
   console.log('UW-T-01 constants='+Object.keys(C).length);
 });
@@ -178,8 +178,8 @@ test('UW-T-05 preview: 拍で群 0・1、小節頭で群 2・3',()=>{
 });
 test('UW-T-06 量子のビジョン v2 は available:true・UI 一覧に出る',()=>{
   const types=r.get('WORLD_ANALYZER_TYPES');
-  assert.deepEqual(types.find(t=>t.id==='g-quantum'),{id:'g-quantum',label:'量子のビジョン',key:5,available:true});
-  assert.equal(types.filter(t=>t.available).length,5);
+  assert.deepEqual(types.find(t=>t.id==='g-quantum'),{id:'g-quantum',label:'量子のビジョン',key:3,available:true});
+  assert.equal(types.filter(t=>t.available).length,3);
   const reg=fs.readFileSync(new URL('../../js/renderer-registry.js',import.meta.url),'utf8');
   assert.ok(reg.includes("'g-quantum': {"));assert.ok(reg.includes("'g-tesseract': {"));
   console.log('UW-T-06 ok');
@@ -211,7 +211,7 @@ test('UW-T GLモックで init/step/render が通り、stepで新しい配列を
   const before=arrays.map(n=>a[n]);
   features.raw[L.ONSET_FLAGS]=5;engine._step(10/60,features,1/60);engine._step(11/60,features,1/60);engine._step(10.5,features,1/60);
   assert.ok(arrays.every((n,i)=>a[n]===before[i]),'配列を再確保しない');
-  engine._draw();assert.equal(engine.post.tesseract,true);assert.equal(engine.post.attractor,false);
+  engine._draw();assert.equal(engine.post.tesseract,true);assert.equal(engine.post.quantum,false);
   assert.ok(gl.calls.some(c=>c.uniform===engine.post.thresholdLoc&&c.value===C.BLOOM_THRESHOLD));
   assert.equal(count(engine.post.exposureProgram),0);
   assert.deepEqual([g.textures.length,g.fbos.length,g.programs.length],resources);

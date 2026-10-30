@@ -10,8 +10,6 @@ const DIRECTOR_SCENES = [
   { id: 'builtin:lissajous', cls: 'calm', patch: { analyzerType: 'lissajous', expressionMethod: 'line', motionSpeed: 1.0, afterimageIntensity: 4 } },
   { id: 'builtin:tunnel', cls: 'build', patch: { analyzerType: 'tunnel', expressionMethod: 'line', motionSpeed: 1.2, afterimageIntensity: 2 } },
   { id: 'builtin:terrain', cls: 'build', patch: { analyzerType: 'terrain', expressionMethod: 'line', motionSpeed: 1.0, afterimageIntensity: 0 } },
-  { id: 'builtin:ring3d', cls: 'build', patch: { analyzerType: 'ring3d', expressionMethod: 'line', layerCount: 2, motionSpeed: 1.2, afterimageIntensity: 2 } },
-  { id: 'builtin:bar3d', cls: 'drop', patch: { analyzerType: 'bar3d', layerCount: 3, afterimageIntensity: 0 } },
   { id: 'builtin:radial', cls: 'drop', patch: { analyzerType: 'radial', expressionMethod: 'bar', layerCount: 3, afterimageIntensity: 2 } },
   { id: 'builtin:bar', cls: 'drop', patch: { analyzerType: 'bar', expressionMethod: 'bar', barDisplayMode: 'mirror-vertical', layerCount: 4, afterimageIntensity: 1 } },
 ];

@@ -51,7 +51,7 @@ test('UW-94 WORLD-34 割当のない数字キーは例外なく無視し、選�
   }
 });
 
-test('UW-95 WORLD-34 割当済みの数字キーは該当タイプを選び preventDefault する（Digit3→g-attractor）', () => {
+test('UW-95 WORLD-34 割当済みの数字キーは該当タイプを選び preventDefault する（Digit3→g-quantum）', () => {
   const { app, press } = setup();
   for (const type of types) {
     const before = app.engine.type.id;

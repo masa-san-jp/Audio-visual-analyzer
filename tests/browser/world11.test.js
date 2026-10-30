@@ -75,7 +75,7 @@ async function runWorldAnalyzerMeasurement(){
   // g-ringsは旧世界粒子（WORLD-38で撤去）に依存するため回帰対象から外した。
   const retained=[new WorldGalaxyAnalyzer()];
   for(const analyzer of retained){analyzer.init(engine.gpu);engine.types.push(analyzer);}
-  const types=['g-fluid','g-galaxy'],G1=[],G2=[],G3=[],G4=[];let glErrors=0;
+  const types=['g-galaxy'],G1=[],G2=[],G3=[],G4=[];let glErrors=0;
   const nextFrame=()=>new Promise(resolve=>requestAnimationFrame(resolve));
   const feature=new MfsFrameView(),score=compileWorldScore({bpm:120,durationSec:12,beats:[],downbeatIndices:[],sections:[{startSec:0,endSec:12,kind:'main',label:'G'}]},11);
   engine.timeline=null;
@@ -134,7 +134,7 @@ async function runWorldAnalyzerMeasurement(){
   }finally{engine.selectType(originalType,true);engine.setScore(originalScore);engine.setTimeline(originalTimeline,originalFps);engine.types.splice(engine.types.length-retained.length,retained.length);}
 }
 if(typeof avzTest==='function'){
-  avzGpuTest('BW-11-types','タイプ選択・ブラックホールkey2・0.5秒crossfade・逆シークで選択維持',async()=>{
+  avzGpuTest('BW-11-types','タイプ選択（キー1〜3）・0.5秒crossfade・逆シークで選択維持',async()=>{
     const iframe=document.createElement('iframe');iframe.src=new URL('../browser/harness/world.html',location.href).href;
     const ready=new Promise(resolve=>iframe.onload=resolve);document.body.appendChild(iframe);
     try{await ready;const child=iframe.contentWindow,w=child.__world;avzAssert.ok(w?.engine,w?.error);
@@ -144,20 +144,20 @@ if(typeof avzTest==='function'){
         const slots=Array.from(app.typeInput.options,o=>({id:o.value,disabled:o.disabled}));
         document.dispatchEvent(new KeyboardEvent('keydown',{code:'Digit2',bubbles:true}));const selected=e.type.id,first=e.fadeElapsed;
         e.redrawTransition(.25);const halfway=e.fadeElapsed;
-        document.dispatchEvent(new KeyboardEvent('keydown',{code:'Digit3',bubbles:true}));const attractor=e.type.id;
-        document.dispatchEvent(new KeyboardEvent('keydown',{code:'Digit4',bubbles:true}));const galaxy=e.type.id;
-        e.redrawTransition(.5);return {typeCount:WORLD_ANALYZER_TYPES.length,availableCount:WORLD_ANALYZER_TYPES.filter(t=>t.available).length,slots,selected,first,halfway,attractor,galaxy,end:e.fadeElapsed,glError:e.gpu.gl.getError()};
+        document.dispatchEvent(new KeyboardEvent('keydown',{code:'Digit3',bubbles:true}));const third=e.type.id;
+        document.dispatchEvent(new KeyboardEvent('keydown',{code:'Digit4',bubbles:true}));const fourth=e.type.id;
+        e.redrawTransition(.5);return {typeCount:WORLD_ANALYZER_TYPES.length,availableCount:WORLD_ANALYZER_TYPES.filter(t=>t.available).length,slots,selected,first,halfway,third,fourth,end:e.fadeElapsed,glError:e.gpu.gl.getError()};
       })()`);
       avzAssert.equal(result.slots.length,result.typeCount);avzAssert.equal(result.slots.filter(o=>!o.disabled).length,result.availableCount);
-      avzAssert.equal(result.selected,'g-gargantua');avzAssert.equal(result.first,0);avzAssert.equal(result.halfway,.25);
-      avzAssert.equal(result.attractor,'g-attractor');avzAssert.equal(result.galaxy,'g-attractor');avzAssert.equal(result.end,.5);avzAssert.equal(result.glError,0);
-      await w.engine.renderAt(.2);avzAssert.equal(w.engine.type.id,'g-attractor');
+      avzAssert.equal(result.selected,'g-tesseract');avzAssert.equal(result.first,0);avzAssert.equal(result.halfway,.25);
+      avzAssert.equal(result.third,'g-quantum');avzAssert.equal(result.fourth,'g-quantum','割当のないキー4は無視');avzAssert.equal(result.end,.5);avzAssert.equal(result.glError,0);
+      await w.engine.renderAt(.2);avzAssert.equal(w.engine.type.id,'g-quantum');
     }finally{iframe.contentWindow.__world?.engine?.dispose();iframe.remove();}
   },{timeoutMs:30000});
 }
 if(typeof module!=='undefined'&&module.exports){module.exports={world11Correlation,world11Histogram,world11HistogramDistance,world11RegionSamples};}
 
-if(typeof avzGpuTest==='function')avzGpuTest('BW-11-export','選択fluid/gargantuaをUIから音声入りexport・live/renderAt・復号画像で検査',async()=>{
+if(typeof avzGpuTest==='function')avzGpuTest('BW-11-export','選択tesseract/gargantuaをUIから音声入りexport・live/renderAt・復号画像で検査',async()=>{
   const iframe=document.createElement('iframe');iframe.src=new URL('../browser/harness/world.html',location.href).href;
   const ready=new Promise(resolve=>iframe.onload=resolve);document.body.appendChild(iframe);
   let decoded=null,decoder=null;
@@ -174,7 +174,7 @@ if(typeof avzGpuTest==='function')avzGpuTest('BW-11-export','選択fluid/gargant
     const full=w.app.prepared,{sampleRate,numberOfChannels}=full.audioBuffer,windowSamples=6*sampleRate,windowed=new child.AudioBuffer({length:windowSamples,numberOfChannels,sampleRate});
     for(let c=0;c<numberOfChannels;c++)windowed.copyToChannel(full.audioBuffer.getChannelData(c).subarray(0,windowSamples),c);
     w.app.prepared={...full,audioBuffer:windowed,frameCount:6*full.fps};
-    for(const typeId of ['g-fluid','g-gargantua']){
+    for(const typeId of ['g-tesseract','g-gargantua']){
       w.app.selectType(typeId);await w.app.renderAt(3);const reference=w.engine.capture();
       w.engine.setScore(w.score);for(const t of [.12,.34,.72,1.5,2.2,3])w.engine.render(t,null,.017);
       const live=w.engine.capture();avzAssert.deepEqual(Array.from(live.rgba),Array.from(reference.rgba),'selected-type fixed-step pixels');
@@ -190,7 +190,7 @@ if(typeof avzGpuTest==='function')avzGpuTest('BW-11-export','選択fluid/gargant
       for(let y=0;y<1080;y++)for(let x=0;x<1920;x++)for(let c=0;c<3;c++){
         const d=(rgba[(y*1920+x)*4+c]-reference.rgba[((1079-y)*1920+x)*4+c])/255;sum+=d*d;
       }
-      const rmse=Math.sqrt(sum/(1920*1080*3));avzAssert.ok(rmse<=.04,'selected type='+typeId+' decoded RMSE='+rmse);
+      const rmse=Math.sqrt(sum/(1920*1080*3));const maxRmse=typeId==='g-tesseract'?.07:.04;avzAssert.ok(rmse<=maxRmse,'selected type='+typeId+' decoded RMSE='+rmse);
       const audioContext=new child.OfflineAudioContext(2,1,48000),audio=await audioContext.decodeAudioData(await blob.arrayBuffer());
       let energy=0;for(const sample of audio.getChannelData(0))energy+=sample*sample;const rms=Math.sqrt(energy/audio.length);
       avzAssert.ok(rms>1e-4,'audio present');avzAssert.equal(w.engine.type.id,typeId);

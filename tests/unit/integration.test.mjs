@@ -29,9 +29,9 @@ const runtime = loadClassic([
 ], { document: _d, window: { devicePixelRatio: 1 }, WorldExporter: class {}, WorldEngine: class {} });
 const get = runtime.get;
 const registry = get('RENDERER_REGISTRY');
-const GPU_IDS = ['g-fluid', 'g-gargantua', 'g-attractor', 'g-tesseract', 'g-quantum'];
+const GPU_IDS = ['g-gargantua', 'g-tesseract', 'g-quantum'];
 
-test('UI-01 レジストリ: GPU 4 項目・グループ GPU が最後・capabilities は gpu のみ・create なし', () => {
+test('UI-01 レジストリ: GPU 3 項目・グループ GPU が最後・capabilities は gpu のみ・create なし', () => {
   const order = get('RENDERER_GROUP_ORDER');
   assert.equal(order.at(-1), 'GPU');
   const gpuKeys = Object.keys(registry).filter((key) => registry[key].gpu);
@@ -42,13 +42,13 @@ test('UI-01 レジストリ: GPU 4 項目・グループ GPU が最後・capabil
     assert.equal(registry[id].create, undefined);
     assert.equal(get('getRendererEntry')(id).gpu, true);
   }
-  // 2D の 8 タイプは gpu を持たない
-  assert.equal(Object.keys(registry).filter((key) => !registry[key].gpu).length, 8);
+  // 2D の 6 タイプは gpu を持たない
+  assert.equal(Object.keys(registry).filter((key) => !registry[key].gpu).length, 6);
 });
 
 test('UI-02 ランダム選択の母集団・ディレクターのシーンから GPU 項目が除外される', () => {
   const twoD = get('listRenderer2DKeys')();
-  assert.equal(twoD.length, 8);
+  assert.equal(twoD.length, 6);
   for (const id of GPU_IDS) assert.ok(!twoD.includes(id));
   // 内蔵シーンに GPU タイプは無い
   for (const scene of get('DIRECTOR_SCENES')) assert.ok(!registry[scene.patch.analyzerType].gpu);
@@ -59,7 +59,7 @@ test('UI-02 ランダム選択の母集団・ディレクターのシーンか�
     assert.ok(scenes.every((scene) => !scene.id.startsWith('preset:gpu')));
   }
   // GPU の設定が紛れ込んでも例外にならず、2D 用の変化は適用不可
-  const settings = { ...get('createDefaultSettings')(), analyzerType: 'g-fluid' };
+  const settings = { ...get('createDefaultSettings')(), analyzerType: 'g-gargantua' };
   assert.doesNotThrow(() => get('applyScenePatch')(settings, { expressionMethod: 'dot', layerCount: 3 }));
   assert.equal(get('directorVariationApplicable')(settings, 'method'), false);
   assert.equal(get('directorVariationApplicable')(settings, 'layers'), false);
@@ -151,16 +151,16 @@ test('UI-05 _applyCapabilities: GPU タイプは body.gpu-type を付け、2D �
 test('UI-06 GPU を使えない環境・マイク入力中は直前の 2D タイプへ戻し、option を disabled にする', () => withDocument(() => {
   // WebGL 不可
   let { ui } = makeUi({ bridge: stubBridge({ ok: false }) });
-  ui.visualizer.settings.analyzerType = 'g-fluid';
-  ui._applyCapabilities('g-fluid');
+  ui.visualizer.settings.analyzerType = 'g-gargantua';
+  ui._applyCapabilities('g-gargantua');
   assert.equal(ui.visualizer.settings.analyzerType, 'bar');
   assert.equal(_d.body.classList.contains('gpu-type'), false);
   // マイク入力中
   ({ ui } = makeUi({ bridge: stubBridge(), mic: true }));
-  ui._last2DType = 'ring3d';
-  ui.visualizer.settings.analyzerType = 'g-attractor';
-  ui._applyCapabilities('g-attractor');
-  assert.equal(ui.visualizer.settings.analyzerType, 'ring3d');
+  ui._last2DType = 'lissajous';
+  ui.visualizer.settings.analyzerType = 'g-tesseract';
+  ui._applyCapabilities('g-tesseract');
+  assert.equal(ui.visualizer.settings.analyzerType, 'lissajous');
   assert.equal(_d.body.classList.contains('gpu-type'), false);
 }));
 

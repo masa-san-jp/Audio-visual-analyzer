@@ -43,7 +43,7 @@ test('UW-69 WORLD-23 engine→post→uniform・全他タイプは0・ブルー�
   const draw=r.get('WorldEngine').prototype._draw;draw.call(engine);
   assert.equal(post.kick,engine.type.music[0]);assert.equal(uniforms.get('kick'),engine.type.music[0]);
   assert.equal(uniforms.get('gargantuaMode'),1);assert.equal(uniforms.get('exposureMultiplier'),1.1);
-  for(const id of ['g-fluid','g-rings','g-galaxy']){engine.type={id};draw.call(engine);assert.equal(post.kick,0);assert.equal(uniforms.get('kick'),0);}
+  for(const id of ['g-tesseract','g-quantum','g-rings','g-galaxy']){engine.type={id};draw.call(engine);assert.equal(post.kick,0);assert.equal(uniforms.get('kick'),0);}
   const shader=r.get('WORLD_POST_FRAGMENT'),branch=shader.slice(shader.indexOf('if(gargantuaMode>.5)'),shader.indexOf('if(screen.w>.5||mood.x<=0.)'));
   assert.ok(shader.includes('const float KICK_BLOOM = 0.80000000;'));
   const bloom=branch.match(/bloom\*GARGANTUA_BLOOM_STRENGTH[^;]+/)[0],veil=branch.match(/b3\*VEIL_GAIN[^;]+/)[0];

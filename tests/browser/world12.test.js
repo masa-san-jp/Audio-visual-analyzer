@@ -5,7 +5,6 @@ function world12Median(values) {
   return n?(n%2?sorted[n>>1]:(sorted[n/2-1]+sorted[n/2])/2):0;
 }
 function world12CorrelationReport(records,typeId) {
-  if(typeId==='g-fluid')return {typeId,applicable:false,reason:'§5はringsの扇形とgalaxyの軌道環を指定。g-fluid v2は円環の噴出口でBW-38が検査'};
   const correlations=[];
   for(let i=0;i<32;i++)correlations.push(world11Correlation(records.map(r=>r.levels[i]),records.map(r=>r.luminance[i])));
   const median=world12Median(correlations);
@@ -14,7 +13,7 @@ function world12CorrelationReport(records,typeId) {
 async function world12Shoot(typeId,tSec) {
   const w=window.__world,app=w.app,e=w.engine,audio=w.audio;
   if(tSec<1.5||tSec>=w.score.durationSec)throw new RangeError('撮影時刻は1.5秒以上、曲長未満');
-  if(!['g-rings','g-galaxy','g-fluid'].includes(typeId))throw new RangeError('未実装のタイプ');
+  if(!['g-rings','g-galaxy'].includes(typeId))throw new RangeError('未実装のタイプ');
   audio.pause();cancelAnimationFrame(app.raf);app.state='paused';
   e.selectType(typeId,true);e.setScore(w.score);
   // この計測だけlive AudioWorkletを使う。製品の固定offline timelineは変更しない。
@@ -40,7 +39,7 @@ async function world12Shoot(typeId,tSec) {
       if(time!==previousTime){
         const levels=Array.from({length:32},(_,i)=>analyzer.bandUniforms[i*4]);
         const state={tSec:e.latestSec,speed:analyzer.songUniforms[0],beat:analyzer.pulseUniforms[0],bass:analyzer.pulseUniforms[2]};
-        const luminance=typeId==='g-fluid'?null:world11RegionSamples(capture,typeId,state);
+        const luminance=world11RegionSamples(capture,typeId,state);
         records.push({tSec:time,levels,luminance});previousTime=time;
       }
       if(time>=tSec){
@@ -65,7 +64,7 @@ if(typeof avzGpuTest==='function')avzGpuTest('BW-12-design','指定GLSLを実コ
     await ready;const child=iframe.contentWindow;avzAssert.ok(child.__world?.engine,child.__world?.error);
     const rows=child.eval(`(()=>{
       const e=__world.engine,score=compileWorldScore({bpm:128,durationSec:4,beats:[],downbeatIndices:[],sections:[{startSec:0,endSec:4,kind:'main',label:'v1'}]},11),f=new MfsFrameView(),rows=[];
-      for(const id of ['g-galaxy','g-fluid'])for(const raw of [0,.82]){
+      for(const id of ['g-galaxy'])for(const raw of [0,.82]){
         if(!e.types.some(type=>type.id===id)){const legacy=id==='g-rings'?new WorldRingsAnalyzer():new WorldGalaxyAnalyzer();legacy.init(e.gpu);e.types.push(legacy);}
         e.selectType(id,true);e.setScore(score);f.raw.fill(0);f.bandsSmooth.fill(raw);f.raw[MFS_LAYOUT.LEVEL]=.7;
         f.raw[MFS_LAYOUT.BEAT_FLAG]=1;f.raw[MFS_LAYOUT.DOWNBEAT_FLAG]=1;f.onset.env.fill(.9);

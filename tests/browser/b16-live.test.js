@@ -138,7 +138,7 @@ avzTest('B16-02m', 'B16-02m マイク入力（フェイクデバイス）でも 
   }
 }, { timeoutMs: 30000 });
 
-avzTest('B16-03', 'B16-03 __avzForceMfsFailure でフォールバック: features null・全8タイプ描画・コンソールエラー 0', async function () {
+avzTest('B16-03', 'B16-03 __avzForceMfsFailure でフォールバック: features null・全6タイプ描画・コンソールエラー 0', async function () {
   const originalWarn = console.warn;
   const warnings = [];
   console.warn = function () { warnings.push(Array.prototype.join.call(arguments, ' ')); };
@@ -167,7 +167,7 @@ avzTest('B16-03', 'B16-03 __avzForceMfsFailure でフォールバック: feature
     avzAssert.ok(warnings.some((w) => w.includes('フォールバック')), 'フォールバック理由が console.warn に出ていません');
     // 2D の描画タイプだけを数える（GPU タイプは別グループ。GPU テストは avzGpuTest 側で確認する）
     const types = Array.from(document.getElementById('analyzer-type').options).map((o) => o.value).filter((v) => !getRendererEntry(v).gpu);
-    avzAssert.equal(types.length, 8, 'アナライザータイプ数');
+    avzAssert.equal(types.length, 6, 'アナライザータイプ数');
     let frames = 0;
     for (const type of types) {
       visualizer.settings.analyzerType = type;
@@ -178,7 +178,7 @@ avzTest('B16-03', 'B16-03 __avzForceMfsFailure でフォールバック: feature
       avzAssert.ok(freq && freq.length > 0, `${type}: AnalyserNode 経路の freq`);
       frames++;
     }
-    avzAssert.equal(frames, 8, '描画したタイプ数');
+    avzAssert.equal(frames, 6, '描画したタイプ数');
     avzAssert.equal(engine.mfsStatus, 'fallback', '再生後も fallback');
     // AnalyserNode 経路が実際に音を拾っている
     let nonZero = 0;

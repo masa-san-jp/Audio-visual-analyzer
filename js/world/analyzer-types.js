@@ -1,11 +1,9 @@
 // 目的 — GPUタイプの登録・MFS帯域uniform・残光状態を共有する — doc/20261004-design-gpu-analyzers-v1.md §1
-// タイプ表はブラックホール設計 §6・アトラクター設計 §8に従う。
+// タイプ表はブラックホール設計 §6に従う。
 const WORLD_ANALYZER_TYPES = [
-  { id: 'g-fluid', label: 'スペクトル流体', key: 1, available: true },
-  { id: 'g-gargantua', label: 'ブラックホール', key: 2, available: true },
-  { id: 'g-attractor', label: 'ストレンジアトラクター', key: 3, available: true },
-  { id: 'g-tesseract', label: 'テッセラクト', key: 4, available: true },
-  { id: 'g-quantum', label: '量子のビジョン', key: 5, available: true }
+  { id: 'g-gargantua', label: 'ブラックホール', key: 1, available: true },
+  { id: 'g-tesseract', label: 'テッセラクト', key: 2, available: true },
+  { id: 'g-quantum', label: '量子のビジョン', key: 3, available: true }
 ];
 const WORLD_BAND_FLOOR = .12;
 const WORLD_BAND_RANGE = .70;

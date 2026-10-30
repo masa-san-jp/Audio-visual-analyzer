@@ -441,7 +441,6 @@ async function runWorldMeasurement(visual = null) {
       }
       const result = {
         ...visual,
-        'W-3': { pass: metrics.particleCount >= 12000 && metrics.fluidWidth === 384 && metrics.dyeWidth === 1152 && metrics.raymarchSteps === 0, ...metrics },
         'W-4': { pass: checked > 0 && maxDelay <= 1 && uniformFailures === 0 && !!engine.timeline, checked, maxDelayFrames: maxDelay, uniformFailures },
         'W-6': { pass: metrics.boundaryCount === sections.length, fired: metrics.boundaryCount, expected: sections.length, events: w.events },
         'W-7': { pass: motifPass, sections: sections.map(s => ({ kind: s.kind, label: s.label, environment: s.environment, formId: s.formId, variation: s.variation })) },

@@ -1,4 +1,4 @@
-// 目的 — HDRブルーム・ACESとタイプ別の光学仕上げ — doc/20261004-concept-world-mode.md §2.7・§5、doc/20261004-design-gargantua-v1.md §5、doc/20261008-design-attractor-v1.md §3
+// 目的 — HDRブルーム・ACESとタイプ別の光学仕上げ — doc/20261004-concept-world-mode.md §2.7・§5、doc/20261004-design-gargantua-v1.md §5
 const WORLD_BLOOM_FRAGMENT = `#version 300 es
 precision highp float;
 precision highp int;
@@ -40,11 +40,9 @@ ${WORLD_GLSL}
 uniform sampler2D scene, history, bloom0, bloom1, bloom2, bloom3, exposure;
 uniform float analyzerPulse;
 uniform float analyzerMode;
-uniform float gargantuaMode, attractorMode, tesseractMode, quantumMode, fluid2Mode, exposureMultiplier, kick;
+uniform float gargantuaMode, tesseractMode, quantumMode, exposureMultiplier, kick;
 uniform int grainFrame;
-const float FLUID2_BLOOM_STRENGTH = ${WORLD_FLUID2.BLOOM_STRENGTH.toFixed(8)};
 const float TESSERACT_BLOOM_STRENGTH = ${WORLD_TESSERACT.BLOOM_STRENGTH.toFixed(8)};
-const float ATTRACTOR_BLOOM_STRENGTH = ${WORLD_ATTRACTOR.BLOOM_STRENGTH.toFixed(8)};
 const float QUANTUM_BLOOM_STRENGTH = ${WORLD_QUANTUM.BLOOM_STRENGTH.toFixed(8)};
 const float QUANTUM_HALATION = ${WORLD_QUANTUM.HALATION.toFixed(8)};
 const float QUANTUM_GRAIN = ${WORLD_QUANTUM.GRAIN.toFixed(8)};
@@ -56,18 +54,6 @@ out vec4 frag;
 float qhash(uvec3 p){uint x=(p.x*1973u)^(p.y*9277u)^(p.z*26699u);x^=x>>16;x*=0x7feb352du;x^=x>>15;x*=0x846ca68bu;x^=x>>16;return float(x)/4294967295.;}
 vec3 aces(vec3 x){return clamp((x*(2.51*x+.03))/(x*(2.43*x+.59)+.14),0.,1.);}
 void main(){
- if(fluid2Mode>.5){
-  vec3 bloom=texture(bloom0,vUv).rgb*.25+texture(bloom1,vUv).rgb*.25+texture(bloom2,vUv).rgb*.30+texture(bloom3,vUv).rgb*.45;
-  vec3 c=aces((texture(scene,vUv).rgb+bloom*FLUID2_BLOOM_STRENGTH)*.75);
-  c=mix(c*12.92,1.055*pow(c,vec3(1./2.4))-.055,step(vec3(.0031308),c));
-  frag=vec4(c,1.);return;
- }
- if(attractorMode>.5){
-  vec3 bloom=texture(bloom0,vUv).rgb*.25+texture(bloom1,vUv).rgb*.25+texture(bloom2,vUv).rgb*.30+texture(bloom3,vUv).rgb*.45;
-  vec3 c=aces((texture(scene,vUv).rgb+bloom*ATTRACTOR_BLOOM_STRENGTH)*.75);
-  c=mix(c*12.92,1.055*pow(c,vec3(1./2.4))-.055,step(vec3(.0031308),c));
-  frag=vec4(c,1.);return;
- }
  if(tesseractMode>.5){
   vec3 bloom=texture(bloom0,vUv).rgb*.25+texture(bloom1,vUv).rgb*.25+texture(bloom2,vUv).rgb*.30+texture(bloom3,vUv).rgb*.45;
   vec3 c=aces((texture(scene,vUv).rgb+bloom*TESSERACT_BLOOM_STRENGTH)*.75);
@@ -128,8 +114,8 @@ class WorldPost {
     this.exposureProgram = gpu.program(WORLD_EXPOSURE_FRAGMENT);
     this.meterSourceLoc = gpu.texture(this.exposureProgram, 'source'); this.firstLoc = gpu.texture(this.exposureProgram, 'firstPass');
     this.program = gpu.program(WORLD_POST_FRAGMENT); this.pulse = 0; this.analyzerMode = 0;
-    this.gargantua = false; this.attractor = false; this.tesseract = false; this.quantum = false; this.fluid2 = false; this.exposureMultiplier = 1; this.kick = 0;
-    this.attractorLoc = gpu.texture(this.program, 'attractorMode'); this.tesseractLoc = gpu.texture(this.program, 'tesseractMode'); this.quantumLoc = gpu.texture(this.program, 'quantumMode'); this.fluid2Loc = gpu.texture(this.program, 'fluid2Mode');
+    this.gargantua = false; this.tesseract = false; this.quantum = false; this.exposureMultiplier = 1; this.kick = 0;
+    this.tesseractLoc = gpu.texture(this.program, 'tesseractMode'); this.quantumLoc = gpu.texture(this.program, 'quantumMode');
     this.gargantuaLoc = gpu.texture(this.program, 'gargantuaMode'); this.exposureMultiplierLoc = gpu.texture(this.program, 'exposureMultiplier');
     this.kickLoc = gpu.texture(this.program, 'kick'); this.grainFrameLoc = gpu.texture(this.program, 'grainFrame'); this.grainFrame = 0;
     this.pulseLoc = gpu.texture(this.program, 'analyzerPulse'); this.modeLoc = gpu.texture(this.program, 'analyzerMode');
@@ -153,22 +139,22 @@ class WorldPost {
   }
   render(scene) {
     const g = this.gpu, gl = g.gl;
-    let source = this.gargantua || this.attractor || this.tesseract || this.quantum || this.fluid2 || this.analyzerMode ? scene : this.feedback.read;
+    let source = this.gargantua || this.tesseract || this.quantum || this.analyzerMode ? scene : this.feedback.read;
     for (let i = 0; i < 4; i++) {
       const b = this.bloom[i]; g.bind(this.bloomProgram, b.write); g.sampler(this.sourceLoc, 0, source);
-      gl.uniform2f(this.axisLoc, 1, 0); gl.uniform1f(this.thresholdLoc, i === 0 ? (this.fluid2 ? WORLD_FLUID2.BLOOM_THRESHOLD : this.gargantua ? WORLD_GARGANTUA.BLOOM_THRESHOLD : this.attractor ? WORLD_ATTRACTOR.BLOOM_THRESHOLD : this.tesseract ? WORLD_TESSERACT.BLOOM_THRESHOLD : this.quantum ? WORLD_QUANTUM.BLOOM_THRESHOLD : .65) : 0); g.draw(); g.swap(b);
+      gl.uniform2f(this.axisLoc, 1, 0); gl.uniform1f(this.thresholdLoc, i === 0 ? (this.gargantua ? WORLD_GARGANTUA.BLOOM_THRESHOLD : this.tesseract ? WORLD_TESSERACT.BLOOM_THRESHOLD : this.quantum ? WORLD_QUANTUM.BLOOM_THRESHOLD : .65) : 0); g.draw(); g.swap(b);
       g.bind(this.bloomProgram, b.write); g.sampler(this.sourceLoc, 0, b.read);
       gl.uniform2f(this.axisLoc, 0, 1); gl.uniform1f(this.thresholdLoc, 0); g.draw(); g.swap(b); source = b.read;
     }
     // 縮約FBOは半解像度の入力用。露出は従来どおりfeedbackから全域を測る。
     source = this.feedback.read;
-    for (let i = 0; !this.gargantua && !this.attractor && !this.tesseract && !this.quantum && !this.fluid2 && i < this.meter.length; i++) {
+    for (let i = 0; !this.gargantua && !this.tesseract && !this.quantum && i < this.meter.length; i++) {
       g.bind(this.exposureProgram, this.meter[i]); g.sampler(this.meterSourceLoc, 0, source);
       gl.uniform1i(this.firstLoc, i === 0 ? 1 : 0); g.draw(); source = this.meter[i];
     }
     g.bind(this.program, this.output);
     gl.uniform1f(this.gargantuaLoc, this.gargantua ? 1 : 0); gl.uniform1f(this.exposureMultiplierLoc, this.exposureMultiplier);
-    gl.uniform1f(this.attractorLoc, this.attractor ? 1 : 0); gl.uniform1f(this.tesseractLoc, this.tesseract ? 1 : 0); gl.uniform1f(this.quantumLoc, this.quantum ? 1 : 0); gl.uniform1f(this.fluid2Loc, this.fluid2 ? 1 : 0);
+    gl.uniform1f(this.tesseractLoc, this.tesseract ? 1 : 0); gl.uniform1f(this.quantumLoc, this.quantum ? 1 : 0);
     gl.uniform1f(this.kickLoc, this.kick); gl.uniform1i(this.grainFrameLoc, this.grainFrame);
     gl.uniform1f(this.pulseLoc, this.pulse); gl.uniform1f(this.modeLoc, this.analyzerMode);
     g.sampler(this.samplers[0], 0, scene); g.sampler(this.samplers[1], 1, this.feedback.read);

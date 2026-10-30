@@ -29,7 +29,7 @@ class WorldBridge {
     this.engine = null;
     this.available = null;        // null=未試行 / true / false（WebGL2 を作れなかった）
     this.active = false;          // GPU タイプ選択中か
-    this.typeId = 'g-fluid';
+    this.typeId = 'g-gargantua';
     this._exporter = null; this._prepExporter = null;
     this._cache = null;           // { key, fps, map, prepared, score }（ライブ用。同じファイルは使い回す）
     this._preparing = null;       // { key, promise }

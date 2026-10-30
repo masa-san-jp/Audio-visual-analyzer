@@ -192,7 +192,6 @@ function world17Geometry(engine,state){
 // world12/13Shootをこの撮影用の計測経路へ実行時に差し替える（製品と他のテストファイルは変更しない）。
 async function world12Shoot(typeId,tSec){
   const w=__world,app=w.app,e=w.engine,audio=w.audio,c=WORLD17_CHECKS,gargantua=typeId==='g-gargantua';
-  if(!['g-gargantua','g-fluid'].includes(typeId))throw new RangeError('未実装のタイプ');
   if(tSec<c.LEAD_SECONDS||tSec+c.G1_SECONDS>=w.score.durationSec)throw new RangeError('撮影窓が曲長の範囲外');
   for(let attempt=0;attempt<2;attempt++){
     audio.pause();cancelAnimationFrame(app.raf);app.state='paused';e.selectType(typeId,true);e.setScore(w.score);
@@ -330,13 +329,13 @@ async function main(){
   const options={types:['g-gargantua'],times:[7,20,31,45,62,90],wav:null},args=process.argv.slice(2);
   for(let i=0;i<args.length;i++){
     const arg=args[i];if(arg==='--help'){
-      console.log('node tests/world/shoot-live.mjs [--types g-gargantua,g-fluid] [--times 7,20,31,45,62,90] [--wav path]\nWORLD_CHROME_WRAPPERに実GPU用起動ラッパーを指定。node tests/world/shoot-live.mjs --unit はGPUなしの計測契約テスト。');return;
+      console.log('node tests/world/shoot-live.mjs [--types g-gargantua] [--times 7,20,31,45,62,90] [--wav path]\nWORLD_CHROME_WRAPPERに実GPU用起動ラッパーを指定。node tests/world/shoot-live.mjs --unit はGPUなしの計測契約テスト。');return;
     }
     if(arg==='--unit'){await unitChecks();return;}
     if(!['--types','--times','--wav'].includes(arg)||!args[i+1])throw new Error('不正な引数: '+arg);
     const value=args[++i];if(arg==='--types')options.types=value.split(',');else if(arg==='--times')options.times=value.split(',').map(Number);else options.wav=path.resolve(root,value);
   }
-  if(options.types.some(id=>!['g-gargantua','g-fluid'].includes(id)))throw new Error('未実装のタイプ');
+  if(options.types.some(id=>!['g-gargantua'].includes(id)))throw new Error('未実装のタイプ');
   if(options.times.some(t=>!Number.isFinite(t)||t<1.5))throw new Error('撮影時刻は有限かつ1.5秒以上');
   if(!process.env.WORLD_CHROME_WRAPPER)throw new Error('WORLD_CHROME_WRAPPERに実GPU起動ラッパーを指定してください');
   await fs.mkdir(output,{recursive:true});let chrome;
@@ -461,7 +460,7 @@ async function unitChecks(){
   });
   test('UW-61 WORLD-24 撮影mock: 候補窓の直前.18秒・最初の描画・20枚以上・後始末',async()=>{
     const vm=await import('node:vm');let audioTime=0,seeking=false,cancelled=0,reads=0,firstReadAt=null;
-    const listeners=new Map(),rows=[],engine={timeline:[1],latestSec:0,type:{id:'g-fluid',bandUniforms:new Float32Array(128)},
+    const listeners=new Map(),rows=[],engine={timeline:[1],latestSec:0,type:{id:'g-mock',bandUniforms:new Float32Array(128)},
       selectType(){},setScore(){},async renderAt(t){this.latestSec=t;},metrics(){return {};},mfsFrames:40};
     const audio={pause(){},get currentTime(){return audioTime;},set currentTime(t){audioTime=t;seeking=true;queueMicrotask(()=>{seeking=false;listeners.get('seeked')();});},
       get seeking(){return seeking;},addEventListener(n,f){listeners.set(n,f);},removeEventListener(n){listeners.delete(n);}};
@@ -476,7 +475,7 @@ async function unitChecks(){
       world17ReadPixels:async()=>{assert.equal(app.state,'paused');firstReadAt??=engine.latestSec;reads++;return [{width:1,height:1,pixels:new Uint8Array(4)}];},
       world17ReleasePixels(){},document:{createElement:()=>({getContext:()=>ctx,toDataURL:()=> 'data:image/png;base64,AA=='})},
       cancelAnimationFrame:()=>cancelled++,setTimeout,clearTimeout,Promise,Float32Array,Array};
-    vm.createContext(scope);vm.runInContext(world12Shoot.toString(),scope);const shot=await scope.world12Shoot('g-fluid',7);
+    vm.createContext(scope);vm.runInContext(world12Shoot.toString(),scope);const shot=await scope.world12Shoot('g-mock',7);
     assert.equal(shot.capturedSec,7);assert.equal(shot.records.length,25);assert.ok(shot.sampleEndSec-7>=.4);
     const historyStart=7-WORLD17_CHECKS.PRE_KICK_SECONDS-WORLD17_CHECKS.KICK_SECONDS;
     assert.ok(rows[0]>=historyStart);assert.ok(rows[0]-1/60<historyStart);
@@ -488,8 +487,8 @@ async function unitChecks(){
     async function capture(lags){
       const order=[],listeners=new Map(),buffers=new Set(),fences=new Set(),drainBuffers=[],timeline=[1];
       let audioTime=0,seeking=false,starts=0,reads=0,transfers=0,cancelled=0,framebuffer={},packBuffer={};
-      const engine={timeline,latestSec:0,type:{id:'g-fluid',bandUniforms:new Float32Array(128)},
-        post:{output:{width:1,height:1,fbo:{}}},selectType(id,reset){assert.equal(id,'g-fluid');assert.equal(reset,true);order.push('select');},
+      const engine={timeline,latestSec:0,type:{id:'g-mock',bandUniforms:new Float32Array(128)},
+        post:{output:{width:1,height:1,fbo:{}}},selectType(id,reset){assert.equal(id,'g-mock');assert.equal(reset,true);order.push('select');},
         setScore(){order.push('score');},async renderAt(t){assert.equal(this.timeline,timeline);assert.equal(t,5.5);this.latestSec=t;order.push('render');
           framebuffer={};packBuffer={};},metrics(){return {};},mfsFrames:40};
       const audio={pause(){},get currentTime(){return audioTime;},set currentTime(t){
@@ -522,7 +521,7 @@ async function unitChecks(){
         requestAnimationFrame:fn=>{assert.equal(app.state,'paused');order.push('rAF');queueMicrotask(fn);return 1;},
         cancelAnimationFrame:()=>cancelled++,setTimeout,clearTimeout,performance};
       vm.createContext(scope);vm.runInContext(world17BrowserSource,scope);
-      let shot,error;try {shot=await scope.world12Shoot('g-fluid',7);}catch(value){error=value;}
+      let shot,error;try {shot=await scope.world12Shoot('g-mock',7);}catch(value){error=value;}
       assert.equal(engine.timeline,timeline);assert.equal(engine.onFrame,null);assert.equal(app.state,'paused');
       assert.equal(audio.seeking,false);assert.equal(listeners.size,0);assert.equal(buffers.size,0);assert.equal(fences.size,0);
       assert.ok(cancelled>=2*starts);assert.equal(drainBuffers.length,2*starts);
