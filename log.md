@@ -1,3 +1,15 @@
+## 2026-10-31（ブラウザテストを現行の実装に合わせた）
+
+### 作業内容
+- `tests/browser/world9.test.js` BW-9-export：6秒のWAVはSongMapの最短曲長（`SONG_CONST.MIN_DURATION_SEC`）未満で読み込めなかった。最短曲長+2秒の曲を読み込み、`prepared` を先頭6秒（180フレーム）の窓に制限して書き出す形にした。書き出しの描画タイプは既定の `g-gargantua`。合否の閾値（RMSE ≤ .04 など）は変えていない。
+- `tests/browser/world13.test.js` BW-13-formulas：削除済みの `WORLD_GARGANTUA_BLACKBODY`・`blackbodyRamp` の検査を外し、現行GLSLの `musicGain`（32環の帯域とキック内側増光）と、`starfield` の背景（中央値が `BACKGROUND_MAX` 以下・全値が有限で非負）を検査する形にした。星の上限（旧 .6 の一律上限）は `BACKGROUND_MAX` を天の川だけに適用する現行仕様（§10.5）に合わせて外した。
+- `tests/browser/world13.test.js` BW-13-kick-gpu：曲未読込のテスト画面では `engine.score`・`timeline` が null で、後始末の `setScore(null)` が `events` の読み取りで落ちていた。`world13Kick`・`world13Performance` の後始末を、元の値がある場合だけ戻す形にした。測定内容と閾値は変えていない。
+- `tests/browser/world14.test.js` BW-14-periodic：`filamentInput`・`fbm`（v1.1の2層）が現行のGLSLにないため、現行の `streakInput`（位相1・2）と `streakFlow` でφ=−πとφ=+πの一致を検査する形にした。
+- `tests/browser/world14.test.js` BW-14-screen：`traceRay` の呼び出しを現行の引数に更新した。継ぎ目（左右4画素の輝度差が周囲の2倍以下）は現行の仕様でも有効なので残した。画面のキック増光（表示輝度 ≥35%）は、§10.21 で内側の光量を上げた結果、キック前後とも表示輝度がほぼ飽和し（0.94→0.99）判定できなくなったため外した（キックは線形HDRで測る BW-13-kick-gpu、GPU p95 ≤ 16ms も同テストが検査する）。白飛び率 ≤ 8%（§7.2）と「1.5画素以上の星が400個」（§7.5）は、§9.1・§10.5（星は v1.0 の大きさ）と §10.21（光量と飽和感を上げた）で置き換わっているため検査から外し、専用の補助関数（`world14ExposureReport`・`world14StarReport`・`world14ShotReport`・`world14AcceptanceReport`・`world14Kick`・`world14KickReport`）も削除した。`world13Shoot` が撮影レコードに付けていた同報告の呼び出しも外した。
+
+### 備考
+- 単体テストは変更なし。`tests/world/shoot-live.mjs` と `tests/unit/world-gargantua.test.mjs` が参照する関数（`world13AnnulusSamples`・`world13CorrelationReport`・`world13KickReport`・`world14SeamReport`）は残している。
+
 ## 2026-10-30（アナライザータイプの整理：擬似3D系・スペクトル流体・ストレンジアトラクターの削除）
 
 ### 作業内容

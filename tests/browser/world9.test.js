@@ -20,13 +20,21 @@ async function world9Page(run) {
 }
 avzGpuTest('BW-9-export', '6秒30fps・音声・180フレーム・t=3のrenderAt一致', async () => {
   await world9Page(async child => {
-    const signal = sigSine(48000, 6, 180, .2);
-    const melody = sigSine(48000, 6, 1300, .08);
+    // SongMapの最短曲長+2秒の曲を読み込み、下で先頭6秒の窓に制限する（6秒単体は最短曲長未満でSongMapErrorになる）。
+    const loadSec = SONG_CONST.MIN_DURATION_SEC + 2;
+    const signal = sigSine(48000, loadSec, 180, .2);
+    const melody = sigSine(48000, loadSec, 1300, .08);
     for (let c=0;c<2;c++) for(let i=0;i<signal.channels[c].length;i++) {
       signal.channels[c][i] = signal.channels[c][i]*(.6+.4*Math.cos(2*Math.PI*i/24000))+melody.channels[c][i];
     }
-    const file = new child.File([encodeWav16(signal)], 'world9-six-seconds.wav', {type:'audio/wav',lastModified:1});
+    const file = new child.File([encodeWav16(signal)], 'world9-export.wav', {type:'audio/wav',lastModified:1});
     const w=child.__world; await w.app.load(file); await w.app.setFps(30);
+    // frameCountと音声バッファを6秒に揃え、先頭6秒（180枚）だけを書き出す。描画タイプは既定のg-gargantua。
+    const full=w.app.prepared,{sampleRate,numberOfChannels}=full.audioBuffer,windowSamples=6*sampleRate;
+    const windowed=new child.AudioBuffer({length:windowSamples,numberOfChannels,sampleRate});
+    for(let c=0;c<numberOfChannels;c++)windowed.copyToChannel(full.audioBuffer.getChannelData(c).subarray(0,windowSamples),c);
+    w.app.prepared={...full,audioBuffer:windowed,frameCount:6*full.fps};
+    avzAssert.equal(w.engine.type.id,'g-gargantua');
     const score=w.score,prepared=w.app.prepared;
     avzAssert.equal(prepared.frameCount,180);await w.renderAt(3);const reference=w.engine.capture();
     // ライブの不規則なrAF時計で進めても同じGPU状態になること。
