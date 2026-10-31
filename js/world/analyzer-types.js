@@ -1,4 +1,4 @@
-// 目的 — GPUタイプの登録・MFS帯域uniform・残光状態を共有する — doc/20261004-design-gpu-analyzers-v1.md §1
+// 目的 — GPUタイプの登録・MFS帯域uniform・残光状態を共有する
 // タイプ表はブラックホール設計 §6に従う。
 const WORLD_ANALYZER_TYPES = [
   { id: 'g-gargantua', label: 'ブラックホール', key: 1, available: true },

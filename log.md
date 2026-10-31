@@ -1,3 +1,14 @@
+## 2026-10-31（旧GPUタイプと生成物の整理）
+
+### 作業内容
+- 製品に含まれない旧GPUタイプのコード `js/world/g-rings.js`・`g-galaxy.js`・`particles.js` を削除した。製品（index.html、js/**）からの参照はなかった。
+- テストハーネス `tests/browser/harness/world.html` の該当scriptタグ、`world11.test.js` の旧タイプ回帰計測（`runWorldAnalyzerMeasurement`、G-1〜G-4の補助関数）、`world12.test.js`（BW-12-design）、単体テストUW-41・UW-46、`world-score.test.mjs`・`world-kick.test.mjs` の旧タイプ参照を削除した。`measure.mjs` から旧G-1〜G-4の計測を外し、`shoot-live.mjs` の読込一覧から `world12.test.js` を外した。現行タイプ（ブラックホール・テッセラクト・量子）の検査は変えていない。
+- `tests/world/output/` のコミット済み生成物（PNG・JSON）をgit管理から外し、`.gitignore` に追加した。どのテストも読み込んでいなかった。
+- 旧タイプと旧流体のみを扱う `doc/20261004-design-gpu-analyzers-v1.md` を削除し、READMEの文書表とコード内コメントの参照を直した。
+
+### 備考
+- README の撮影・計測の説明を現状に合わせた。
+
 ## 2026-10-31（ブラウザテストを現行の実装に合わせた）
 
 ### 作業内容

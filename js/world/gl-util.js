@@ -8,7 +8,7 @@ precision highp int;
 precision highp sampler2D;
 out vec2 vUv;
 void main(){ vec2 p=vec2((gl_VertexID<<1)&2,gl_VertexID&2); vUv=p; gl_Position=vec4(p*2.-1.,0.,1.); }`;
-// 全GPUタイプの式と名前つき定数 — doc/20261004-design-gpu-analyzers-v1.md §1〜4。
+// 全GPUタイプの式と名前つき定数。
 const WORLD_GPU_DESIGN_GLSL = `
 const float PI=3.141592653589793, TAU=6.283185307179586;
 const float BAND_SECONDARY_END=.65, BAND_ACCENT_START=.78;

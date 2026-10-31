@@ -144,7 +144,7 @@ test('UW-07 曲の三色だけで全抽象状態を配色・種別をまたぐ�
 function worldTestEngine() {
   const gl = worldCommandGl(), canvas = { width: 1920, height: 1080, getContext: () => gl }; gl.canvas = canvas;
   const runtime = loadClassic(['js/vis-utils.js', 'js/mfs-const.js', 'js/mfs-view.js', 'js/world/gl-util.js',
-    'js/world/particles.js', 'js/world/score.js', 'js/world/analyzer-types.js', 'js/world/g-rings.js', 'js/world/g-galaxy.js', 'js/world/g-gargantua.js', 'js/world/g-tesseract.js', 'js/world/g-quantum.js', 'js/world/post.js', 'js/world/world-engine.js']);
+    'js/world/score.js', 'js/world/analyzer-types.js', 'js/world/g-gargantua.js', 'js/world/g-tesseract.js', 'js/world/g-quantum.js', 'js/world/post.js', 'js/world/world-engine.js']);
   const engine = new (runtime.get('WorldEngine'))(canvas); engine.setScore(runtime.get('compileWorldScore')(fixture, 11));
   return { engine, gl };
 }
@@ -627,7 +627,7 @@ test('UW-39 WORLD-13 タイプ契約: ブラックホールkey1・32帯域・半
   assert.equal(inactiveSteps,0);engine._draw();
   assert.equal(engine.post.analyzerMode,1);assert.equal(engine.post.pulse,0);assert.equal(engine.post.gargantua,true);
   assert.deepEqual([engine.gpu.textures.length,engine.gpu.fbos.length,engine.gpu.programs.length],resources);
-  for(const id of ['g-terrain','g-rings','g-galaxy'])assert.throws(()=>engine.selectType(id),RangeError);
+  for(const id of ['g-terrain'])assert.throws(()=>engine.selectType(id),RangeError);
   const types=loadClassic(['js/world/gl-util.js','js/world/analyzer-types.js']).get('WORLD_ANALYZER_TYPES');
   assert.deepEqual(Array.from(types,t=>t.id),['g-gargantua','g-tesseract','g-quantum']);
   assert.equal(types[0].key,1);assert.equal(types[0].label,'ブラックホール');
@@ -645,15 +645,6 @@ test('UW-40 WORLD-11 曲固有値: クロマ上位・BPM比例・重心/オン�
   assert.ok(b.detail>a.detail);assert.ok(b.particleAmount>a.particleAmount);assert.notDeepEqual(a.palette,b.palette);
   assert.deepEqual(variation(map,frames),a);assert.equal(JSON.stringify(map),original);
   console.log('UW-40 BPMspeed=.75/1.5 centroidHz=800/6400 onsetPerSec=0/4 detail='+a.detail+'/'+b.detail+' particleAmount='+a.particleAmount+'/'+b.particleAmount);
-});
-test('UW-41 WORLD-11 計測: Pearsonの無変化拒否・輝度重み色ヒストグラム・固定領域',()=>{
-  const r=loadClassic(['tests/browser/world11.test.js']),corr=r.get('world11Correlation'),hist=r.get('world11Histogram'),distance=r.get('world11HistogramDistance');
-  assert.equal(corr([1,2,3],[2,4,6]),1);assert.equal(corr([1,2,3],[6,4,2]),-1);assert.equal(corr([1,1,1],[2,3,4]),0);
-  const image=color=>{const rgba=new Uint8Array(8*8*4);for(let i=0;i<rgba.length;i+=4)rgba[i+color]=255;return {rgba,width:8,height:8};};
-  const a=hist(image(0)),b=hist(image(2));assert.equal(distance(a.bins,b.bins),1);assert.equal(distance(a.bins,a.bins),0);
-  assert.equal(hist({rgba:new Uint8Array(256),width:8,height:8}).weight,0);
-  assert.equal(r.get('world11RegionSamples')(image(0),'g-galaxy').length,32);
-  console.log('UW-41 Pearson=1/-1 constant=0 redBlueHistogramDistance=1 identical=0 blackWeight=0 ROIcount=32');
 });
 test('UW-43 WORLD-11 決定性: タイプ選択を保ってlive/renderAt/逆シークの位相と残光一致',async()=>{
   const {engine}=worldTestEngine(),L=loadClassic(['js/mfs-const.js']).get('MFS_LAYOUT');
@@ -687,12 +678,4 @@ test('UW-44 WORLD-12 共通整形: 下限/上限・残光exp(-6dt)・4/13/8帯�
   const glow=analyzer.bandUniforms[1],phase=analyzer.bandUniforms[2];input.dt=0;analyzer.update(input);
   assert.equal(analyzer.bandUniforms[1],glow);assert.equal(analyzer.bandUniforms[2],phase);
   console.log('UW-44 Llow=1 Lhigh=0 mid='+mid+' G100ms='+glow+' beat100ms='+analyzer.pulseUniforms[0]+' bar100ms='+analyzer.pulseUniforms[1]+' phaseError<1e-7 dt0StateError=0');
-});
-test('UW-46 WORLD-12 実音G-1計測: 32帯域の中央値・定数拒否・閾値.6保持',()=>{
-  const r=loadClassic(['tests/browser/world11.test.js','tests/browser/world12.test.js']);
-  const records=Array.from({length:5},(_,n)=>({levels:Array.from({length:32},(_,i)=>(n+i)%7),luminance:Array.from({length:32},(_,i)=>2*((n+i)%7))}));
-  const result=r.get('world12CorrelationReport')(records,'g-rings');assert.equal(result.median,1);assert.equal(result.pass,true);assert.equal(result.correlations.length,32);
-  for(const row of records)row.levels.fill(1);const flat=r.get('world12CorrelationReport')(records,'g-galaxy');assert.equal(flat.median,0);assert.equal(flat.pass,false);
-  assert.equal(r.get('world12Median')([.1,.5,.7,.9]),.6);
-  console.log('UW-46 PearsonMedian=1 constantMedian=0 constantRejected=true bands=32');
 });
