@@ -165,7 +165,7 @@ g-tesseract v2（doc/20261027-design-tesseract-v2.md §5）と同じものを使
 - `hash` はシェーダー内に書く 32bit の整数ハッシュ（試作の `hu` と同じ混ぜ方で、`(x*1973)^(y*9277)^(frame*26699)` を `hu` に通して 0..1）。
 
 ## 8. 配線
-- `js/world/g-quantum.js` を本書のとおりに書き換える。クラス名・id（`g-quantum`）・label（量子のビジョン）・key 5 は変えない。
+- `js/world/g-quantum.js` を本書のとおりに書き換える。クラス名・id（`g-quantum`）・label（量子のビジョン）は変えない。キーは 3（2026-10-30 に振り直し）。
 - UI に戻す: `WORLD_ANALYZER_TYPES` の g-quantum を `available: true` にし、`js/renderer-registry.js` の UI 一覧に戻す（テッセラクトの次）。
 - 影響するテスト（GPU タイプ一覧、キー割り当て、integration の GPU ID）を、v2.24 のとき（量子のビジョンが選べた状態）に戻す。
 
@@ -176,7 +176,7 @@ g-tesseract v2（doc/20261027-design-tesseract-v2.md §5）と同じものを使
 - カメラ: camZ が単調に増える。拍の直後に v が増え、0.6 秒の時定数で戻る。60 fps で 60 秒進めたとき、1 ステップの camZ の増分の最大と最小の比が 10 未満（跳ばない）。
 - 音の状態: テッセラクトと同じ項目（立ち上がり・二重カウントなし・REFRACTORY・BEAT_HOLD・preview）。
 - 後処理: post の quantum 枝に grainFrame とハレーションがあること。
-- 量子のビジョンが available:true で UI 一覧に出ること。キー 5 で選べること。
+- 量子のビジョンが available:true で UI 一覧に出ること。キー 3 で選べること。
 - GL モック: init/step/render が通り、step で新しい配列を作らない。
 
 ## 10. 検証
