@@ -10,6 +10,7 @@ https://youtube.com/shorts/dywUYpVFatw?feature=share
 
 更新内容は [GitHub のリリース](https://github.com/masa-san-jp/Audio-visual-analyzer/releases) にまとめています。
 
+- **v2.27：** タイプの整理。擬似3D・スペクトル流体・ストレンジアトラクターを削除し、GPU タイプはブラックホール・テッセラクト・量子のビジョンの 3 種類（キー 1〜3）になりました。
 - **v2.26：** 量子のビジョン v2。実写のレンズの質感でできた場面のモンタージュとして描きます。
 - **v2.25：** テッセラクト v2。時間方向へ押し出した部屋の格子を、光の糸の束として描きます。
 
