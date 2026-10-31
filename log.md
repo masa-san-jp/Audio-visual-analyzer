@@ -1,3 +1,11 @@
+## 2026-10-31（削除済みタイプの残りの記述・コードの整理）
+
+### 作業内容
+- 3D地形の「粘性揺らぎ」スライダーを出さないようにした（`renderer-registry.js` の `physics` を外した）。粘性揺らぎはステートレス描画（棒グラフ・円形放射の line・dot）にだけ効き、3D地形では値を変えても描画が変わらなかった。
+- どのレンダラーも読まない設定 `particleAmount`・`petalCount` を削除した。自動演出のビルド区間で `particleAmount` を増やす処理（`RAMP_PARTICLE_MUL`）と管理キーからも外した。旧設定・プリセット・JSON にこれらのキーがあっても読込時に無視される。
+- 削除済みタイプ専用のまま残っていたコードを削除した：`js/vis-utils.js` のボロノイ分割・`ValueNoise`・単体の `Spring`・`polarToXy`・`hash32`、`js/world/gl-util.js` の銀河・放射リング・流体のシェーダー定数と関数（135個）、`js/world/analyzer-types.js` の未使用の `WORLD_ANALYZER_GLSL`、`world-engine.js` の計測値 `layers`・`depthParticleCount`・`raymarchSteps`（固定値）とその検査（BW-6-layers）。
+- 設計書（`doc/spec-phase6.md`・`plan-phase6.md`・`test-phase6.md`・`renderer-contract.md`・GPUタイプの構想・設計書・Phase 15/16/18 計画書など）から、削除済みタイプ（円形スペクトログラム・パーティクル・波紋・ノイズフロー・メタボール・フラワー・ボロノイ・擬似3D・スペクトル流体・ストレンジアトラクターほか）の記述を除き、タイプ数・ファイル構成・キー割り当て・自動演出の設定キーを現行に合わせた。`spec-phase6.md` の形状ランダマイズの対象を実装どおりに直した。
+
 ## 2026-10-31（旧GPUタイプと生成物の整理）
 
 ### 作業内容

@@ -14,18 +14,6 @@ const WORLD_BAR_SECONDS = .35;
 const WORLD_ORBIT_BASE_SPEED = .25;
 const WORLD_ORBIT_SPEED_SPAN = 1.2;
 const WORLD_ORBIT_LEVEL_SPEED = 1.5;
-const WORLD_ANALYZER_GLSL = `
-${WORLD_GPU_DESIGN_GLSL}
-uniform vec4 bands[32]; // L、G、積分軌道位相、帯域群onset
-uniform vec4 song; // BPM速度、細部、粒子量、ラウドネス
-uniform vec3 colors[3];
-uniform vec2 resolution;
-uniform vec4 beats; // 直近4拍の経過秒
-uniform vec4 pulse; // 拍、小節頭、低域、高域
-uniform float mids;
-uniform float t;
-vec3 bandRamp(float x){return bandRamp(x,colors[0],colors[1],colors[2]);}
-`;
 class WorldBandAnalyzer {
   constructor() {
     this.bandUniforms = new Float32Array(128); this.songUniforms = new Float32Array(4);

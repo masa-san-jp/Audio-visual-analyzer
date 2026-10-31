@@ -399,9 +399,8 @@ class WorldEngine {
     const duration = cpu.map((c, i) => Number.isFinite(this.gpuTimes[i]) ? Math.max(c, this.gpuTimes[i]) : NaN).filter(Number.isFinite);
     const intervals = Array.from(this.frameIntervals.subarray(0, this.timeCount));
     const p95 = a => { a.sort((x, y) => x - y); return a.length ? a[Math.ceil(a.length * .95) - 1] : null; };
-    // 旧世界流体・粒子は撤去済み（WORLD-38）。粒子数・格子はアクティブなタイプの値を返す。
+    // 粒子数はアクティブなタイプの値を返す。
     return { width: this.canvas.width, height: this.canvas.height, particleCount: this.type.particleCount || 0,
-      depthParticleCount: 0,
       typeId: this.type.id, typeBlend: this.fadeElapsed / .5, analyzerParticleCount: this.type.particleCount || 0,
       overscan: OVERSCAN, domainMargin: WORLD_DOMAIN_MARGIN,
       hdrFormat: 'RGBA16F',
@@ -409,13 +408,12 @@ class WorldEngine {
       timingSamples: duration.length, submittedFrames: this.timeCount, timerAvailable: !!this.timer,
       timerDisjoints: this.timerDisjoints, mfsFrames: this.mfsFrames, responseCount: this.responseCount,
       environment: this.score ? this.score.sections[this.sectionIndex].environment : null,
-      layers: ['ABSTRACT', 'FLUID', 'PARTICLE', 'LIGHT', 'FEEDBACK'],
       formation: this.score ? this.score.sections[this.sectionIndex].environment : null,
       composition: this.score ? this.score.sections[this.sectionIndex].composition : null,
       camera2D: Array.from(this.gpu.uniforms.slice(80, 84)), kickCount: this.kickCount,
       dropKeyRole: this.score && this.score.sections[this.sectionIndex].kind === 'drop' ?
         (this.score.sections[this.sectionIndex].variation === 1 ? 'accent' : 'secondary') : null,
-      raymarchSteps: 0, previewSteps: this.previewStep || 0,
+      previewSteps: this.previewStep || 0,
       frame: this.frame, tSec: this.latestSec, sectionIndex: this.sectionIndex,
       boundaryCount: this.events.filter(e => e.type === 'boundary' && e.firedFrame >= 0).length,
       expectedBoundaryCount: this.score ? this.score.sections.length : 0 };

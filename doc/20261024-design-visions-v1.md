@@ -39,11 +39,11 @@
 - 音のイベントは既存タイプと同じ方式: `if (t !== this.lastEventSec) { flags&1 → キック, flags&4 → 高域オンセット; this.lastEventSec = t; }`。
 - 帯域は `this.bandUniforms`（`bands[i].x` = レベル、`.y` = 残光つきレベル）。
 - 区間は `input.engine.score.sections[input.engine.sectionIndex]`（`kind` ∈ intro/build/drop/break/main/outro、`variation`、`startSec`、`endSec`）。区間内進行 `p = clamp((t-start)/(end-start))`、`progress = smoothstep(p)`。
-- カメラ表は「始点/終点」の対で持ち、`progress` で補間。区間が変わったら `CAMERA_EASE_SECONDS` かけて前ショットから新ショットへ smoothstep で移る（g-attractor と同じ実装パターン。初回は表の値から開始）。`variation >= 3 && variation % 2 === 1` のとき、表に「反転」と書いた列の符号を反転する。
+- カメラ表は「始点/終点」の対で持ち、`progress` で補間。区間が変わったら `CAMERA_EASE_SECONDS` かけて前ショットから新ショットへ smoothstep で移る（`js/world/g-gargantua.js` のカメラ補間と同じ実装パターン: 区間の切り替え時に現在のショットを `cameraFrom` に保存し、目標へ補間する。初回は表の値から開始）。`variation >= 3 && variation % 2 === 1` のとき、表に「反転」と書いた列の符号を反転する。
 - 露出: `exposure = EXPOSURE_BASE * (EXPOSURE_FLOOR + EXPOSURE_GAIN * loudness)`。各タイプが自分の出力に掛ける（post の exposureMultiplier は使わない）。
-- 毎フレーム経路で配列・オブジェクトを作らない。ハッシュは g-attractor の `particleHash` と同じ uint 混合（seed = `score.seed`）。
+- 毎フレーム経路で配列・オブジェクトを作らない。ハッシュは uint 混合 `x^=x>>16; x*=0x7feb352d; x^=x>>15; x*=0x846ca68b; x^=x>>16`（シェーダーの `hu`。seed = `score.seed`）を使い、`/4294967295` で 0..1 にする。
 
-## 2. g-tesseract「テッセラクト」（key 4）
+## 2. g-tesseract「テッセラクト」（key 2）
 
 ### 2.1 構造
 
@@ -136,10 +136,10 @@ out = (BG + sum * PEAK * (1 + KICK_GAIN*kick)) * exposure
 
 ### 2.5 パルス（高域オンセット）
 
-- CPU: 高域オンセットごとに `serial++`、スロット `serial % PULSE_SLOTS` に `(serial, t0=t, dir, 0)` を入れる。`dir = worldAttractorHash(0, serial, seed) < .5 ? 1 : -1`。reset で t0 = -100。
+- CPU: 高域オンセットごとに `serial++`、スロット `serial % PULSE_SLOTS` に `(serial, t0=t, dir, 0)` を入れる。`dir = hash(serial, seed) < .5 ? 1 : -1`（hash は §1 の uint 混合）。reset で t0 = -100。
 - GPU: 各スロットで、筋が `hash(n*7919+k, serial) < PULSE_FRACTION` のとき、`age = tSec - t0`（0 ≤ age < PULSE_SECONDS）、`yc = dir*(-PULSE_START + PULSE_SPEED*age)`、`dy = y - yc`、後ろ側（`dy*dir < 0`）は長さ `PULSE_LENGTH*3`、前側は `PULSE_LENGTH`。`pulse += PULSE_GAIN * exp(-.5*(dy/len)^2) * (1 - age/PULSE_SECONDS)`。
 
-## 3. g-quantum「量子のビジョン」（key 5）
+## 3. g-quantum「量子のビジョン」（key 3）
 
 ### 3.1 構造
 
@@ -237,8 +237,9 @@ out = (BG + sum * PEAK * (1 + KICK_GAIN*kick)) * exposure
 | main | 3.2/3.2 | .12/.12 | -6/-6 | -3/-3 | 40/40 | 3.2/3.2 |
 | outro | 3.6/5.0 | .03/.03 | 8/14 | 0/0 | 34/34 | 4.0/4.0 |
 
-- yaw は g-attractor と同じく積分（`yaw += yawSpd * speedFactor * dt`、speedFactor は g-tesseract と同じ式・同じ定数値を WORLD_QUANTUM に持つ: SPEED_LOUD_GAIN .8 / SPEED_MIN .5 / SPEED_MAX 1.6）。
-- 位置と基底は g-attractor の `_updateCameraBasis` と同じ式（dist、pitch、yaw、roll）。投影も g-attractor と同じ（`projection = (aspect, tanH)`）。
+- yaw は積分する（`yaw += yawSpd * speedFactor * dt`、speedFactor は g-tesseract と同じ式・同じ定数値を WORLD_QUANTUM に持つ: SPEED_LOUD_GAIN .8 / SPEED_MIN .5 / SPEED_MAX 1.6）。
+- 位置は原点を中心とする球座標 `camPos = dist*(cos(pitch) sin(yaw), sin(pitch), cos(pitch) cos(yaw))` とし、原点を注視する。基底は `forward = normalize(-camPos)`、`right = normalize(cross(forward, (0,1,0)))`、`up = cross(right, forward)` を作ってから roll で回す（`right' = cos(roll)·right + sin(roll)·up`、`up' = -sin(roll)·right + cos(roll)·up`）。CPU で計算して uniform で渡す。
+- 投影は `projection = (aspect, tanH)`（`tanH = tan(fov/2)`。画素の光線と点の投影はこの 2 値で行う）。
 
 ### 3.5 点の共通処理
 
@@ -272,7 +273,7 @@ out = (BG + sum * PEAK * (1 + KICK_GAIN*kick)) * exposure
 ### 3.8 火花
 
 - キック（flags&1）で、sparks の重み > .05 のときだけバーストを 1 つ作る。スロット `serial % SPARK_BURSTS` に `(t0, origin.xyz)` と serial を入れる。
-- origin: drop と「star の重み ≥ .5」のときは殻の上 `dir_h * SHELL_R * B`、それ以外は半径 1.6 の球内の一様点（ハッシュ 3 個）。ハッシュは `worldAttractorHash(k, serial, seed)` 系で決定的に。
+- origin: drop と「star の重み ≥ .5」のときは殻の上 `dir_h * SHELL_R * B`、それ以外は半径 1.6 の球内の一様点（ハッシュ 3 個）。ハッシュは §1 の uint 混合に成分番号 k・serial・seed を混ぜて決定的に。
 - 火花 i、tap s: §3.3 の式で位置、`u = a/life`（a は tap の時刻）、色は SPARK_COLORS を u で線形補間、強度 `SPARK_GAIN*(1-u)^1.5*w_sparks/SPARK_TAPS`。ボケの火花は位置を `-camForward*(SPARK_BOKEH_NEAR + h)` だけずらす（カメラに寄る → 大きくぼける）。
 
 ### 3.9 背景パス
@@ -281,12 +282,12 @@ out = (BG + sum * PEAK * (1 + KICK_GAIN*kick)) * exposure
 
 ## 4. 配線
 
-- `js/world/analyzer-types.js` の `WORLD_ANALYZER_TYPES` に `{ id: 'g-tesseract', label: 'テッセラクト', key: 4, available: true }`、`{ id: 'g-quantum', label: '量子のビジョン', key: 5, available: true }`。
+- `js/world/analyzer-types.js` の `WORLD_ANALYZER_TYPES` に `{ id: 'g-tesseract', label: 'テッセラクト', key: 2, available: true }`、`{ id: 'g-quantum', label: '量子のビジョン', key: 3, available: true }`。
 - `js/world/world-engine.js` の `this.types` に追加。`_draw` で `this.post.tesseract`／`this.post.quantum` を設定。
-- `js/world/post.js`: `tesseractMode`／`quantumMode` 分岐を attractor 分岐と同じ形（bloom 4 段の重み .25/.25/.30/.45、`aces((scene + bloom*STRENGTH)*.75)`）で追加。閾値は各タイプの BLOOM_THRESHOLD。露出メーターは使わない。
+- `js/world/post.js`: `tesseractMode`／`quantumMode` 分岐を、bloom 4 段の重み .25/.25/.30/.45（gargantua 分岐と同じ重み）と `aces((scene + bloom*STRENGTH)*.75)` の形で追加。閾値は各タイプの BLOOM_THRESHOLD。露出メーターは使わない。
 - `js/renderer-registry.js` に GPU 項目 2 つ（label 同上、group 'GPU'）。
-- `index.html` と `tests/browser/harness/world.html` に script タグ（g-attractor.js の後）。
-- テストで GPU タイプ数を 3 と決め打ちしている箇所を追従させる。
+- `index.html` と `tests/browser/harness/world.html` に script タグ（g-gargantua.js の後、post.js の前）。
+- テストで GPU タイプ数を決め打ちしている箇所を追従させる。
 - README・`doc/spec.md`（v2.24）・log.md を更新。
 
 ## 5. テスト（単体）

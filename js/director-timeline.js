@@ -8,7 +8,6 @@ const DIRECTOR_CONST = {
   HUE_SHIFT_DEG: { calm: 30, standard: 60, wild: 60 },
   RAMP_MOTION_MUL: { calm: 1.4, standard: 1.8, wild: 2.2 },
   RAMP_AFTERIMAGE_ADD: 3,
-  RAMP_PARTICLE_MUL: 1.5,
   FADE_MIN_SEC: 0.25,
   FADE_MAX_SEC: 1.0,
   FLASH_PEAK_ALPHA: 0.8,
@@ -93,7 +92,6 @@ function compileDirectorTimeline(songMap, options, presets) {
     const ramp = s.kind === 'build' ? {
       motionMul: [1, DIRECTOR_CONST.RAMP_MOTION_MUL[intensity]],
       afterimageAdd: [0, DIRECTOR_CONST.RAMP_AFTERIMAGE_ADD],
-      particleMul: [1, DIRECTOR_CONST.RAMP_PARTICLE_MUL],
     } : null;
     if (options.flash && intensity !== 'calm' && s.kind === 'drop' && i > 0
       && s.startSec - lastFlash >= DIRECTOR_CONST.FLASH_MIN_INTERVAL_SEC) {
@@ -139,7 +137,6 @@ function directorSegmentSettings(timeline, index, t, baseSettings, settings) {
     const u = clamp((t - segment.startSec) / (segment.endSec - segment.startSec), 0, 1);
     settings.motionSpeed = clamp(settings.motionSpeed * lerp(1, segment.ramp.motionMul[1], u), 0.1, 3.0);
     settings.afterimageIntensity = clamp(settings.afterimageIntensity + lerp(0, segment.ramp.afterimageAdd[1], u), 0, 10);
-    settings.particleAmount = clamp(Math.round(settings.particleAmount * lerp(1, segment.ramp.particleMul[1], u)), 10, 100);
   }
   return settings;
 }

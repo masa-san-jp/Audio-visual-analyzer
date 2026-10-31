@@ -14,7 +14,7 @@
 
 | レイヤー | 手段 | 対象 | 実行方法 |
 |---------|------|------|---------|
-| L1 単体テスト | Node 標準機能のみの自作ミニランナー | vis-utils / history-buffer / 粒子プール等の純ロジック | `node test/run-all.mjs` |
+| L1 単体テスト | Node 標準機能のみの自作ミニランナー | vis-utils / history-buffer 等の純ロジック | `node test/run-all.mjs` |
 | L2 ビジュアルハーネス | ブラウザで開く自己診断ページ（モック音源） | 全レンダラーの実描画（例外・非空描画・FPS） | `test/visual-harness.html` を開く |
 | L3 手動チェックリスト | 人手 | UI・録画・統合動作 | 本書 §5 のチェックリスト |
 | L4 性能測定 | ハーネス内蔵の計測モード | フレーム時間 | 本書 §6 |
@@ -36,9 +36,7 @@
 ├─ lib/mock-audio.js    # L2 用モック音源（ブラウザ用、classic script）
 └─ unit/
    ├─ vis-utils.test.mjs
-   ├─ history-buffer.test.mjs
-   ├─ particles-pool.test.mjs
-   └─ voronoi.test.mjs
+   └─ history-buffer.test.mjs
 ```
 
 - `tester.mjs` は約 50 行想定: 失敗時に期待値/実際値を表示し、プロセス終了コードで
@@ -57,7 +55,7 @@ AudioEngine 互換のインターフェースを持ち、**再現可能な合成
 | `silence` | 全ビン 0 / 波形 128 固定 | 無音時挙動（消滅・収束） |
 | `sine(freqBin)` | 特定ビンのみ 255、波形は正弦波 | lissajous 形状・単一帯域反応 |
 | `sweep` | ピークビンが時間で移動 | spectrogram の模様・帯域割当 |
-| `pulse(bpm)` | 低域が周期的にバースト | ビート検出・ripple・particles |
+| `pulse(bpm)` | 低域が周期的にバースト | ビート検出 |
 | `noise(seed)` | シード付き疑似ランダム | 全タイプの一般動作・性能測定 |
 
 - `mockEngine.setPattern(name)` / `captureFrame()` / `getLayerData()` /
@@ -73,23 +71,14 @@ AudioEngine 互換のインターフェースを持ち、**再現可能な合成
 |----|------|--------|--------|
 | U-01 | clamp/lerp | 境界値（min/max/中間、t=0/1/0.5） | 定義どおり |
 | U-02 | isoProject | (0,0,0) / (10,0,0) / (0,0,10) | `{0,0}` / `{10,0}` / `{5,-3.5}`（既定係数） |
-| U-03 | polarToXy | angle=0, π/2, π（r=10, 中心(0,0)） | (10,0)/(0,10)/(-10,0)（誤差 1e-9） |
-| U-10 | ValueNoise 決定性 | 同一 seed で 100 点2回評価 | 全一致 |
-| U-11 | ValueNoise 値域 | 1000 点評価 | すべて 0..1 |
-| U-12 | ValueNoise seed 差 | seed=1 と seed=2 の 100 点 | 少なくとも1点は差 > 0.01 |
-| U-13 | fbm 連続性 | 近接2点 (d=0.001) の差 | < 0.05（急峻な不連続なし） |
-| U-20 | Spring 収束 | target=100 固定で 3 秒分 update | 最終値が 100±0.5 |
-| U-21 | Spring 無発散 | amount=10（最弱減衰）で矩形波 target 10 秒 | 値が target 振幅の 3 倍以内 |
-| U-22 | Spring バイパス | `springParamsFromAmount(0)` | update が target を即座に返す（完全一致） |
+| U-20 | SpringArray 収束 | target=100 固定で 3 秒分 update | 最終値が 100±0.5 |
+| U-21 | SpringArray 無発散 | amount=10（最弱減衰）で矩形波 target 10 秒 | 値が target 振幅の 3 倍以内 |
+| U-22 | SpringArray バイパス | `springParamsFromAmount(0)` | update が target を即座に返す（完全一致） |
 | U-23 | SpringArray 一括 | 8 本で U-20 同等 | 各要素収束 |
 | U-30 | BeatDetector 検出 | pulse パターン（120BPM 合成、60fps × 5 秒） | 検出ビート数 9〜11 回 |
 | U-31 | BeatDetector 不応期 | 100ms 間隔の連続パルス | 200ms 以内の再検出なし |
 | U-32 | BeatDetector 無音 | silence 5 秒 | ビート 0 回 |
 | U-33 | BeatDetector 決定性 | 同一入力列を2回 | 同一の検出タイミング |
-| U-40 | Voronoi 面積保存 | 5×4 jittered sites, 800×600 | セル面積合計 = 480000（誤差 1%） |
-| U-41 | Voronoi 帰属 | 各セルポリゴンの重心 | 最近傍サイトが自セルのサイト |
-| U-42 | Voronoi 決定性 | 同一 seed | 同一ポリゴン列 |
-| U-43 | Voronoi 縮退 | サイト1個 / 同一直線上3個 | 例外なくポリゴン返却 |
 
 ### 3.2 history-buffer.test.mjs
 
@@ -100,15 +89,6 @@ AudioEngine 互換のインターフェースを持ち、**再現可能な合成
 | H-03 | `get(age >= size)` | null（または未定義動作にしない） |
 | H-04 | `setFrameLength` | size=0 に戻り、新長で push 可能 |
 | H-05 | 事前確保 | push 前後で内部配列の参照が同一（GC 回避の確認） |
-
-### 3.3 particles-pool.test.mjs（M4-1 の純ロジック部）
-
-| ID | ケース | 期待値 |
-|----|--------|--------|
-| P-01 | spawn 上限 | 容量 600 に 700 要求 | 生存数 ≤ 600、例外なし |
-| P-02 | 寿命消滅 | 寿命 1s の粒子を 1.5s 更新 | 生存数 0 |
-| P-03 | 再利用 | 消滅後に spawn | 同スロットが再利用される（プールサイズ不変） |
-| P-04 | dt 独立性 | 16.7ms×60 回 と 33.4ms×30 回 | 位置誤差 5% 以内（実時間基準の動き） |
 
 ### 3.4 既存機能の回帰テスト
 
@@ -174,24 +154,20 @@ AudioEngine 互換のインターフェースを持ち、**再現可能な合成
 
 各タイプで共通:
 - [ ] 実音源（音楽ファイル）で 30 秒再生し、spec §6 の受け入れ条件を満たす
-- [ ] 対応スライダー（history/motion/particles/physics のうち該当分）が効く
+- [ ] 対応スライダー（history/motion/angle/physics のうち該当分）が効く
 - [ ] 非対応 UI が非表示になっている
 - [ ] タイプ切替往復（他タイプ→戻る）で状態が正しくリセットされる
 - [ ] 残像強度 0 / 5 / 10 で破綻しない
 
 タイプ固有の追加確認:
-- [ ] T1/T2: 曲の展開（静→動）が模様の変化として視認できる
+- [ ] T1: 曲の展開（静→動）が模様の変化として視認できる
 - [ ] T3: 手前の稜線が奥を隠す。`historySeconds` 1↔8 で奥行きが変わる
-- [ ] T5/T6: 奥行きの明度差が背景白でも成立する
-- [ ] T7: 静かな曲でまばら・激しい曲で多量。フリーズなし（粒子上限確認）
-- [ ] T8: ビートのある曲で波が同期。アンビエント曲で過剰発生しない
-- [ ] T10: ブロブの融合が見える。録画ファイルにも融合が写っている（filter 検証）
+- [ ] T4: 奥行きの明度差が背景白でも成立する
 - [ ] T11: 音楽で形が常に変化。無音で中央収束
-- [ ] T13: セルの脈動が帯域と対応（低音で左側が反応）
 
 ### 5.3 録画統合（M6-3）
 
-- [ ] 全 15 タイプで各 10 秒録画 → 保存 → OS プレイヤーで再生成功
+- [ ] 全 6 タイプで各 10 秒録画 → 保存 → OS プレイヤーで再生成功
 - [ ] WebM 保存分: 長さ表示が約 10 秒（Duration パッチ有効）
 - [ ] 録画中にタイプ切替・ランダマイズを行っても録画が完走する
 - [ ] 録画中 30fps 維持（rec-status 目視 + §6 計測）

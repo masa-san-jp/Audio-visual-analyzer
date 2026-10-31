@@ -2,7 +2,7 @@
 
 const DIRECTOR_MANAGED_KEYS = [
   'analyzerType', 'expressionMethod', 'barDisplayMode', 'layerCount',
-  'motionSpeed', 'particleAmount', 'afterimageIntensity', 'hue',
+  'motionSpeed', 'afterimageIntensity', 'hue',
 ];
 
 const DIRECTOR_SCENES = [
@@ -46,7 +46,6 @@ function applyScenePatch(settings, patch) {
   }
   if (Object.hasOwn(patch, 'layerCount') && capabilities.layers === true) settings.layerCount = patch.layerCount;
   if (Object.hasOwn(patch, 'motionSpeed')) settings.motionSpeed = patch.motionSpeed;
-  if (Object.hasOwn(patch, 'particleAmount')) settings.particleAmount = patch.particleAmount;
   if (Object.hasOwn(patch, 'afterimageIntensity')) settings.afterimageIntensity = patch.afterimageIntensity;
   return settings;
 }

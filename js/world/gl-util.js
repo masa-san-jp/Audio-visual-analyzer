@@ -8,65 +8,12 @@ precision highp int;
 precision highp sampler2D;
 out vec2 vUv;
 void main(){ vec2 p=vec2((gl_VertexID<<1)&2,gl_VertexID&2); vUv=p; gl_Position=vec4(p*2.-1.,0.,1.); }`;
-// 全GPUタイプの式と名前つき定数。
+// 後処理（post.js）が使う共通の式と名前つき定数。
 const WORLD_GPU_DESIGN_GLSL = `
 const float PI=3.141592653589793, TAU=6.283185307179586;
 const float BAND_SECONDARY_END=.65, BAND_ACCENT_START=.78;
-const float DUST_THRESHOLD=.9975, DUST_GRID=900., DUST_AMOUNT=.6, DUST_LIGHT=.35;
-const float STREAK_SEED=3.;
-const float STREAK_ANGLE=6., STREAK_RADIUS=1.5, STREAK_SPEED=.15, STREAK_POWER=6.;
-const float STREAK_OUTER=1.2, STREAK_INNER=.15, BACKGROUND_BASE=.006, STREAK_LIGHT=.05;
-const float CORE_RADIUS=.075, CORE_BASS_RADIUS=.035, CORE_BEAT_RADIUS=.02;
-const float CORE_FALLOFF=.55, CORE_BASE=1.2, CORE_BASS_LIGHT=4., CORE_BEAT_LIGHT=2.;
-const float CORE_WHITE_MIX=.5;
-const float CORONA_BASE=.6, CORONA_NOISE=.4, CORONA_SCALE=3., CORONA_SPEED=.6;
-const float RINGS_ROTATION=.04, RINGS_BEAT_ROTATION=.025, RAY_COUNT=64.;
-const float RAY_BASE_LENGTH=.06, RAY_LEVEL_LENGTH=.40, RAY_BASS_LENGTH=.05;
-const float RAY_ROOT_WIDTH=.0016, RAY_TIP_WIDTH=.0040, RAY_HALO=.12, RAY_HALO_WIDTH=5.;
-const float RAY_START=.04, RAY_FADE=.85, RAY_TIP_RADIUS=.012, RAY_WHITE_END=.55;
-const float RAY_BASE_LIGHT=.25, RAY_LEVEL_LIGHT=5., RAY_ONSET_LIGHT=.5, RAY_TIP_LIGHT=3.;
-const float TRAIL_WIDTH=1.6, TRAIL_FADE=.02, TRAIL_LIGHT=.35;
-const float RING_LIFE=.7, RING_SPEED=.95, RING_BASE_SPEED=.3;
-const float RING_WIDTH=.003, RING_WIDTH_GROWTH=.012, RING_LIGHT=2.5;
-const float RING_RED_SCALE=1.006, RING_BLUE_SCALE=.994, BAR_EXPOSURE=.25;
-const float SPARK_THRESHOLD=.6, SPARK_SPEED=.25, SPARK_LEVEL_SPEED=.5, SPARK_LIFE=.5, SPARK_LIGHT=2.;
-const int SPARKS_PER_RAY=8;
-const float GALAXY_TILT_DEGREES=62., GALAXY_SPIN=.03;
-const float ORBIT_INNER=.10, ORBIT_SPAN=.78, ORBIT_POWER=.9;
-const float GALAXY_ANGLE_JITTER=.02, ARM_BASE=.55, ARM_MODULATION=.45;
-const float ARM_COUNT=2., ARM_TWIST=3.2, ARM_SPEED=.05;
-const float ORBIT_WOBBLE=.05, ORBIT_WAVES=3., ORBIT_WOBBLE_SPEED=2., ORBIT_JITTER=.012;
-const float GALAXY_SIZE=1.4, GALAXY_LEVEL_SIZE=3.2, GALAXY_BEAT_SIZE=1., REFERENCE_HEIGHT=1080.;
-const float GALAXY_BASE_LIGHT=.10, GALAXY_LEVEL_POWER=1.2, GALAXY_LEVEL_LIGHT=3.2, GALAXY_BEAT_LIGHT=.6;
-const float GALAXY_FAR_LIGHT=.75, BULGE_RADIUS=.07, BULGE_BASE=.8, BULGE_BASS=3.5, BULGE_BEAT=1.5;
-const float BULGE_WHITE_MIX=.6, LANE_SEED=1.;
-const float LANE_LOW=.45, LANE_HIGH=.55, LANE_ANGLE=2., LANE_RADIUS=8., LANE_SHADE=.5;
-const float GALAXY_BEAT_SCALE=.035;
-const float FLUID_ARC_RADIUS=.32, FLUID_ARC_DEGREES=220., FLUID_DRIFT_MAX=.02, FLUID_JITTER=.006;
-const float PUFF_RADIUS=.010, PUFF_LEVEL_RADIUS=.018, PUFF_LEVEL_POWER=1.5, PUFF_AMOUNT=6.;
-const float FLUID_BEAT_EXPOSURE=.30, FLUID_BEAT_ACCELERATION=40., FLUID_BASS_SWIRL=2.;
 vec3 bandRamp(float x,vec3 a,vec3 b,vec3 c){
  return mix(mix(a,b,smoothstep(0.,BAND_SECONDARY_END,x)),c,smoothstep(BAND_ACCENT_START,1.,x));
-}
-float gpuHash(vec3 p){p=fract(p*.1031);p+=dot(p,p.yzx+33.33);return fract((p.x+p.y)*p.z);}
-float gpuNoise3(vec3 p){vec3 i=floor(p),f=fract(p);f=f*f*(3.-2.*f);
- return mix(mix(mix(gpuHash(i),gpuHash(i+vec3(1,0,0)),f.x),mix(gpuHash(i+vec3(0,1,0)),gpuHash(i+vec3(1,1,0)),f.x),f.y),
- mix(mix(gpuHash(i+vec3(0,0,1)),gpuHash(i+vec3(1,0,1)),f.x),mix(gpuHash(i+vec3(0,1,1)),gpuHash(i+vec3(1,1,1)),f.x),f.y),f.z);
-}
-mat2 gpuRot(float a){return mat2(cos(a),sin(a),-sin(a),cos(a));}
-float coronaRadius(vec4 pulse){return CORE_RADIUS+pulse.z*CORE_BASS_RADIUS+pulse.x*CORE_BEAT_RADIUS;}
-vec3 analyzerBackground(vec2 p,float a,float r,float t,vec3 secondary){
- float dust=step(DUST_THRESHOLD,gpuHash(vec3(floor(p*DUST_GRID),0.)))*DUST_AMOUNT;
- // 逆順smoothstepはGLSLでは未定義なので、同じ下降曲線の正順の補数で表す。
- float streak=pow(gpuNoise3(vec3(a*STREAK_ANGLE,r*STREAK_RADIUS-t*STREAK_SPEED,STREAK_SEED)),STREAK_POWER)*(1.-smoothstep(STREAK_INNER,STREAK_OUTER,r));
- return secondary*(BACKGROUND_BASE+streak*STREAK_LIGHT)+vec3(dust)*DUST_LIGHT;
-}
-vec3 analyzerBeatRings(float r,float R0,vec4 beats,float speed,vec3 accent){
- vec3 c=vec3(0);for(int k=0;k<4;k++){float age=beats[k];if(age<RING_LIFE){
- float rad=R0+age*(RING_SPEED*speed+RING_BASE_SPEED),wid=RING_WIDTH+age*RING_WIDTH_GROWTH;
- float amp=pow(1.-age/RING_LIFE,2.)*RING_LIGHT;
- c+=accent*amp*exp(-pow((vec3(r)-rad*vec3(RING_RED_SCALE,1.,RING_BLUE_SCALE))/wid,vec3(2.)));
- }}return c;
 }
 `;
 const WORLD_GLSL = `
@@ -102,111 +49,13 @@ vec3 worldColor(float role){
  float y=dot(c,vec3(.2126,.7152,.0722));
  return mix(vec3(y),c,role<1.5?.68:.78)*(role<.5?.22:role<1.5?.55:1.);
 }
-// kick/boundaryの薄い殻は0.4秒で厳密に消える（音声時刻、breakの遅延時刻ではない）。
-float worldShockAge(){return min(secondary.w,max(0.,clock.z-accent.w));}
 float worldShockFade(float age){return 1.-smoothstep(.08,.4,age);}
 // 低域イベントの当該フレームから立ち上がり、継続フラグがなくても余韻を残す。
 float worldDropFlare(){return max(hit.w,max(hit.x,exp(-max(0.,secondary.w)*18.)*worldShockFade(secondary.w)));}
-float hash31(vec3 p){ p=fract(p*.1031); p+=dot(p,p.yzx+33.33); return fract((p.x+p.y)*p.z); }
-// 値ノイズ（三線形補間）。流体の注入を途切れさせ、細い筋を作るために使う
-float noise3(vec3 p){vec3 i=floor(p),f=fract(p);f=f*f*(3.-2.*f);
- return mix(mix(mix(hash31(i),hash31(i+vec3(1,0,0)),f.x),mix(hash31(i+vec3(0,1,0)),hash31(i+vec3(1,1,0)),f.x),f.y),
-  mix(mix(hash31(i+vec3(0,0,1)),hash31(i+vec3(1,0,1)),f.x),mix(hash31(i+vec3(0,1,1)),hash31(i+vec3(1,1,1)),f.x),f.y),f.z);}
 mat2 rot(float a){ return mat2(cos(a),sin(a),-sin(a),cos(a)); }
-// 粒子と染料は同じ世界に置き、表示時だけ共通のカメラを適用する。
-const float OVERSCAN = ${OVERSCAN};
-vec2 worldExtent(){return vec2(screen.x/screen.y,1.)*OVERSCAN;}
-vec2 worldUv(vec2 p){return p/worldExtent()+.5;}
-vec2 worldDomainPosition(vec2 uv){return (uv-.5)*worldExtent();}
-vec2 worldScreenUv(vec2 p){return p/vec2(screen.x/screen.y,1.)+.5;}
-vec2 worldView(vec2 p){return rot(-lens.w)*(p-lens.xy)*lens.z;}
-vec2 worldPosition(vec2 uv){return rot(lens.w)*((uv-.5)*vec2(screen.x/screen.y,1.))/lens.z+lens.xy;}
 float worldKind(float id){
  float current=mix(float(transition.z==id),float(transition.w==id),transition.x);
  return mix(current,float(id==0.),transition.y);
-}
-// dropの空間解放は0.5秒程度で立ち上がる。カメラには瞬時の切り返しを加えない。
-float worldDropSpace(){
- float base=worldKind(2.);
- return base+(1.-base)*(1.-exp(-max(0.,clock.z-accent.w)*6.))*float(story.x==2.);
-}
-float worldSlowPhase(){return clock.x*composition.y;}
-vec2 worldCenter(int i){
- // 曲の周期に整数周波数を掛ける。両端で位置と微分が一致する。
- return vortices[i].xy+vec2(cos(worldSlowPhase()+float(i)*2.),sin(worldSlowPhase()+float(i)*2.))*.07;
-}
-float worldPeriodicNoise(vec2 p,float scale,float phase){
- vec2 a=p/worldExtent()*6.283185;
- return noise3(vec3(sin(a.x)*scale,cos(a.x)*scale+sin(a.y)*scale,cos(a.y)*scale+phase));
-}
-vec2 flowFor(vec2 p,float id,float count){
- vec2 f=vec2(0);
- for(int i=0;i<2;i++){
-  vec2 a=(p-worldCenter(i))/worldExtent()*6.283185;
-  vec2 d=sin(a)*worldExtent()/6.283185;
-  float r2=dot(d,d)+.018;
-  f+=vec2(-d.y,d.x)*vortices[i].z*.075/r2*(i==0?1.:count-1.);
- }
- float t=worldSlowPhase();
- vec2 a=p/worldExtent()*6.283185;
- vec2 undulation=vec2(sin(a.y+sin(t)),cos(a.x+cos(t)))*.13;
- if(id==1.)f+=vec2(.16,.08);
- if(id==2.)f+=vec2(.2,.04);
- if(id==4.)f-=sin(a)*(.15+.25*worldKind(1.));
- vec2 axis=normalize(vortices[1].xy-vortices[0].xy+vec2(.001));
- vec2 d=sin(p/worldExtent()*6.283185)*worldExtent()/6.283185;
- float shear=exp(-pow(dot(d,vec2(-axis.y,axis.x))/.08,2.));
- return f+undulation+axis*.45*shear*worldKind(2.);
-}
-vec2 worldFlow(vec2 p){
- p=worldDomainPosition(fract(worldUv(p)));
- vec2 f=mix(flowFor(p,oldComposition.x,oldComposition.z),flowFor(p,composition.x,composition.z),transition.x);
- return mix(f,flowFor(p,3.,2.),transition.y)*(1.+audio.x*.35+environment.z*.25);
-}
-// 角度の反復や水平な正弦波の列を使わず、雲の密度境界に細い筋を置く。
-// 回転させながら重ねる fbm（格子方向の癖を消す）
-float worldFbm(vec3 p){float a=.5,s=0.;mat2 R=mat2(.8,.6,-.6,.8);
- for(int i=0;i<3;i++){s+=a*noise3(p);p.xy=R*p.xy*2.03;p.z+=1.7;a*=.5;}return s*1.14;}
-// 星雲: ドメインワープした fbm の柔らかい雲と、流れに沿う細い筋。
-// 値ノイズの等高線（網目・水面の揺らぎに見える）は使わない。周期写像で継ぎ目なし
-float worldNebula(vec2 p,float depth){
- float t=clock.x;vec2 drift=vec2(sin(t),cos(t))*.12;
- vec2 q=sin(p/worldExtent()*6.283185)*worldExtent()*.5;
- vec2 w=vec2(worldFbm(vec3(q*1.6,depth)),worldFbm(vec3(q*1.6+5.2,depth+3.)));
- float n=worldFbm(vec3(q*2.2+w*1.8+drift,depth+t*.05));
- float wisp=pow(worldFbm(vec3(q*6.+w*3.,depth*2.+t*.03)),3.);
- return smoothstep(.42,.85,n)*(.03+wisp*.25);
-}
-float filamentFor(vec2 p,float id,float a){
- float t=worldSlowPhase();
- if(id==3.)return worldNebula(p,2.+sin(clock.x));
- // v8の細い渦腕を復元。周期領域の差分座標で両端の連続性を保持する。
- float f=0.;
- for(int i=0;i<2;i++){
-  vec2 angle=(p-worldCenter(i))/worldExtent()*6.283185;
-  vec2 d=sin(angle)*worldExtent()/6.283185;float r=length(d);
-  float warp=worldPeriodicNoise(p,3.,sin(t))*1.8;
-  float phase=atan(d.y,d.x)*2.+r*36.+sin(t)+float(i)+a*.15+warp;
-  float width=.009*(1.+environment.z*.3);
-  f+=exp(-pow(sin(phase)*max(.03,r)/width,2.))*exp(-r*3.);
- }
- return min(1.,f);
-}
-float worldFilament(vec2 p){
- p=worldDomainPosition(fract(worldUv(p)));
- // 遷移中だけ両方を評価する（常時3回の評価が GPU 時間の大半を占めていた）
- float f=filamentFor(p,composition.x,composition.w);
- if(transition.x<.999)f=mix(filamentFor(p,oldComposition.x,oldComposition.w),f,transition.x);
- if(transition.y>.001)f=mix(f,filamentFor(p,3.,0.),transition.y);
- return f;
-}
-vec2 emitterWorld(int i){
- vec2 p=emitters[i].xy;
- return rot(lens.w)*p/lens.z+lens.xy;
-}
-float worldShock(vec2 p){
- float age=worldShockAge(),r=length(p-shot.yz);
- return exp(-pow((r-(.025+age*1.6))/.018,2.))*worldShockFade(age);
 }
 `;
 class WorldGL {

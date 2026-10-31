@@ -301,7 +301,7 @@ class SongMapService {
   - シークしても即座に正しい場面になる（内部状態を持たない）
   - 将来のタイムライン編集（Phase 20 構想）も同じデータ構造を編集するだけで済む
 - 演出が変更するのは「どのタイプで・どんな動きで描くか」だけ。**色（色相・彩度・輝度）・背景色・表示比率・動画合成・解析設定はユーザー設定のまま**
-- 演出が変更する設定キー（`DIRECTOR_MANAGED_KEYS`）: `analyzerType`, `expressionMethod`, `barDisplayMode`, `layerCount`, `motionSpeed`, `particleAmount`, `afterimageIntensity`、および色相のずらし量（`hue` への加算のみ）
+- 演出が変更する設定キー（`DIRECTOR_MANAGED_KEYS`）: `analyzerType`, `expressionMethod`, `barDisplayMode`, `layerCount`, `motionSpeed`, `afterimageIntensity`、および色相のずらし量（`hue` への加算のみ）
 
 ### 6.2 定数表（`DIRECTOR_CONST`、`js/director-timeline.js`）
 
@@ -314,7 +314,6 @@ class SongMapService {
 | `HUE_SHIFT_DEG` | `{calm: 30, standard: 60, wild: 60}` | `hueShift` 1回の色相加算量 |
 | `RAMP_MOTION_MUL` | `{calm: 1.4, standard: 1.8, wild: 2.2}` | ビルド区間終端での `motionSpeed` 倍率 |
 | `RAMP_AFTERIMAGE_ADD` | 3 | ビルド区間終端での `afterimageIntensity` 加算量 |
-| `RAMP_PARTICLE_MUL` | 1.5 | ビルド区間終端での `particleAmount` 倍率 |
 | `FADE_MIN_SEC` | 0.25 | クロスフェードの最短時間 |
 | `FADE_MAX_SEC` | 1.0 | クロスフェードの最長時間 |
 | `FLASH_PEAK_ALPHA` | 0.8 | フラッシュの最大不透明度 |
@@ -325,24 +324,22 @@ class SongMapService {
 
 ### 6.3 シーンカタログ（`js/director-scenes.js`）
 
-内蔵シーンは全8タイプを系統に割り当てる（T18-11: 2026-10-04 の決定で削除）。calm は2、build は3、drop は3シーンを保持し、各系統2以上と連続シーン回避を維持する。空欄は「ユーザー設定のまま」。`patch` の適用規則（プリセット由来も同じ。`applyScenePatch(settings, patch)` として `director-scenes.js` に置く）:
+内蔵シーンは 2D の全6タイプを系統に割り当てる。calm・build・drop はそれぞれ2シーンを保持し、各系統2以上と連続シーン回避を維持する。空欄は「ユーザー設定のまま」。`patch` の適用規則（プリセット由来も同じ。`applyScenePatch(settings, patch)` として `director-scenes.js` に置く）:
 
 - `analyzerType` は常に適用し、以降の判定は適用後のタイプの `capabilities` で行う
 - `expressionMethod`: `capabilities.methods` に含まれる場合のみ
 - `barDisplayMode`: `capabilities.barDisplayMode === true` の場合のみ
 - `layerCount`: `capabilities.layers === true` の場合のみ
-- `motionSpeed`・`particleAmount`・`afterimageIntensity`: 常に適用（対応しないタイプでは描画に影響しないだけ）
+- `motionSpeed`・`afterimageIntensity`: 常に適用（対応しないタイプでは描画に影響しないだけ）
 
-| ID | 系統 | analyzerType | expressionMethod | barDisplayMode | layerCount | motionSpeed | particleAmount | afterimageIntensity |
-|---|---|---|---|---|---|---|---|---|
-| `builtin:spectrogram` | calm | spectrogram | | | | | | |
-| `builtin:lissajous` | calm | lissajous | line | | | 1.0 | | 4 |
-| `builtin:tunnel` | build | tunnel | line | | | 1.2 | | 2 |
-| `builtin:terrain` | build | terrain | line | | | 1.0 | | 0 |
-| `builtin:ring3d` | build | ring3d | line | | 2 | 1.2 | | 2 |
-| `builtin:bar3d` | drop | bar3d | | | 3 | | | 0 |
-| `builtin:radial` | drop | radial | bar | | 3 | | | 2 |
-| `builtin:bar` | drop | bar | bar | mirror-vertical | 4 | | | 1 |
+| ID | 系統 | analyzerType | expressionMethod | barDisplayMode | layerCount | motionSpeed | afterimageIntensity |
+|---|---|---|---|---|---|---|---|
+| `builtin:spectrogram` | calm | spectrogram | | | | | |
+| `builtin:lissajous` | calm | lissajous | line | | | 1.0 | 4 |
+| `builtin:tunnel` | build | tunnel | line | | | 1.2 | 2 |
+| `builtin:terrain` | build | terrain | line | | | 1.0 | 0 |
+| `builtin:radial` | drop | radial | bar | | 3 | | 2 |
+| `builtin:bar` | drop | bar | bar | mirror-vertical | 4 | | 1 |
 
 「マイプリセット」を選んだ場合（`directorPool = 'presets'`）:
 - 各プリセットの系統は、そのプリセットの `analyzerType` を上表で引いて決める
@@ -380,8 +377,7 @@ for (s, i) in songMap.sections（時刻順）:
   for bar = s.startBar + period; bar < s.endBar; bar += period:
     適用可能な op を VARIATION_OPS[opCursor % 4] から最大4つ順に探す（§6.5 の適用条件）
     見つかれば variations.push({ timeSec: 小節 bar の開始時刻, op }), opCursor = 見つかった位置 + 1
-  ramp = s.kind == 'build' ? { motionMul: [1, RAMP_MOTION_MUL[intensity]], afterimageAdd: [0, RAMP_AFTERIMAGE_ADD],
-                               particleMul: [1, RAMP_PARTICLE_MUL] } : null
+  ramp = s.kind == 'build' ? { motionMul: [1, RAMP_MOTION_MUL[intensity]], afterimageAdd: [0, RAMP_AFTERIMAGE_ADD] } : null
   if options.flash && intensity != 'calm' && s.kind == 'drop' && i > 0 && s.startSec - lastFlash ≥ FLASH_MIN_INTERVAL_SEC:
     flashes.push(s.startSec); lastFlash = s.startSec
   segments.push({ startSec: s.startSec, endSec: s.endSec, sectionIndex: i, kind: s.kind, cls,
@@ -433,7 +429,6 @@ segmentSettings(j, t):
       u = clamp((t - startSec)/(endSec - startSec), 0, 1)
       s.motionSpeed         = clamp(s.motionSpeed · lerp(1, motionMul[1], u), 0.1, 3.0)
       s.afterimageIntensity = clamp(s.afterimageIntensity + lerp(0, afterimageAdd[1], u), 0, 10)
-      s.particleAmount      = clamp(round(s.particleAmount · lerp(1, particleMul[1], u)), 10, 100)
   return s
 ```
 

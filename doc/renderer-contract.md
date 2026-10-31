@@ -37,20 +37,17 @@ class XxxRenderer {
 `density`(30-100), `baseOffset`(0-99), `expressionMethod`('bar'|'line'|'dot'),
 `layerCount`(1-4), `layers`([{hueOffset, sensitivity}]), `bgColor`('#000'|'#fff'),
 `afterimageIntensity`(0-10), `historySeconds`(1-8), `motionSpeed`(0.1-3.0),
-`particleAmount`(10-100), `physicsAmount`(0-10)
+`physicsAmount`(0-10)
 
 ## 利用可能なグローバル（js/vis-utils.js — レンダラーより先に読み込み済み）
 
 - `clamp(v,min,max)`, `lerp(a,b,t)`
 - `isoProject(x,y,z,kx?,ky?) -> {x,y}`（既定 kx=0.5, ky=0.35）
-- `polarToXy(cx,cy,r,angleRad) -> {x,y}`
 - `makeColor(baseHue, amp01, settings, alpha?) -> 'hsl(...)'|'hsla(...)'`
   既存レンダラーと同一の色決定則。**色は必ずこれを使う**。
 - `makeRng(seed) -> ()=>0..1`（決定的）
-- `new ValueNoise(seed)` … `.noise2(x,y)`（0..1）, `.fbm(x,y,octaves)`（0..1）
-- `new Spring(...)`, `new SpringArray(n, params)`, `springParamsFromAmount(amount)`
+- `new SpringArray(n, params)`, `springParamsFromAmount(amount)`
 - `new BeatDetector()`
-- `generateJitteredSites(cols,rows,jitter,seed)`, `computeVoronoiCells(sites,w,h)`
 - `FrameHistory`（js/history-buffer.js）
 
 ## 色の使い方

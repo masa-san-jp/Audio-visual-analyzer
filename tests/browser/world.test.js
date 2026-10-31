@@ -59,17 +59,17 @@ function worldReadHdr(engine, target = engine.scene) {
 }
 function worldParticleCoverage(before, after) {
   // 半精度の暗部丸めを除き、HDR輝度差>1e-4を可視な直接粒子として数える。
-  let pixels = 0, peak = 0, total = 0, fluidEnergy = 0;
+  let pixels = 0, peak = 0, total = 0, baseEnergy = 0;
   for (let i = 0; i < before.length; i += 4) {
     const delta = .2126 * (after[i] - before[i]) + .7152 * (after[i + 1] - before[i + 1]) + .0722 * (after[i + 2] - before[i + 2]);
-    fluidEnergy += .2126 * before[i] + .7152 * before[i + 1] + .0722 * before[i + 2];
+    baseEnergy += .2126 * before[i] + .7152 * before[i + 1] + .0722 * before[i + 2];
     if (delta > .0001) pixels++; peak = Math.max(peak, delta); total += Math.max(0, delta);
   }
   const n = before.length / 4;
   return { visiblePixels: pixels, fraction: pixels / n, peakHdrContribution: peak, meanHdrContribution: total / n,
-    particleEnergyFraction: total / Math.max(1e-12, fluidEnergy + total) };
+    particleEnergyFraction: total / Math.max(1e-12, baseEnergy + total) };
 }
-// WORLD-38: 旧流体・粒子の分離描画は撤去。新流体の合成像（円環・塵・染料）の可視画素を数える。
+// アクティブなタイプの HDR 像の可視画素を数える。
 function worldMatterProbe(engine) {
   const input = engine.typeInput; input.target = engine.scene; engine.type.render(input);
   const hdr = worldReadHdr(engine); let pixels = 0, peak = 0, total = 0;
@@ -305,12 +305,9 @@ async function worldV6Probe(w) {
   const visible = ['controls', 'file', 'play', 'seek', 'fullscreen'].every(id => {
     const node = document.getElementById(id); return !!node && !node.hidden && getComputedStyle(node).display !== 'none';
   });
-  const m = w.metrics(), layers = m.layers;
   return {
     'BW-6-ui': { pass: visible && fullscreenBefore === fullscreenAfterStart && requests === 2 && forwardSec === .2 && backwardSec === .1 && seekState === 'paused',
-      visible, forcedFullscreen: fullscreenBefore !== fullscreenAfterStart, requests, forwardSec, backwardSec, seekState },
-    'BW-6-layers': { pass: layers.join('/') === 'ABSTRACT/FLUID/PARTICLE/LIGHT/FEEDBACK' && m.raymarchSteps === 0 && !w.engine.form,
-      layers, raymarchSteps: m.raymarchSteps }
+      visible, forcedFullscreen: fullscreenBefore !== fullscreenAfterStart, requests, forwardSec, backwardSec, seekState }
   };
 }
 // カメラを固定した画素差は物質の動き。RGB各channelの差合計>3で量子化を除く。

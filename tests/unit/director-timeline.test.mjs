@@ -33,14 +33,14 @@ test('U18-13 定数名・値は §6.2 と完全一致する', () => {
     VARIATION_OPS: ['hueShift', 'method', 'mirror', 'layers'],
     HUE_SHIFT_DEG: { calm: 30, standard: 60, wild: 60 },
     RAMP_MOTION_MUL: { calm: 1.4, standard: 1.8, wild: 2.2 },
-    RAMP_AFTERIMAGE_ADD: 3, RAMP_PARTICLE_MUL: 1.5,
+    RAMP_AFTERIMAGE_ADD: 3,
     FADE_MIN_SEC: 0.25, FADE_MAX_SEC: 1.0,
     FLASH_PEAK_ALPHA: 0.8, FLASH_TAU_SEC: 0.12, FLASH_DURATION_SEC: 0.4,
     FLASH_MIN_INTERVAL_SEC: 2.0, SEEK_RESET_SEC: 1.0,
   });
   assert.deepEqual(DIRECTOR_MANAGED_KEYS, [
     'analyzerType', 'expressionMethod', 'barDisplayMode', 'layerCount',
-    'motionSpeed', 'particleAmount', 'afterimageIntensity', 'hue',
+    'motionSpeed', 'afterimageIntensity', 'hue',
   ]);
 });
 
@@ -117,13 +117,13 @@ test('U18-15 seedOffset 0〜49 で連続シーンを回避する（fixture・同
 
 test('U18-16 内蔵6シーンは §6.3 の値・空欄・系統と一致する', () => {
   const rows = [
-    ['spectrogram', 'calm'], ['lissajous', 'calm', 'line', undefined, undefined, 1.0, undefined, 4],
-    ['tunnel', 'build', 'line', undefined, undefined, 1.2, undefined, 2],
-    ['terrain', 'build', 'line', undefined, undefined, 1.0, undefined, 0],
-    ['radial', 'drop', 'bar', undefined, 3, undefined, undefined, 2],
-    ['bar', 'drop', 'bar', 'mirror-vertical', 4, undefined, undefined, 1],
+    ['spectrogram', 'calm'], ['lissajous', 'calm', 'line', undefined, undefined, 1.0, 4],
+    ['tunnel', 'build', 'line', undefined, undefined, 1.2, 2],
+    ['terrain', 'build', 'line', undefined, undefined, 1.0, 0],
+    ['radial', 'drop', 'bar', undefined, 3, undefined, 2],
+    ['bar', 'drop', 'bar', 'mirror-vertical', 4, undefined, 1],
   ];
-  const keys = ['expressionMethod', 'barDisplayMode', 'layerCount', 'motionSpeed', 'particleAmount', 'afterimageIntensity'];
+  const keys = ['expressionMethod', 'barDisplayMode', 'layerCount', 'motionSpeed', 'afterimageIntensity'];
   const expected = rows.map(([type, cls, ...values]) => {
     const patch = { analyzerType: type };
     values.forEach((value, i) => { if (value !== undefined) patch[keys[i]] = value; });
@@ -238,7 +238,7 @@ test('U18-13 タイムライン形状・main の閾値・カット・フェー�
         ? { type: 'cut', duration: 0 } : { type: 'fade', duration: 60 / 127.75 });
       assert.deepEqual(seg.ramp, seg.kind === 'build' ? {
         motionMul: [1, { calm: 1.4, standard: 1.8, wild: 2.2 }[intensity]],
-        afterimageAdd: [0, 3], particleMul: [1, 1.5],
+        afterimageAdd: [0, 3],
       } : null);
     }
     assert.deepEqual(timeline.flashes, intensity === 'calm' ? [] : [map.sections[2].startSec, map.sections[4].startSec]);
@@ -301,14 +301,13 @@ test('U18-19 パッチは適用後のタイプの capabilities に従う', () =>
     settings.analyzerType = type === 'bar' ? 'spectrogram' : 'bar';
     const cap = registry[type].capabilities;
     const patch = { analyzerType: type, expressionMethod: 'dot', barDisplayMode: 'mirror-horizontal',
-      layerCount: 4, motionSpeed: 0.7, particleAmount: 83, afterimageIntensity: 0 };
+      layerCount: 4, motionSpeed: 0.7, afterimageIntensity: 0 };
     applyScenePatch(settings, patch);
     assert.equal(settings.analyzerType, type);
     assert.equal(settings.expressionMethod, cap.methods.includes('dot') ? 'dot' : 'bar');
     assert.equal(settings.barDisplayMode, cap.barDisplayMode === true ? 'mirror-horizontal' : 'normal');
     assert.equal(settings.layerCount, cap.layers === true ? 4 : 1);
     assert.equal(settings.motionSpeed, 0.7);
-    assert.equal(settings.particleAmount, 83);
     assert.equal(settings.afterimageIntensity, 0);
     applyScenePatch(settings, { expressionMethod: 'unsupported' });
     assert.equal(settings.expressionMethod, cap.methods.includes('dot') ? 'dot' : 'bar');

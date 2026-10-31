@@ -704,9 +704,9 @@ function computeLayerRange(i, count, sliceLen, sampleRate, fftSize, mode, out) -
 |---|---|---|---|
 | B16-01 | ハーネス | 同じ合成信号（ドラム 10 秒）を `OfflineAudioContext` 上の MFS ワークレット（offline、30fps）と、Node と同じ `MfsExtractor` をページ内で直接駆動した結果で比較 | 全フレームで packed の最大絶対差 ≤ 1e-6、freq/time はバイト一致 |
 | B16-02 | アプリ | 120BPM ドラムの WAV を読み込み再生（実時間 12 秒） | `mfsStatus === 'active'`、10 秒以降の `getFeatures().tempo.bpm` が 120 ± 1.5%、コンソールエラー 0 |
-| B16-03 | アプリ | `window.__avzForceMfsFailure = true` で起動して再生 | `mfsStatus === 'fallback'`、`getFeatures()` が null、全14タイプで描画してコンソールエラー 0 |
+| B16-03 | アプリ | `window.__avzForceMfsFailure = true` で起動して再生 | `mfsStatus === 'fallback'`、`getFeatures()` が null、2D 全タイプで描画してコンソールエラー 0 |
 | B16-04 | アプリ | 再生中にシーク・スロット切替・停止を行う | 各操作の 200ms 後の `getMfsDebugInfo().lastHop` が、操作直前の値より小さく 30 以下（ワークレットが 0 から数え直している）、コンソールエラー 0 |
-| B16-05 | ハーネス | `features` あり・なし両方の `input` で全14タイプを描画 | 例外 0。`autoGain = false` ではゴールデン（B15-04）が不変 |
+| B16-05 | ハーネス | `features` あり・なし両方の `input` で2D 全タイプを描画 | 例外 0。`autoGain = false` ではゴールデン（B15-04）が不変 |
 | B16-06 | アプリ | ドラム 5 秒を書き出し（30fps） | 状態 `done`、`featureFrames.length === freqFrames.length`（151）、フレーム 0 の packed が全 0、書き出し中の `FramePipeline.render` に渡った `features` が非 null |
 | B16-07 | アプリ | 「音量自動補正」を ON/OFF して、-30 LUFS と -10 LUFS の同一ドラムを各 10 秒再生 | 10 秒時点の `visualizer` の `FramePipeline.lastFreq` の平均値の差が、OFF 時に比べ ON 時で 70% 以上縮小 |
 | B16-08 | ハーネス | ワークレット単体: offline モードで fps = 30・`totalSamples` = 48000×2 | 送信フレーム数 = 61、index が 0..60 の連番、hop が §6.3 の規則どおり、最後に `done` |
@@ -717,7 +717,7 @@ function computeLayerRange(i, count, sliceLen, sampleRate, fftSize, mode, out) -
 
 - [ ] 実際の楽曲（ジャンルの異なる3曲以上）で、BPM 表示が曲のテンポ（またはその倍/半分）と一致する
 - [ ] 10 分間連続再生して、音切れ・ノイズが発生しない
-- [ ] 全14タイプの見た目が Phase 15 時点と同等（体感で遅れ・カクつきが増えていない）
+- [ ] 2D 全タイプの見た目が Phase 15 時点と同等（体感で遅れ・カクつきが増えていない）
 - [ ] マイク入力で解析が動く（`mfsStatus` が `active`）
 - [ ] 書き出し結果の動きが、ライブ表示と同等の滑らかさになっている
 

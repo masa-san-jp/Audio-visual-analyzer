@@ -26,10 +26,8 @@ const DEFAULT_SETTINGS = {
   // Phase 6: 拡張表現パラメーター
   historySeconds: 4,             // 1~8   時間軸系の履歴長
   motionSpeed: 1.0,              // 0.1~3.0 回転・流れ・脈動の速度
-  particleAmount: 50,            // 10~100 粒子・要素の量
   physicsAmount: 0,              // 0~10  粘性揺らぎ（バネ物理）
   depthAngle: 50,                // 0~100 3D地形の奥行き角度
-  petalCount: 6,                 // 2~16  極座標フラワーの花弁数
   // Phase 10: 動画合成表示（動画ファイル読込時のみ有効）
   videoCompositeEnabled: false,
   videoCompositeOpacity: 100,        // 0~100

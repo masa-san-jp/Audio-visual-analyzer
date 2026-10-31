@@ -53,7 +53,7 @@ const RENDERER_REGISTRY = {
   terrain: {
     label: '3D地形', group: '時間軸', stateful: true,
     create: (canvas) => new TerrainRenderer(canvas),
-    capabilities: { methods: ['line', 'dot'], layers: false, sliders: ['history', 'angle'], physics: true },
+    capabilities: { methods: ['line', 'dot'], layers: false, sliders: ['history', 'angle'] },
   },
   tunnel: {
     label: 'トンネル', group: '時間軸', stateful: true,

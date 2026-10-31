@@ -266,7 +266,7 @@ class FramePipeline {
 
 - `{...settings, hue}` の毎フレーム生成は現行と同じく許容する（ガイド §9.3 の例外）
 - `sliceLayerLinear(freq, i, count)` は `frame-pipeline.js` にトップレベル関数として置く（現 `OfflineExporter._sliceLayer` と同じ式）
-- `frame.getLayer` は `bar3d`・`ring3d` が使う。**constructor で1回だけ作る束縛関数** `this._getLayerBound = (i, count) => this._getLayer(i, count)` を設定し、`_getLayer` は現在の `input.getLayer`（無ければ `sliceLayerLinear(現在の freq, …)`）へ委譲する（毎フレームのクロージャ生成を避ける）
+- `frame.getLayer` はステートフルレンダラーにレイヤー帯域を渡す（レンダラー契約 `doc/renderer-contract.md`）。**constructor で1回だけ作る束縛関数** `this._getLayerBound = (i, count) => this._getLayer(i, count)` を設定し、`_getLayer` は現在の `input.getLayer`（無ければ `sliceLayerLinear(現在の freq, …)`）へ委譲する（毎フレームのクロージャ生成を避ける）
 - ステートレス経路のレイヤー取得も同じ `_getLayer` を使う
 
 ### 4.4 意図的な振る舞い変更（1件のみ）

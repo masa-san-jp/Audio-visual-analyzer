@@ -113,7 +113,7 @@ function worldCommandGl() {
   };
   gl.uniform1i = (loc, value) => {
     if (loc.name === 'mode') modes.set(loc.p, value);
-    else if (['maxSteps', 'firstPass', 'screenSpace', 'ringMode', 'sparkReset', 'fluidReset', 'particlesPerOrbit'].includes(loc.name)) {}
+    else if (['firstPass'].includes(loc.name)) {}
     else {
       if (!samplers.has(loc.p)) samplers.set(loc.p, new Map());
       samplers.get(loc.p).set(loc.name, value);
@@ -152,7 +152,7 @@ test('UW-08 renderAt: 0から固定60Hz・音声不要・逆向きと反復でun
   const { engine, gl } = worldTestEngine();
   await engine.renderAt(.1); const initial = Array.from(engine.gpu.uniforms);
   assert.equal(engine.previewStep, 6); assert.equal(engine.mfsFrames, 0); assert.equal(engine.responseCount, 0);
-  assert.equal(engine.latestSec, .1); assert.equal(engine.metrics().raymarchSteps, 0);
+  assert.equal(engine.latestSec, .1);
   await engine.renderAt(.2); await engine.renderAt(.1);
   assert.deepEqual(Array.from(engine.gpu.uniforms), initial);
   await engine.renderAt(.105); assert.equal(engine.previewStep, 6); assert.equal(engine.latestSec, .105);
@@ -326,15 +326,15 @@ test('UW-13 WORLD-3 キック: 同フレームで衝撃中心を固定・移動�
   assert.ok(Math.abs(u[31] - .1) < 1e-6);
   console.log('UW-13 kickUniformLatencyFrames=0 anchorDriftWithoutKick=0 kickAgeSec=' + u[31]);
 });
-test('UW-14 WORLD-9 第二drop: 空間スケール変奏・連続カメラ・レイマーチ撤去と履歴解像度', () => {
+test('UW-14 WORLD-9 第二drop: 空間スケール変奏・連続カメラと履歴解像度', () => {
   const { engine } = worldTestEngine(), drops = engine.score.sections.filter(s => s.kind === 'drop');
   assert.ok(drops[1].worldScale > drops[0].worldScale);
   assert.notEqual(drops[1].compositionId, drops[0].compositionId);
   engine._step(drops[1].startSec, null, 0);
-  assert.equal(engine.metrics().formation, 'explosion'); assert.equal(engine.metrics().raymarchSteps, 0);
+  assert.equal(engine.metrics().formation, 'explosion');
   assert.equal(engine.form, undefined);
   assert.ok(drops[1].intensity > drops[0].intensity);
-  console.log('UW-14 worldScale='+drops[1].worldScale+' intensity='+drops[1].intensity+' raymarchSteps=0');
+  console.log('UW-14 worldScale='+drops[1].worldScale+' intensity='+drops[1].intensity+'');
 });
 
 

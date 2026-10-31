@@ -43,7 +43,7 @@
 ## 3. タイプの選択肢
 
 - `RENDERER_REGISTRY` に `gpu: true` の 3 項目を追加する。
-  - `g-fluid`（スペクトル流体）、`g-gargantua`（ブラックホール）、`g-attractor`（ストレンジアトラクター）
+  - `g-gargantua`（ブラックホール）、`g-tesseract`（テッセラクト）、`g-quantum`（量子のビジョン）
   - グループは「GPU」。RENDERER_GROUP_ORDER の最後に置く。
   - `capabilities` は `{ gpu: true }` だけにする。2D の項目は一切持たない。
   - `create` は持たない。FramePipeline は gpu 項目を描画しない。
@@ -60,7 +60,7 @@ GPU タイプのときの表示を次のように決める。
 
 | 区分 | GPU タイプでは |
 |---|---|
-| 形状（barWidth、density、baseOffset、barDisplayMode、expressionMethod、layers、layerSplit、physics、history、depthAngle、petalCount） | 隠す |
+| 形状（barWidth、density、baseOffset、barDisplayMode、expressionMethod、layers、layerSplit、physics、history、depthAngle） | 隠す |
 | 残像（afterimageIntensity） | 隠す |
 | 動画合成（videoComposite*） | 隠す |
 | 背景色（bgColor） | 隠す |
