@@ -98,6 +98,14 @@ GitHub Actions では `pull_request` と `main` への push で `node tests/run.
 
 B15-00 の意図的な失敗テストは、通常実行では「期待どおり失敗したら成功」と反転して判定します。生の判定を確認する場合は `node tests/run.mjs --browser --filter 'B15-00'` を実行してください（pass / fail / fail のため終了コードは 1）。
 
+## 改善調査・仕様案
+
+公開リファレンスの比較から現行仕様との差分を検討しています。以下は**提案・未実装**で、現行製品仕様の正本を置き換えません。
+
+- [リファレンスDB](doc/references/index.md)
+- [共通機能モデル](doc/common-capabilities.md)
+- [現行仕様との差分・改善仕様案](doc/improvement-spec.md)
+
 ## 開発ドキュメント
 
 | 文書 | 内容 |
