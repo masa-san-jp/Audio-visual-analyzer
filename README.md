@@ -104,7 +104,7 @@ B15-00 の意図的な失敗テストは、通常実行では「期待どおり�
 
 - [リファレンスDB](doc/references/index.md)
 - [共通機能モデル](doc/common-capabilities.md)
-- [現行仕様との差分・改善仕様案](doc/improvement-spec.md)
+- [現行仕様との差分・改善仕様案](doc/improvement-spec.md)（§7: CIの確認範囲・既存テスト対応・入力×出力能力・残る判断）
 
 ## 開発ドキュメント
 
