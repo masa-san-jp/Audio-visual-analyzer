@@ -120,10 +120,12 @@ avzTest('B16-02m', 'B16-02m マイク入力（フェイクデバイス）でも 
   const app = window.__app;
   const engine = app.audioEngine;
   try {
-    avzAssert.ok(await b16LiveWaitFor(() => engine.mfsStatus !== 'initializing', 5000), 'MFS 初期化が完了しません');
-    avzAssert.equal(engine.mfsStatus, 'active', 'mfsStatus');
+    // マイク開始で AudioContext と MFS が作られる。先に開始してから初期化完了を待つ
+    // （以前は先行テストが AudioContext を作っている前提で待っていたため、遅いテストを飛ばすと失敗した。IMP-03）
     await app.micInput.start();
     avzAssert.ok(app.micInput.active, 'マイクが開始されていません');
+    avzAssert.ok(await b16LiveWaitFor(() => engine.mfsStatus !== 'initializing', 5000), 'MFS 初期化が完了しません');
+    avzAssert.equal(engine.mfsStatus, 'active', 'mfsStatus');
     app.visualizer.start();
     const before = engine.getMfsDebugInfo().lastHop;
     await b16LiveWait(1200);
