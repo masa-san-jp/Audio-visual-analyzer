@@ -1,3 +1,19 @@
+## 2026-11-15 — [IMP-01] GPU タイプの録画・自動切替・書き出し FPS の理由表示
+
+### 作業内容
+- `js/ui-controller.js`: GPU タイプ選択中で解析が終わっていない（失敗を含む）間は録画開始を無効にし、録画の状態表示に理由を出す（従来は止まった 2D 画面が黙って録られた）。マイク入力・WebGL2 不可で GPU タイプから 2D へ戻したとき、タイプ選択の下（`#analyzer-notice`）に理由を表示し、手動で選び直すと消す
+- `js/world/world-bridge.js`: 準備状態が変わりうるときに呼ぶ `onStateChange` を追加（UI が録画ボタンを更新する）
+- `index.html`: オフライン書き出しの FPS に 60fps を追加（オーナー決定 1）。理由表示用の `#analyzer-notice` を追加
+- `js/settings-io.js`: 旧 GPU タイプ `g-rings`・`g-galaxy` を削除タイプの読み替え対象に追加（読み込み時に `bar`）
+- テスト: `tests/browser/imp01.test.js`（IMP01-01〜05）を追加。`tests/unit/settings-io.test.mjs` の削除タイプ一覧に2件追加
+
+### 検証
+- `node tests/run.mjs --skip-slow`: 284件中 256成功・1失敗・27スキップ（GPU なし環境）。追加した6件はすべて成功。失敗は既知の不安定なテスト B16-02m のみ（IMP-03 で扱う）
+
+### spec.md 変更
+- v2.29: §1.1（FPS の選択肢、解析前の録画無効化と理由、自動で 2D に戻したときの理由表示）、§11.3（`g-rings`・`g-galaxy` の読み替え）、§14.8 の書き出し FPS
+- 理由: IMP-01 とオーナー決定 1・5 の反映
+
 ## 2026-11-15 — [IMP-00] 仕様書の古い記述の整理
 
 ### 作業内容

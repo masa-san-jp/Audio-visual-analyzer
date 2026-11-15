@@ -1,4 +1,10 @@
 // 目的 — UI とメディア読込後のソングマップ解析・自動演出の接続 — doc/20260928-plan-phase18-song-map-and-auto-director.md §2・§5・§6.8・§7
+// IMP-01: 自動で表示を変えたときと、録画できないときの理由（doc/20261115-improvement-spec-adoption-review.md §2.2）
+const UI_NOTICE_GPU_MIC = 'マイク入力中は GPU タイプを使えないため、「{type}」で表示しています（GPU タイプは曲ファイル全体の解析が必要です）';
+const UI_NOTICE_GPU_UNAVAILABLE = 'GPU タイプを使えないため、「{type}」で表示しています';
+const UI_REC_GPU_WAIT = 'GPU タイプは曲の解析が終わるまで録画できません';
+const UI_REC_GPU_FAILED = 'GPU 解析に失敗したため、GPU タイプでは録画できません';
+
 class UIController {
   constructor(visualizer, mediaManager, audioEngine, recorder, micInput) {
     this.visualizer = visualizer;
@@ -29,6 +35,8 @@ class UIController {
   }
 
   init() {
+    // GPU の準備状態が変わったら録画ボタンを更新する（IMP-01: 解析前の録画を防ぐ）
+    if (this.worldBridge) this.worldBridge.onStateChange = () => this._updateRecButtons();
     this._initMode();
     this._initFile();
     this._initSlots();
@@ -563,7 +571,7 @@ class UIController {
     // 録画開始: 録画キャプチャの開始を待ってから再生を始める（A/V同期のため）
     // マイク入力中は「再生」の概念がないため、そのまま録画キャプチャのみ開始する。
     btnStart.addEventListener('click', async () => {
-      if (this.recorder.state !== 'idle') return;
+      if (this.recorder.state !== 'idle' || this._gpuRecordBlockReason()) return;
       const usingMic = this.micInput.active;
       if (!usingMic) this.mediaManager.stop();
       this.visualizer.start();
@@ -623,7 +631,8 @@ class UIController {
     const btnReset = document.getElementById('btn-rec-reset');
     const statusEl = document.getElementById('rec-status');
 
-    btnStart.disabled = !loaded || state !== 'idle';
+    const gpuWait = this._gpuRecordBlockReason();
+    btnStart.disabled = !loaded || state !== 'idle' || !!gpuWait;
     btnStop.disabled  = state !== 'recording';
     btnSave.disabled  = state !== 'recorded';
     btnReset.disabled = state === 'idle';
@@ -638,9 +647,16 @@ class UIController {
       statusEl.textContent = '録画完了 — 保存可能です';
       statusEl.classList.remove('recording');
     } else {
-      statusEl.textContent = '待機中';
+      statusEl.textContent = gpuWait && loaded ? gpuWait : '待機中';
       statusEl.classList.remove('recording');
     }
+  }
+
+  // GPU タイプ選択中で準備ができていないときは録画できない理由を返す（IMP-01。準備前に録ると止まった画面が録られるため）
+  _gpuRecordBlockReason() {
+    const bridge = this.worldBridge;
+    if (!bridge || !this._isGpuType(this.visualizer.settings.analyzerType) || bridge.ready) return '';
+    return bridge.error ? UI_REC_GPU_FAILED : UI_REC_GPU_WAIT;
   }
 
   // ── オフライン書き出し ──
@@ -1057,6 +1073,7 @@ class UIController {
     analyzerTypeSelect.value = this.visualizer.settings.analyzerType;
 
     analyzerTypeSelect.addEventListener('change', () => {
+      this._setAnalyzerNotice('');
       this.visualizer.settings.analyzerType = analyzerTypeSelect.value;
       this._applyCapabilities(analyzerTypeSelect.value);
     });
@@ -1187,7 +1204,7 @@ class UIController {
     const bridge = this.worldBridge;
     if (gpu && (this.micInput.active || !bridge || !bridge.selectType(type))) {
       const unavailable = !!bridge && bridge.available === false;
-      this._revertTo2D();
+      this._revertTo2D(this.micInput.active ? UI_NOTICE_GPU_MIC : UI_NOTICE_GPU_UNAVAILABLE);
       this._updateGpuOptions();
       if (unavailable && bridge.statusEl) bridge._setText(bridge.statusEl, 'この環境では GPU タイプを利用できません');
       return false;
@@ -1202,20 +1219,31 @@ class UIController {
     }
     // ディレクター表示は GPU 状態が変わったときだけ更新する（2D のみの利用では従来どおり）
     if (gpu !== !!this._gpuShown) { this._gpuShown = gpu; this._updateDirectorUI(); }
+    this._updateRecButtons();
     return gpu;
   }
 
   // 直前の 2D タイプへ戻す（設定・セレクト・表示を揃える）
-  _revertTo2D() {
+  // reason: 戻した理由の文（タイプ選択の下に表示する。IMP-01）
+  _revertTo2D(reason) {
     const back = this._last2DType || 'bar';
     this.visualizer.settings.analyzerType = back;
     const select = document.getElementById('analyzer-type');
     if (select) select.value = back;
     this._applyCapabilities(back);
+    if (reason) this._setAnalyzerNotice(reason.replace('{type}', getRendererEntry(back).label));
+  }
+
+  // タイプ選択の下の注記（自動で切り替えた理由）。空文字で消す
+  _setAnalyzerNotice(text) {
+    const el = document.getElementById('analyzer-notice');
+    if (!el) return;
+    el.textContent = text || '';
+    el.hidden = !text;
   }
 
   _leaveGpuForMic() {
-    if (this._isGpuType(this.visualizer.settings.analyzerType)) this._revertTo2D();
+    if (this._isGpuType(this.visualizer.settings.analyzerType)) this._revertTo2D(UI_NOTICE_GPU_MIC);
     this._updateGpuOptions();
   }
 

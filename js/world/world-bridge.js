@@ -38,6 +38,7 @@ class WorldBridge {
     this.error = null;
     this._w = WORLD_BRIDGE_FALLBACK_SIZE[0]; this._h = WORLD_BRIDGE_FALLBACK_SIZE[1];
     this._prevT = 0; this._needsRedraw = false;
+    this.onStateChange = null;    // 準備状態（ready・解析中・失敗）が変わりうるときに呼ぶ（UI の録画ボタン更新用）
   }
 
   // 書き出し用 WorldExporter（本体のボタン類と共通で使うため、UI がコールバックを差し込む）
@@ -87,6 +88,7 @@ class WorldBridge {
   }
 
   _refreshText() {
+    if (this.onStateChange) this.onStateChange();
     if (!this.active) return;
     if (this.available === false) return;
     this._setText(this.messageEl, this.ready ? '' : (this._preparing ? WORLD_BRIDGE_TEXT_PREPARING : (this.error ? WORLD_BRIDGE_TEXT_FAILED : WORLD_BRIDGE_TEXT_NEED_SONG)));
