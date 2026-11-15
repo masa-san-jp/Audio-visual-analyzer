@@ -254,6 +254,9 @@ class FramePipeline {
     frame.getLayer = this._getLayerBound;
 
     const s = { ...settings, hue: effectiveHue };
+    // 対応しない表現方法・レイヤー数は描画時だけ読み替える（保存値は変えない。IMP-04）
+    s.expressionMethod = effectiveExpressionMethod(settings.analyzerType, settings.expressionMethod);
+    s.layerCount = effectiveLayerCount(settings.analyzerType, settings.layerCount);
     this._stateful.render(this.ctx, this.canvas, frame, s);
   }
 

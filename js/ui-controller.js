@@ -5,6 +5,16 @@ function normalizeLayerSplit(v) {
   return v === 'linear' || v === 'mel' ? v : 'log';
 }
 
+// IMP-04: capabilities.inactive のキーと、隠す操作（その要素を含む label）の対応
+const UI_SETTING_CONTROLS = [
+  ['barWidth', 'slider-bar-width'],
+  ['density', 'slider-density'],
+  ['baseOffset', 'slider-base-offset'],
+  ['afterimageIntensity', 'slider-afterimage'],
+  ['smoothing', 'slider-smoothing'],
+  ['autoGain', 'chk-auto-gain'],
+];
+
 const UI_NOTICE_GPU_MIC = 'マイク入力中は GPU タイプを使えないため、「{type}」で表示しています（GPU タイプは曲ファイル全体の解析が必要です）';
 const UI_NOTICE_GPU_UNAVAILABLE = 'GPU タイプを使えないため、「{type}」で表示しています';
 const UI_REC_GPU_WAIT = 'GPU タイプは曲の解析が終わるまで録画できません';
@@ -451,16 +461,14 @@ class UIController {
 
   // 動画合成セクションは、ライブ再生用の動画読込中またはオフライン書き出し対象が
   // 動画ファイルの場合に表示する（Phase 10.2: オフライン書き出しでも合成が効くため）。
-  // どちらの対象もない場合は設定を自動オフにする
+  // 自分で全面を塗るタイプ（スペクトログラム）では効かないので隠す。
+  // どちらの場合も設定値は保持する（対象がなければ描かれないだけ。IMP-04 決定4）
   _updateVideoCompositeVisibility() {
     const hasTarget = !!this.visualizer.videoElement || !!this._offlineFileIsVideo;
+    const caps = getRendererEntry(this.visualizer.settings.analyzerType).capabilities || {};
+    const usable = (caps.inactive || []).indexOf('videoComposite') === -1;
     const section = document.getElementById('video-composite-controls');
-    if (section) section.style.display = hasTarget ? '' : 'none';
-    if (!hasTarget) {
-      this.visualizer.settings.videoCompositeEnabled = false;
-      const chk = document.getElementById('chk-video-composite');
-      if (chk) chk.checked = false;
-    }
+    if (section) section.style.display = hasTarget && usable ? '' : 'none';
   }
 
   // ── 再生制御 ──
@@ -1087,6 +1095,7 @@ class UIController {
 
     expressionSelect.addEventListener('change', () => {
       this.visualizer.settings.expressionMethod = expressionSelect.value;
+      this._updatePhysicsVisibility();
     });
 
     barModeSelect.addEventListener('change', () => {
@@ -1292,10 +1301,8 @@ class UIController {
       Array.from(exprSelect.options).forEach(opt => {
         opt.hidden = methods.indexOf(opt.value) === -1;
       });
-      if (methods.indexOf(this.visualizer.settings.expressionMethod) === -1) {
-        this.visualizer.settings.expressionMethod = methods[0];
-        exprSelect.value = methods[0];
-      }
+      // 対応しない保存値は書き換えず、表示だけ有効な値にする（IMP-04 決定4）
+      exprSelect.value = effectiveExpressionMethod(type, this.visualizer.settings.expressionMethod);
     }
 
     // 表示モード（ミラー）
@@ -1303,9 +1310,6 @@ class UIController {
 
     // レイヤー数
     show('group-layers', !!caps.layers);
-    if (!caps.layers) {
-      this.visualizer.settings.layerCount = 1;
-    }
     document.getElementById('layer-settings').style.display = caps.layers ? '' : 'none';
     this._updateLayerSplitVisibility();
     // 周波数軸: 独自の軸を持つ・周波数を使わないタイプでは隠す（値は保持。IMP-02）
@@ -1316,7 +1320,25 @@ class UIController {
     show('group-history',   sliders.indexOf('history') !== -1);
     show('group-motion',    sliders.indexOf('motion') !== -1);
     show('group-angle',     sliders.indexOf('angle') !== -1);
-    show('group-physics',   !!caps.physics);
+    this._updatePhysicsVisibility();
+
+    // タイプが使わない設定（capabilities.inactive）を隠す。値は保持する（IMP-04）
+    const inactive = caps.inactive || [];
+    for (const [key, id] of UI_SETTING_CONTROLS) {
+      const el = document.getElementById(id);
+      const row = el && typeof el.closest === 'function' ? el.closest('label') : null;
+      if (row) row.style.display = inactive.indexOf(key) === -1 ? '' : 'none';
+    }
+    this._updateVideoCompositeVisibility();
+  }
+
+  // 粘性揺らぎは physics 対応タイプで、表現方法が波形線・点のときだけ効く（IMP-04）
+  _updatePhysicsVisibility() {
+    const type = this.visualizer.settings.analyzerType;
+    const caps = getRendererEntry(type).capabilities || {};
+    const method = effectiveExpressionMethod(type, this.visualizer.settings.expressionMethod);
+    const group = document.getElementById('group-physics');
+    if (group) group.style.display = caps.physics && (method === 'line' || method === 'dot') ? '' : 'none';
   }
 
   // レイヤー分割セレクトは、layers 対応タイプかつ layerCount >= 2 のときだけ表示（計画書 §7）

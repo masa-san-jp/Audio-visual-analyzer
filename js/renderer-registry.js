@@ -48,7 +48,8 @@ const RENDERER_REGISTRY = {
   spectrogram: {
     label: 'スペクトログラム（滝）', group: '時間軸', stateful: true,
     create: (canvas) => new SpectrogramRenderer(canvas),
-    capabilities: { methods: [], layers: false, selfClear: true, sliders: ['history'], ownFreqAxis: true, noFreqAxis: true },
+    capabilities: { methods: [], layers: false, selfClear: true, sliders: ['history'], ownFreqAxis: true, noFreqAxis: true,
+      inactive: ['barWidth', 'density', 'baseOffset', 'afterimageIntensity', 'videoComposite'] },
   },
   terrain: {
     label: '3D地形', group: '時間軸', stateful: true,
@@ -58,14 +59,14 @@ const RENDERER_REGISTRY = {
   tunnel: {
     label: 'トンネル', group: '時間軸', stateful: true,
     create: (canvas) => new TunnelRenderer(canvas),
-    capabilities: { methods: ['line', 'dot'], layers: false, sliders: ['history', 'motion'] },
+    capabilities: { methods: ['line', 'dot'], layers: false, sliders: ['history', 'motion'], inactive: ['baseOffset'] },
   },
 
   // ── 幾何系（ステートフル） ──
   lissajous: {
     label: 'オシロスコープ', group: '幾何', stateful: true,
     create: (canvas) => new LissajousRenderer(canvas),
-    capabilities: { methods: ['line', 'dot'], layers: false, sliders: [], noFreqAxis: true },
+    capabilities: { methods: ['line', 'dot'], layers: false, sliders: [], noFreqAxis: true, inactive: ['smoothing', 'autoGain'] },
   },
 
   // ── GPU（WebGL2・WorldBridge が描画する。FramePipeline は描画せず、create も持たない） ──
@@ -90,6 +91,16 @@ const RENDERER_GROUP_ORDER = ['基本', '時間軸', '幾何', 'GPU'];
 // 2D タイプの ID 一覧（GPU 項目を除く。ランダム選択・ディレクターの母集団用）
 function listRenderer2DKeys() {
   return Object.keys(RENDERER_REGISTRY).filter(key => !RENDERER_REGISTRY[key].gpu);
+}
+
+// IMP-04: タイプが対応しない値は保存値を変えずに、描画時だけ有効な値へ読み替える（doc/20261115-improvement-spec-adoption-review.md §3.1 決定4）
+// 表現方法: methods に無ければ先頭。レイヤー数: layers 非対応なら 1
+function effectiveExpressionMethod(type, method) {
+  const methods = (getRendererEntry(type).capabilities || {}).methods || [];
+  return methods.length && methods.indexOf(method) === -1 ? methods[0] : method;
+}
+function effectiveLayerCount(type, layerCount) {
+  return (getRendererEntry(type).capabilities || {}).layers ? layerCount : 1;
 }
 
 function getRendererEntry(type) {
