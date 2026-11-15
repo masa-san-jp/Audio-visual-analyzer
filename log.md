@@ -1,3 +1,24 @@
+## 2026-11-15 — [IMP-02] 周波数軸の対数化（Issue #68）
+
+### 作業内容
+- `doc/20261115-plan-imp02-log-frequency-axis.md`: 実装計画書を追加（オーナー決定 3）
+- `js/vis-utils.js`: 周波数と軸の位置の写像（`freqToAxis`・`axisToFreq`）と、スペクトルを対数間隔へ並べ直す `buildAxisResampler`・`resampleSpectrum` を追加。低域は隣のビンの線形補間、高域はビンの最大値。写像表は条件が変わったときだけ作る
+- `js/frame-pipeline.js`: 周波数軸が対数のとき、レイヤーごとに並べ直した配列を描画タイプへ渡す。3D地形・トンネルには全帯域の写像を `frame.freq` と履歴に渡す。描画タイプ（`js/renderers/`）は変更なし
+- `js/mfs-view.js`: `computeLayerRange` にオクターブ等分（`'log'`）を追加
+- `js/settings.js`: `freqAxis`（既定 `'log'`）を追加し、`layerSplit` の既定を `'log'` に変更
+- `js/renderer-registry.js`: スペクトログラム（独自の縦軸）に `ownFreqAxis`、スペクトログラム・オシロスコープに `noFreqAxis` を宣言
+- `index.html`・`js/ui-controller.js`: 「周波数軸」セレクトを追加、「レイヤー分割」に「対数（オクターブ等分）」を追加
+- テスト: `tests/unit/freq-axis.test.mjs`（U-AX-01〜04）、`tests/browser/imp02.test.js`（B-AX-01〜05）を追加。ゴールデンに対数軸の6ケースを追加（既存34ケースの基準値は変更なし）。既定値のテスト（U15-01・B16-09）を新しい既定に更新
+
+### 検証
+- `node tests/run.mjs --skip-slow`: 295件中 267成功・1失敗・27スキップ（GPU なし環境）。追加分はすべて成功。失敗は既知の不安定なテスト B16-02m のみ
+- 線形軸の回帰: 既存ゴールデン34ケースが基準値に合格。B-AX-01 で、線形軸はサンプルレートの有無にかかわらず従来と画素単位で一致
+- 実際の解析経路（SpectrumAnalyzer）に正弦波の合成音を通した比較画像で、低音域が横幅の左側に広がり、ブロック状にならないことを目視確認
+
+### spec.md 変更
+- v2.30: §9.6 に周波数軸（既定は対数）、§10.2 にレイヤー分割の対数（既定）、§15.1 に周波数軸の UI を追加
+- 理由: Issue #68・オーナー決定 3
+
 ## 2026-11-15 — [IMP-01] GPU タイプの録画・自動切替・書き出し FPS の理由表示
 
 ### 作業内容

@@ -120,11 +120,75 @@ function computeFreqRange(sampleRate, binCount) {
   return { startBin, endBin };
 }
 
+// ── 周波数軸（IMP-02）— doc/20261115-plan-imp02-log-frequency-axis.md §3・§4 ──
+// 画面上の位置と周波数の対応。対数では1オクターブあたりの幅が帯域内で一定になる。
+const FREQ_AXIS_CONST = { F_MIN_HZ: 50, F_MAX_HZ: 15000, MIN_POINTS: 16 };
+
+// 軸の右端（Hz）。ナイキスト周波数を超えない
+function freqAxisMaxHz(sampleRate) {
+  return Math.min(FREQ_AXIS_CONST.F_MAX_HZ, sampleRate / 2);
+}
+
+// 周波数 f を軸上の位置 0..1 へ。帯域外は 0 / 1 にクランプ。mode は 'log'（既定）| 'linear'
+function freqToAxis(f, fMin, fMax, mode) {
+  if (mode === 'linear') return clamp((f - fMin) / (fMax - fMin), 0, 1);
+  if (!(f > 0)) return 0;
+  return clamp(Math.log(f / fMin) / Math.log(fMax / fMin), 0, 1);
+}
+
+// 軸上の位置 t（0..1）を周波数へ（freqToAxis の逆）
+function axisToFreq(t, fMin, fMax, mode) {
+  if (mode === 'linear') return fMin + t * (fMax - fMin);
+  return fMin * Math.pow(fMax / fMin, t);
+}
+
+// [fa, fb] Hz を M 点に対数間隔で並べ直すための表を作る（§4.3）。
+// sliceLen: freq スライス長、startBin: スライス先頭のビン番号、binHz: 1ビンの幅（Hz）
+// 点 j: 受け持つ範囲に整数ビンがあれば最大値（kind=1, i0..i1）、無ければ中心で線形補間（kind=0, i0・i1・w）
+function buildAxisResampler(sliceLen, startBin, binHz, fa, fb, M) {
+  const kind = new Uint8Array(M), i0 = new Int32Array(M), i1 = new Int32Array(M), w = new Float32Array(M);
+  const last = sliceLen - 1;
+  const ratio = fb / fa;
+  for (let j = 0; j < M; j++) {
+    const kLo = fa * Math.pow(ratio, j / M) / binHz - startBin;
+    const kHi = fa * Math.pow(ratio, (j + 1) / M) / binHz - startBin;
+    const c0 = Math.ceil(kLo), c1 = Math.ceil(kHi) - 1;
+    if (c1 >= c0) {
+      kind[j] = 1;
+      i0[j] = clamp(c0, 0, last);
+      i1[j] = Math.max(i0[j], clamp(c1, 0, last));
+    } else {
+      const kc = clamp((kLo + kHi) / 2, 0, last);
+      i0[j] = Math.floor(kc);
+      i1[j] = Math.min(i0[j] + 1, last);
+      w[j] = kc - i0[j];
+    }
+  }
+  return { M, sliceLen, kind, i0, i1, w, out: new Uint8Array(M) };
+}
+
+// 表に従って slice を並べ直し、table.out に書いて返す（毎回の配列生成なし）
+function resampleSpectrum(table, slice) {
+  const { M, kind, i0, i1, w, out } = table;
+  for (let j = 0; j < M; j++) {
+    if (kind[j] === 1) {
+      let m = 0;
+      for (let k = i0[j]; k <= i1[j]; k++) if (slice[k] > m) m = slice[k];
+      out[j] = m;
+    } else {
+      const a = slice[i0[j]], b = slice[i1[j]];
+      out[j] = Math.round(a + (b - a) * w[j]);
+    }
+  }
+  return out;
+}
+
 // Node 環境（テスト）向けエクスポート。ブラウザでは無視される。
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
     clamp, lerp, isoProject, makeColor, makeRng,
     SpringArray, springParamsFromAmount, BeatDetector, ISO_KX, ISO_KY,
     computeFreqRange,
+    FREQ_AXIS_CONST, freqAxisMaxHz, freqToAxis, axisToFreq, buildAxisResampler, resampleSpectrum,
   };
 }

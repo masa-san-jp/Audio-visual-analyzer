@@ -32,6 +32,8 @@ class FramePipeline {
     this._autoGained = false;      // このフレームで補正を適用したか
     this._layerRange = new Int32Array(2);   // computeLayerRange の出力（使い回す）
     this._layerViews = [];         // レイヤー別の subarray キャッシュ（同一範囲なら再利用）
+    this._axisTables = [];         // 周波数軸の写像表（IMP-02）。[0..3] はレイヤー別、[4] は全帯域（ステートフル用）
+    this._axisKeys = [];
     // 毎フレームのクロージャ生成を避けるため、束縛関数は1回だけ作る
     this._getLayerBound = (i, count) => this._getLayer(i, count);
     // レンダラーへ渡す frame オブジェクト（使い回す）
@@ -134,10 +136,40 @@ class FramePipeline {
     if (!freq) return null;
     // sampleRate / fftSize が無い入力では聴感分割できないため均等分割にする
     const hasRate = input.sampleRate > 0 && input.fftSize > 0;
+    // 周波数軸が対数なら、レイヤーの帯域を対数間隔で並べ直した配列を返す（IMP-02 §4.3）
+    if (hasRate && this._settings.freqAxis !== 'linear') return this._axisLayer(freq, i, count, this._settings.layerSplit);
     const mode = hasRate ? this._settings.layerSplit : 'linear';
     const r = computeLayerRange(i, count, freq.length, hasRate ? input.sampleRate : 0,
       hasRate ? input.fftSize : 0, mode, this._layerRange);
     return this._layerView(freq, i, r[0], r[1]);
+  }
+
+  // レイヤー i の帯域 [fa, fb]（Hz）を対数軸で並べ直す。slot: 写像表の置き場所（4 = 全帯域）
+  // split: 'log' は正確なオクターブ等分、それ以外は computeLayerRange のビン境界を Hz にしたもの
+  _axisLayer(freq, i, count, split, slot = i) {
+    const input = this._input;
+    const sr = input.sampleRate, fft = input.fftSize, len = freq.length;
+    const key = len + '|' + sr + '|' + fft + '|' + i + '|' + count + '|' + split;
+    let table = this._axisTables[slot];
+    if (!table || this._axisKeys[slot] !== key) {
+      const binHz = sr / fft;
+      const startBin = computeFreqRange(sr, fft / 2).startBin;
+      const fMin = FREQ_AXIS_CONST.F_MIN_HZ, fMax = freqAxisMaxHz(sr);
+      let fa, fb;
+      if (count === 1 || split === 'log') {
+        fa = axisToFreq(i / count, fMin, fMax, 'log');
+        fb = axisToFreq((i + 1) / count, fMin, fMax, 'log');
+      } else {
+        const r = computeLayerRange(i, count, len, sr, fft, split, this._layerRange);
+        fa = Math.max(fMin, (startBin + r[0]) * binHz);
+        fb = Math.max(fa * 1.0001, (startBin + r[1]) * binHz);
+      }
+      const M = Math.max(FREQ_AXIS_CONST.MIN_POINTS, Math.floor(len / count));
+      table = buildAxisResampler(len, startBin, binHz, fa, fb, M);
+      this._axisTables[slot] = table;
+      this._axisKeys[slot] = key;
+    }
+    return resampleSpectrum(table, freq);
   }
 
   // freq.subarray(start, end) をレイヤー別にキャッシュして返す（同一範囲・同一バッファなら新規生成しない）
@@ -201,7 +233,12 @@ class FramePipeline {
 
   // ── ステートフル描画 ──
   _renderStateful(input, settings, effectiveHue) {
-    const freq = this._freq;
+    let freq = this._freq;
+    // 周波数軸が対数なら、全帯域を写像した配列を frame.freq と履歴に渡す（独自の軸を持つタイプは除く。IMP-02 §2.1）
+    const caps = getRendererEntry(settings.analyzerType).capabilities || {};
+    if (freq && !caps.ownFreqAxis && settings.freqAxis !== 'linear' && input.sampleRate > 0 && input.fftSize > 0) {
+      freq = this._axisLayer(freq, 0, 1, 'log', 4);
+    }
     const history = this._ensureHistory(freq, settings, input.historyFps);
     if (history && freq) history.push(freq);
 

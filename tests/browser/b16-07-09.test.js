@@ -86,7 +86,7 @@ avzTest('B16-09', 'B16-09 設定の往復: autoGain・layerSplit がプリセッ
   // 既定値
   const defaults = createDefaultSettings();
   avzAssert.equal(defaults.autoGain, false, '既定 autoGain');
-  avzAssert.equal(defaults.layerSplit, 'linear', '既定 layerSplit');
+  avzAssert.equal(defaults.layerSplit, 'log', '既定 layerSplit（IMP-02 で log）');
 
   try {
     // layers 対応タイプ・layerCount 2 でレイヤー分割セレクトが表示される / 条件外では非表示
@@ -169,9 +169,9 @@ avzTest('B16-09', 'B16-09 設定の往復: autoGain・layerSplit がプリセッ
     document.getElementById('preset-status').textContent = '';
     await loadJson(legacy);
     avzAssert.equal(settingsOf().autoGain, false, '旧形式 JSON の autoGain は既定値');
-    avzAssert.equal(settingsOf().layerSplit, 'linear', '旧形式 JSON の layerSplit は既定値');
+    avzAssert.equal(settingsOf().layerSplit, 'log', '旧形式 JSON の layerSplit は既定値');
     avzAssert.equal(document.getElementById('chk-auto-gain').checked, false, '旧形式 JSON 読込後 UI チェックボックス');
-    avzAssert.equal(document.getElementById('layer-split').value, 'linear', '旧形式 JSON 読込後 UI セレクト');
+    avzAssert.equal(document.getElementById('layer-split').value, 'log', '旧形式 JSON 読込後 UI セレクト');
   } finally {
     deletePreset(presetName);
     settingsOf().autoGain = false;

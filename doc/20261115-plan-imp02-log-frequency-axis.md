@@ -5,6 +5,7 @@
 - 前提: main（spec v2.29、IMP-01 まで反映）
 - 決定: オーナー決定 3（2026-11-15）「周波数軸の既定は対数にする」。要件は [Issue #68](https://github.com/masa-san-jp/Audio-visual-analyzer/issues/68) の「どうなったら直ったと言えるか」1〜4
 - 作業ルール: `doc/20260928-implementation-guide.md`
+- 状態: **実装済み（2026-11-15、spec v2.30）**
 
 ---
 
@@ -146,12 +147,11 @@ binHz = sampleRate / fftSize、 startBin = computeFreqRange(sampleRate, fftSize 
 | AX-2 | パイプラインへの組み込み・回帰の確認・基準画像の更新 | ★3 | AX-1 | `frame-pipeline.js`、`renderer-registry.js`、`settings.js`（`freqAxis`・`layerSplit` の既定）、`tests/shared/golden-cases.js`、`tests/golden/frames.json` | B-AX-01〜03、B15-04 |
 | AX-3 | UI・仕様書 | ★1 | AX-2 | `index.html`、`ui-controller.js`、`spec.md`、`README.md`、`log.md` | B-AX-04・05 |
 
-### 7.1 基準画像（ゴールデン）の更新手順（AX-2）
+### 7.1 基準画像（ゴールデン）の扱い（AX-2。実装時に確定）
 
-1. **先に回帰ケースを追加する**: 既存ケースのうち写像の対象になるもの（棒グラフ・円形放射・3D地形・トンネル）について、`freqAxis: 'linear', layerSplit: 'linear'` を明示した同名＋`-linear` のケースを追加し、その基準値は**現在の基準値をそのまま複写**する（新しく生成しない）
-2. 実装後、`-linear` ケースが現在の判定基準（平均差 ≤ 2.0・最大差 ≤ 40）で合格することを確認する。これが線形モードの回帰の証明になる
-3. 既定値（対数）のケースを `node tests/run.mjs --update-golden` で再生成する。更新前後の比較画像（`tests/output/golden/`）を PR に添付し、低音域が左側に広がっていることを目視で確認した結果を書く
-4. スペクトログラム・オシロスコープのケースは基準値が変わらないことを確認する（変わった場合は不具合）
+- 既存の34ケースは描画入力に `sampleRate`・`fftSize` を渡していないため、写像が働かず**従来どおり線形**で描かれる（§5 の条件）。したがって既存の基準値は**一切更新しない**。これがそのまま線形の回帰の証明になる
+- 対数軸のケースを6つ追加する（`bar-log`・`bar-log-mirror-h`・`bar-log-layers4`・`radial-log`・`terrain-log`・`tunnel-log`。入力に 48kHz・2048 を渡す）。基準値は `--update-golden` で生成し、**新しいケースの値だけ**を `tests/golden/frames.json` に取り込む（`--update-golden` は全ケースを書き直すため、既存ケースの値は元に戻す）
+- 2026-11-15 の実装時、変更前のコードで再生成しても `bar-layers4` が最大1階調ずれた（環境差）。既存値を残す理由の一つ
 
 ---
 

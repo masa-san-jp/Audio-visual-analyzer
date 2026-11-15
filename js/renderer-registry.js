@@ -48,7 +48,7 @@ const RENDERER_REGISTRY = {
   spectrogram: {
     label: 'スペクトログラム（滝）', group: '時間軸', stateful: true,
     create: (canvas) => new SpectrogramRenderer(canvas),
-    capabilities: { methods: [], layers: false, selfClear: true, sliders: ['history'] },
+    capabilities: { methods: [], layers: false, selfClear: true, sliders: ['history'], ownFreqAxis: true, noFreqAxis: true },
   },
   terrain: {
     label: '3D地形', group: '時間軸', stateful: true,
@@ -65,7 +65,7 @@ const RENDERER_REGISTRY = {
   lissajous: {
     label: 'オシロスコープ', group: '幾何', stateful: true,
     create: (canvas) => new LissajousRenderer(canvas),
-    capabilities: { methods: ['line', 'dot'], layers: false, sliders: [] },
+    capabilities: { methods: ['line', 'dot'], layers: false, sliders: [], noFreqAxis: true },
   },
 
   // ── GPU（WebGL2・WorldBridge が描画する。FramePipeline は描画せず、create も持たない） ──

@@ -1,5 +1,10 @@
 // 目的 — UI とメディア読込後のソングマップ解析・自動演出の接続 — doc/20260928-plan-phase18-song-map-and-auto-director.md §2・§5・§6.8・§7
 // IMP-01: 自動で表示を変えたときと、録画できないときの理由（doc/20261115-improvement-spec-adoption-review.md §2.2）
+// レイヤー分割の値を 'log' | 'linear' | 'mel' に正規化する（不正値は既定の 'log'。IMP-02）
+function normalizeLayerSplit(v) {
+  return v === 'linear' || v === 'mel' ? v : 'log';
+}
+
 const UI_NOTICE_GPU_MIC = 'マイク入力中は GPU タイプを使えないため、「{type}」で表示しています（GPU タイプは曲ファイル全体の解析が必要です）';
 const UI_NOTICE_GPU_UNAVAILABLE = 'GPU タイプを使えないため、「{type}」で表示しています';
 const UI_REC_GPU_WAIT = 'GPU タイプは曲の解析が終わるまで録画できません';
@@ -907,7 +912,9 @@ class UIController {
     const chkAutoGain = document.getElementById('chk-auto-gain');
     if (chkAutoGain) chkAutoGain.checked = s.autoGain === true;
     const layerSplitSelect = document.getElementById('layer-split');
-    if (layerSplitSelect) layerSplitSelect.value = s.layerSplit === 'mel' ? 'mel' : 'linear';
+    if (layerSplitSelect) layerSplitSelect.value = normalizeLayerSplit(s.layerSplit);
+    const freqAxisSelect = document.getElementById('freq-axis');
+    if (freqAxisSelect) freqAxisSelect.value = s.freqAxis === 'linear' ? 'linear' : 'log';
 
     const chk = document.getElementById('chk-hue-continuous');
     chk.checked = s.hueContinuousMode;
@@ -1108,9 +1115,15 @@ class UIController {
       this.visualizer.settings.autoGain = chkAutoGain.checked;
     });
     const layerSplitSelect = document.getElementById('layer-split');
-    layerSplitSelect.value = this.visualizer.settings.layerSplit === 'mel' ? 'mel' : 'linear';
+    layerSplitSelect.value = normalizeLayerSplit(this.visualizer.settings.layerSplit);
     layerSplitSelect.addEventListener('change', () => {
-      this.visualizer.settings.layerSplit = layerSplitSelect.value === 'mel' ? 'mel' : 'linear';
+      this.visualizer.settings.layerSplit = normalizeLayerSplit(layerSplitSelect.value);
+    });
+    // IMP-02: 周波数軸（アナライザーランダムは変更しない）
+    const freqAxisSelect = document.getElementById('freq-axis');
+    freqAxisSelect.value = this.visualizer.settings.freqAxis === 'linear' ? 'linear' : 'log';
+    freqAxisSelect.addEventListener('change', () => {
+      this.visualizer.settings.freqAxis = freqAxisSelect.value === 'linear' ? 'linear' : 'log';
     });
 
     document.getElementById('btn-analyzer-randomize').addEventListener('click', () => {
@@ -1295,6 +1308,8 @@ class UIController {
     }
     document.getElementById('layer-settings').style.display = caps.layers ? '' : 'none';
     this._updateLayerSplitVisibility();
+    // 周波数軸: 独自の軸を持つ・周波数を使わないタイプでは隠す（値は保持。IMP-02）
+    show('group-freq-axis', !caps.noFreqAxis);
 
     // 追加スライダー（sliders 宣言 + physics）
     const sliders = caps.sliders || [];
