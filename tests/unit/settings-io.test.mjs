@@ -35,7 +35,8 @@ test('U15-01 settings-io: 不正入力は例外を出さず既定値へフォー
 test('U15-01 settings-io: Phase 16 の autoGain・layerSplit の往復と、旧形式・型不一致での既定値フォールバック', () => {
   const defaults = createDefaultSettings();
   assert.equal(defaults.autoGain, false);
-  assert.equal(defaults.layerSplit, 'linear');
+  assert.equal(defaults.layerSplit, 'log'); // IMP-02 で既定を 'log' に変更
+  assert.equal(defaults.freqAxis, 'log');
 
   const custom = { ...defaults, autoGain: true, layerSplit: 'mel' };
   const restored = deserializeSettings(serializeSettings(custom));
@@ -47,15 +48,15 @@ test('U15-01 settings-io: Phase 16 の autoGain・layerSplit の往復と、旧�
   delete legacy.settings.layerSplit;
   const fromLegacy = deserializeSettings(legacy);
   assert.equal(fromLegacy.autoGain, false);
-  assert.equal(fromLegacy.layerSplit, 'linear');
+  assert.equal(fromLegacy.layerSplit, 'log');
 
   const wrongTypes = deserializeSettings({ settings: { autoGain: 'yes', layerSplit: 5 } });
   assert.equal(wrongTypes.autoGain, false);
-  assert.equal(wrongTypes.layerSplit, 'linear');
+  assert.equal(wrongTypes.layerSplit, 'log');
 });
 
-test('U15-01 T18-11: 削除10タイプは JSON・保存プリセットで bar に戻り、演出プールから除外される', async t => {
-  const removed = ['particles', 'ripple', 'flow', 'metaball', 'flower', 'voronoi', 'bar3d', 'ring3d', 'g-fluid', 'g-attractor'];
+test('U15-01 T18-11/IMP-01: 削除12タイプは JSON・保存プリセットで bar に戻り、演出プールから除外される', async t => {
+  const removed = ['particles', 'ripple', 'flow', 'metaball', 'flower', 'voronoi', 'bar3d', 'ring3d', 'g-fluid', 'g-attractor', 'g-rings', 'g-galaxy'];
   const remaining = ['bar', 'radial', 'spectrogram', 'terrain', 'tunnel', 'lissajous'];
   const storage = new Map();
   const { get: lookup } = loadClassic(['js/settings.js', 'js/settings-io.js', 'js/ui-controller.js'], {

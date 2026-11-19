@@ -1,4 +1,4 @@
-// 目的 — FramePipeline の描画を34ケースで固定し、ゴールデン基準値と比較する（計画書 §3.6・§3.6.4 pipeline ドライバ）。
+// 目的 — FramePipeline の描画を40ケース（IMP-02 で対数軸6ケースを追加）で固定し、ゴールデン基準値と比較する（計画書 §3.6・§3.6.4 pipeline ドライバ）。
 // @page harness
 
 (function (global) {
@@ -95,6 +95,8 @@
     var input = {
       freq: freq, time: time, getLayer: null,
       dtMs: 16.7, nowMs: 0, historyFps: 60, drawBackground: null,
+      // IMP-02: 対数軸のケースだけ sampleRate / fftSize を渡す（未指定のケースは線形の回帰）
+      sampleRate: goldenCase.sampleRate, fftSize: goldenCase.fftSize,
     };
     var samples = {};
     try {
@@ -168,8 +170,8 @@
     return frames;
   }
 
-  avzTest('B15-04', 'ゴールデン全34ケースが基準値と一致する', async function () {
-    avzAssert.equal(goldenCases.length, 34, '基本24 + 追加10ケース');
+  avzTest('B15-04', 'ゴールデン全40ケースが基準値と一致する', async function () {
+    avzAssert.equal(goldenCases.length, 40, '基本24 + 追加10 + 対数軸6ケース');
     var renderedCases = {};
     var allFailures = [];
     var diffs = [];

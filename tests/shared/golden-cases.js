@@ -1,4 +1,4 @@
-// 目的 — ゴールデンフレームの34ケースを決定的に定義する（計画書 §3.6.1）。
+// 目的 — ゴールデンフレームの40ケースを決定的に定義する（計画書 §3.6.1。IMP-02 で対数軸の6ケースを追加）。
 
 const GOLDEN_ANALYZER_TYPES = [
   'bar', 'radial', 'spectrogram', 'terrain', 'tunnel',
@@ -71,6 +71,18 @@ function createGoldenCases() {
   cases.push(_goldenExtraCase('radial-huecont', {
     analyzerType: 'radial', hueContinuousMode: true, hueContinuousSpeed: 2,
   }));
+  // IMP-02: 周波数軸の対数化。sampleRate / fftSize を渡すと写像が働く（渡さない上記34ケースは従来どおり線形）
+  const logCase = (id, overrides) => Object.assign(_goldenExtraCase(id, overrides), { sampleRate: 48000, fftSize: 2048 });
+  cases.push(logCase('bar-log', { analyzerType: 'bar' }));
+  cases.push(logCase('bar-log-mirror-h', { analyzerType: 'bar', barDisplayMode: 'mirror-horizontal' }));
+  cases.push(logCase('bar-log-layers4', {
+    analyzerType: 'bar',
+    layerCount: 4,
+    layers: createDefaultSettings().layers.map((layer) => ({ ...layer, blendMode: 'lighter' })),
+  }));
+  cases.push(logCase('radial-log', { analyzerType: 'radial' }));
+  cases.push(logCase('terrain-log', { analyzerType: 'terrain' }));
+  cases.push(logCase('tunnel-log', { analyzerType: 'tunnel' }));
   return cases;
 }
 

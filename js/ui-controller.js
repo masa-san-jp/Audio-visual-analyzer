@@ -1,4 +1,25 @@
 // 目的 — UI とメディア読込後のソングマップ解析・自動演出の接続 — doc/20260928-plan-phase18-song-map-and-auto-director.md §2・§5・§6.8・§7
+// IMP-01: 自動で表示を変えたときと、録画できないときの理由（doc/20261115-improvement-spec-adoption-review.md §2.2）
+// レイヤー分割の値を 'log' | 'linear' | 'mel' に正規化する（不正値は既定の 'log'。IMP-02）
+function normalizeLayerSplit(v) {
+  return v === 'linear' || v === 'mel' ? v : 'log';
+}
+
+// IMP-04: capabilities.inactive のキーと、隠す操作（その要素を含む label）の対応
+const UI_SETTING_CONTROLS = [
+  ['barWidth', 'slider-bar-width'],
+  ['density', 'slider-density'],
+  ['baseOffset', 'slider-base-offset'],
+  ['afterimageIntensity', 'slider-afterimage'],
+  ['smoothing', 'slider-smoothing'],
+  ['autoGain', 'chk-auto-gain'],
+];
+
+const UI_NOTICE_GPU_MIC = 'マイク入力中は GPU タイプを使えないため、「{type}」で表示しています（GPU タイプは曲ファイル全体の解析が必要です）';
+const UI_NOTICE_GPU_UNAVAILABLE = 'GPU タイプを使えないため、「{type}」で表示しています';
+const UI_REC_GPU_WAIT = 'GPU タイプは曲の解析が終わるまで録画できません';
+const UI_REC_GPU_FAILED = 'GPU 解析に失敗したため、GPU タイプでは録画できません';
+
 class UIController {
   constructor(visualizer, mediaManager, audioEngine, recorder, micInput) {
     this.visualizer = visualizer;
@@ -29,6 +50,8 @@ class UIController {
   }
 
   init() {
+    // GPU の準備状態が変わったら録画ボタンを更新する（IMP-01: 解析前の録画を防ぐ）
+    if (this.worldBridge) this.worldBridge.onStateChange = () => this._updateRecButtons();
     this._initMode();
     this._initFile();
     this._initSlots();
@@ -438,16 +461,14 @@ class UIController {
 
   // 動画合成セクションは、ライブ再生用の動画読込中またはオフライン書き出し対象が
   // 動画ファイルの場合に表示する（Phase 10.2: オフライン書き出しでも合成が効くため）。
-  // どちらの対象もない場合は設定を自動オフにする
+  // 自分で全面を塗るタイプ（スペクトログラム）では効かないので隠す。
+  // どちらの場合も設定値は保持する（対象がなければ描かれないだけ。IMP-04 決定4）
   _updateVideoCompositeVisibility() {
     const hasTarget = !!this.visualizer.videoElement || !!this._offlineFileIsVideo;
+    const caps = getRendererEntry(this.visualizer.settings.analyzerType).capabilities || {};
+    const usable = (caps.inactive || []).indexOf('videoComposite') === -1;
     const section = document.getElementById('video-composite-controls');
-    if (section) section.style.display = hasTarget ? '' : 'none';
-    if (!hasTarget) {
-      this.visualizer.settings.videoCompositeEnabled = false;
-      const chk = document.getElementById('chk-video-composite');
-      if (chk) chk.checked = false;
-    }
+    if (section) section.style.display = hasTarget && usable ? '' : 'none';
   }
 
   // ── 再生制御 ──
@@ -563,7 +584,7 @@ class UIController {
     // 録画開始: 録画キャプチャの開始を待ってから再生を始める（A/V同期のため）
     // マイク入力中は「再生」の概念がないため、そのまま録画キャプチャのみ開始する。
     btnStart.addEventListener('click', async () => {
-      if (this.recorder.state !== 'idle') return;
+      if (this.recorder.state !== 'idle' || this._gpuRecordBlockReason()) return;
       const usingMic = this.micInput.active;
       if (!usingMic) this.mediaManager.stop();
       this.visualizer.start();
@@ -623,7 +644,8 @@ class UIController {
     const btnReset = document.getElementById('btn-rec-reset');
     const statusEl = document.getElementById('rec-status');
 
-    btnStart.disabled = !loaded || state !== 'idle';
+    const gpuWait = this._gpuRecordBlockReason();
+    btnStart.disabled = !loaded || state !== 'idle' || !!gpuWait;
     btnStop.disabled  = state !== 'recording';
     btnSave.disabled  = state !== 'recorded';
     btnReset.disabled = state === 'idle';
@@ -638,9 +660,16 @@ class UIController {
       statusEl.textContent = '録画完了 — 保存可能です';
       statusEl.classList.remove('recording');
     } else {
-      statusEl.textContent = '待機中';
+      statusEl.textContent = gpuWait && loaded ? gpuWait : '待機中';
       statusEl.classList.remove('recording');
     }
+  }
+
+  // GPU タイプ選択中で準備ができていないときは録画できない理由を返す（IMP-01。準備前に録ると止まった画面が録られるため）
+  _gpuRecordBlockReason() {
+    const bridge = this.worldBridge;
+    if (!bridge || !this._isGpuType(this.visualizer.settings.analyzerType) || bridge.ready) return '';
+    return bridge.error ? UI_REC_GPU_FAILED : UI_REC_GPU_WAIT;
   }
 
   // ── オフライン書き出し ──
@@ -891,7 +920,9 @@ class UIController {
     const chkAutoGain = document.getElementById('chk-auto-gain');
     if (chkAutoGain) chkAutoGain.checked = s.autoGain === true;
     const layerSplitSelect = document.getElementById('layer-split');
-    if (layerSplitSelect) layerSplitSelect.value = s.layerSplit === 'mel' ? 'mel' : 'linear';
+    if (layerSplitSelect) layerSplitSelect.value = normalizeLayerSplit(s.layerSplit);
+    const freqAxisSelect = document.getElementById('freq-axis');
+    if (freqAxisSelect) freqAxisSelect.value = s.freqAxis === 'linear' ? 'linear' : 'log';
 
     const chk = document.getElementById('chk-hue-continuous');
     chk.checked = s.hueContinuousMode;
@@ -1057,12 +1088,14 @@ class UIController {
     analyzerTypeSelect.value = this.visualizer.settings.analyzerType;
 
     analyzerTypeSelect.addEventListener('change', () => {
+      this._setAnalyzerNotice('');
       this.visualizer.settings.analyzerType = analyzerTypeSelect.value;
       this._applyCapabilities(analyzerTypeSelect.value);
     });
 
     expressionSelect.addEventListener('change', () => {
       this.visualizer.settings.expressionMethod = expressionSelect.value;
+      this._updatePhysicsVisibility();
     });
 
     barModeSelect.addEventListener('change', () => {
@@ -1091,9 +1124,15 @@ class UIController {
       this.visualizer.settings.autoGain = chkAutoGain.checked;
     });
     const layerSplitSelect = document.getElementById('layer-split');
-    layerSplitSelect.value = this.visualizer.settings.layerSplit === 'mel' ? 'mel' : 'linear';
+    layerSplitSelect.value = normalizeLayerSplit(this.visualizer.settings.layerSplit);
     layerSplitSelect.addEventListener('change', () => {
-      this.visualizer.settings.layerSplit = layerSplitSelect.value === 'mel' ? 'mel' : 'linear';
+      this.visualizer.settings.layerSplit = normalizeLayerSplit(layerSplitSelect.value);
+    });
+    // IMP-02: 周波数軸（アナライザーランダムは変更しない）
+    const freqAxisSelect = document.getElementById('freq-axis');
+    freqAxisSelect.value = this.visualizer.settings.freqAxis === 'linear' ? 'linear' : 'log';
+    freqAxisSelect.addEventListener('change', () => {
+      this.visualizer.settings.freqAxis = freqAxisSelect.value === 'linear' ? 'linear' : 'log';
     });
 
     document.getElementById('btn-analyzer-randomize').addEventListener('click', () => {
@@ -1187,7 +1226,7 @@ class UIController {
     const bridge = this.worldBridge;
     if (gpu && (this.micInput.active || !bridge || !bridge.selectType(type))) {
       const unavailable = !!bridge && bridge.available === false;
-      this._revertTo2D();
+      this._revertTo2D(this.micInput.active ? UI_NOTICE_GPU_MIC : UI_NOTICE_GPU_UNAVAILABLE);
       this._updateGpuOptions();
       if (unavailable && bridge.statusEl) bridge._setText(bridge.statusEl, 'この環境では GPU タイプを利用できません');
       return false;
@@ -1202,20 +1241,31 @@ class UIController {
     }
     // ディレクター表示は GPU 状態が変わったときだけ更新する（2D のみの利用では従来どおり）
     if (gpu !== !!this._gpuShown) { this._gpuShown = gpu; this._updateDirectorUI(); }
+    this._updateRecButtons();
     return gpu;
   }
 
   // 直前の 2D タイプへ戻す（設定・セレクト・表示を揃える）
-  _revertTo2D() {
+  // reason: 戻した理由の文（タイプ選択の下に表示する。IMP-01）
+  _revertTo2D(reason) {
     const back = this._last2DType || 'bar';
     this.visualizer.settings.analyzerType = back;
     const select = document.getElementById('analyzer-type');
     if (select) select.value = back;
     this._applyCapabilities(back);
+    if (reason) this._setAnalyzerNotice(reason.replace('{type}', getRendererEntry(back).label));
+  }
+
+  // タイプ選択の下の注記（自動で切り替えた理由）。空文字で消す
+  _setAnalyzerNotice(text) {
+    const el = document.getElementById('analyzer-notice');
+    if (!el) return;
+    el.textContent = text || '';
+    el.hidden = !text;
   }
 
   _leaveGpuForMic() {
-    if (this._isGpuType(this.visualizer.settings.analyzerType)) this._revertTo2D();
+    if (this._isGpuType(this.visualizer.settings.analyzerType)) this._revertTo2D(UI_NOTICE_GPU_MIC);
     this._updateGpuOptions();
   }
 
@@ -1251,10 +1301,8 @@ class UIController {
       Array.from(exprSelect.options).forEach(opt => {
         opt.hidden = methods.indexOf(opt.value) === -1;
       });
-      if (methods.indexOf(this.visualizer.settings.expressionMethod) === -1) {
-        this.visualizer.settings.expressionMethod = methods[0];
-        exprSelect.value = methods[0];
-      }
+      // 対応しない保存値は書き換えず、表示だけ有効な値にする（IMP-04 決定4）
+      exprSelect.value = effectiveExpressionMethod(type, this.visualizer.settings.expressionMethod);
     }
 
     // 表示モード（ミラー）
@@ -1262,18 +1310,35 @@ class UIController {
 
     // レイヤー数
     show('group-layers', !!caps.layers);
-    if (!caps.layers) {
-      this.visualizer.settings.layerCount = 1;
-    }
     document.getElementById('layer-settings').style.display = caps.layers ? '' : 'none';
     this._updateLayerSplitVisibility();
+    // 周波数軸: 独自の軸を持つ・周波数を使わないタイプでは隠す（値は保持。IMP-02）
+    show('group-freq-axis', !caps.noFreqAxis);
 
     // 追加スライダー（sliders 宣言 + physics）
     const sliders = caps.sliders || [];
     show('group-history',   sliders.indexOf('history') !== -1);
     show('group-motion',    sliders.indexOf('motion') !== -1);
     show('group-angle',     sliders.indexOf('angle') !== -1);
-    show('group-physics',   !!caps.physics);
+    this._updatePhysicsVisibility();
+
+    // タイプが使わない設定（capabilities.inactive）を隠す。値は保持する（IMP-04）
+    const inactive = caps.inactive || [];
+    for (const [key, id] of UI_SETTING_CONTROLS) {
+      const el = document.getElementById(id);
+      const row = el && typeof el.closest === 'function' ? el.closest('label') : null;
+      if (row) row.style.display = inactive.indexOf(key) === -1 ? '' : 'none';
+    }
+    this._updateVideoCompositeVisibility();
+  }
+
+  // 粘性揺らぎは physics 対応タイプで、表現方法が波形線・点のときだけ効く（IMP-04）
+  _updatePhysicsVisibility() {
+    const type = this.visualizer.settings.analyzerType;
+    const caps = getRendererEntry(type).capabilities || {};
+    const method = effectiveExpressionMethod(type, this.visualizer.settings.expressionMethod);
+    const group = document.getElementById('group-physics');
+    if (group) group.style.display = caps.physics && (method === 'line' || method === 'dot') ? '' : 'none';
   }
 
   // レイヤー分割セレクトは、layers 対応タイプかつ layerCount >= 2 のときだけ表示（計画書 §7）

@@ -5,7 +5,7 @@ const SETTINGS_IO_VERSION = 1;
 const SETTINGS_IO_PRESET_KEY = 'avz.presets.v1';
 
 // 削除したタイプ。旧保存データの互換判定にのみ使う。
-const REMOVED_ANALYZER_TYPES = new Set(['particles', 'ripple', 'flow', 'metaball', 'flower', 'voronoi', 'bar3d', 'ring3d', 'g-fluid', 'g-attractor']);
+const REMOVED_ANALYZER_TYPES = new Set(['particles', 'ripple', 'flow', 'metaball', 'flower', 'voronoi', 'bar3d', 'ring3d', 'g-fluid', 'g-attractor', 'g-rings', 'g-galaxy']);
 
 function serializeSettings(settings) {
   return {

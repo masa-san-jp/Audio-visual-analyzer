@@ -90,18 +90,24 @@ let _mfsLayerStartBin = 0;
 function _mfsMel(f) { return 2595 * Math.log10(1 + f / 700); }
 function _mfsMelInv(m) { return 700 * (Math.pow(10, m / 2595) - 1); }
 
-// メル等分の境界 j（0..count）を freq スライス内のビン番号へ。[0, sliceLen] にクランプ
-function _mfsMelBoundary(j, count, sliceLen, sampleRate, fftSize, startBin) {
-  const m0 = _mfsMel(MFS_CONST.FREQ_MIN_HZ);
-  const m1 = _mfsMel(MFS_CONST.FREQ_MAX_HZ);
-  const f = _mfsMelInv(m0 + j * (m1 - m0) / count);
+// メル等分（mode='mel'）またはオクターブ等分（mode='log'。IMP-02）の境界 j（0..count）を
+// freq スライス内のビン番号へ。[0, sliceLen] にクランプ
+function _mfsMelBoundary(j, count, sliceLen, sampleRate, fftSize, startBin, mode) {
+  let f;
+  if (mode === 'log') {
+    f = axisToFreq(j / count, FREQ_AXIS_CONST.F_MIN_HZ, freqAxisMaxHz(sampleRate), 'log');
+  } else {
+    const m0 = _mfsMel(MFS_CONST.FREQ_MIN_HZ);
+    const m1 = _mfsMel(MFS_CONST.FREQ_MAX_HZ);
+    f = _mfsMelInv(m0 + j * (m1 - m0) / count);
+  }
   const bin = Math.round(f * fftSize / sampleRate) - startBin;
   return Math.min(sliceLen, Math.max(0, bin));
 }
 
 // out: 長さ2の Int32Array。[start, end)（freq スライス内の添字）を書き込んで out を返す
 function computeLayerRange(i, count, sliceLen, sampleRate, fftSize, mode, out) {
-  if (mode !== 'mel') {
+  if (mode !== 'mel' && mode !== 'log') {
     out[0] = Math.floor(i * sliceLen / count);
     out[1] = Math.floor((i + 1) * sliceLen / count);
     return out;
@@ -118,7 +124,7 @@ function computeLayerRange(i, count, sliceLen, sampleRate, fftSize, mode, out) {
   let prev = 0;
   let cur = 0;
   for (let j = 1; j <= i + 1; j++) {
-    cur = (j === count) ? sliceLen : _mfsMelBoundary(j, count, sliceLen, sampleRate, fftSize, startBin);
+    cur = (j === count) ? sliceLen : _mfsMelBoundary(j, count, sliceLen, sampleRate, fftSize, startBin, mode);
     if (cur < prev + 1) cur = prev + 1;
     const cap = sliceLen - (count - j);
     if (j < count && cap >= j && cur > cap) cur = cap;

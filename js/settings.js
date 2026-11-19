@@ -36,7 +36,8 @@ const DEFAULT_SETTINGS = {
   bgColor: '#000',             // '#000' | '#fff'
   // Phase 16: 音楽特徴ストリーム関連 — doc/20260928-plan-phase16-music-feature-stream.md §7
   autoGain: false,               // 音量自動補正（false で従来どおり）
-  layerSplit: 'linear',          // レイヤー分割方式 'linear'（均等）| 'mel'（聴感）
+  layerSplit: 'log',             // レイヤー分割方式 'log'（オクターブ等分。IMP-02 で既定）| 'linear'（均等）| 'mel'（聴感）
+  freqAxis: 'log',               // 周波数軸 'log'（1オクターブの幅が一定。既定）| 'linear'（従来）— doc/20261115-plan-imp02-log-frequency-axis.md
   // Phase 18: 自動演出（既存の見た目を維持するため既定 OFF）
   directorEnabled: false,
   directorIntensity: 'standard',
