@@ -1,4 +1,4 @@
-// 目的 — ゴールデンフレームの40ケースを決定的に定義する（計画書 §3.6.1。IMP-02 で対数軸の6ケースを追加）。
+// 目的 — ゴールデンフレームの46ケースを決定的に定義する（計画書 §3.6.1。IMP-02 で対数軸6ケース、Phase 21 で縦型6ケースを追加）。
 
 const GOLDEN_ANALYZER_TYPES = [
   'bar', 'radial', 'spectrogram', 'terrain', 'tunnel',
@@ -83,6 +83,8 @@ function createGoldenCases() {
   cases.push(logCase('radial-log', { analyzerType: 'radial' }));
   cases.push(logCase('terrain-log', { analyzerType: 'terrain' }));
   cases.push(logCase('tunnel-log', { analyzerType: 'tunnel' }));
+  // Phase 21: 縦型 9:16（90×160、黒背景、全6タイプ）
+  for (const type of GOLDEN_ANALYZER_TYPES) cases.push(_goldenBasicCase(type, '#000', 90, 160, '916'));
   return cases;
 }
 

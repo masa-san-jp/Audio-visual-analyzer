@@ -1,4 +1,4 @@
-// 目的 — FramePipeline の描画を40ケース（IMP-02 で対数軸6ケースを追加）で固定し、ゴールデン基準値と比較する（計画書 §3.6・§3.6.4 pipeline ドライバ）。
+// 目的 — FramePipeline の描画を46ケース（IMP-02 で対数軸6・Phase 21 で縦型6ケースを追加）で固定し、ゴールデン基準値と比較する（計画書 §3.6・§3.6.4 pipeline ドライバ）。
 // @page harness
 
 (function (global) {
@@ -170,8 +170,8 @@
     return frames;
   }
 
-  avzTest('B15-04', 'ゴールデン全40ケースが基準値と一致する', async function () {
-    avzAssert.equal(goldenCases.length, 40, '基本24 + 追加10 + 対数軸6ケース');
+  avzTest('B15-04', 'ゴールデン全46ケースが基準値と一致する', async function () {
+    avzAssert.equal(goldenCases.length, 46, '基本24 + 追加10 + 対数軸6 + 縦型6ケース');
     var renderedCases = {};
     var allFailures = [];
     var diffs = [];

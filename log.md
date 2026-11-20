@@ -1,3 +1,26 @@
+## 2026-11-20 — [Phase 17・21] 音に連動と縦型 9:16
+
+### 作業内容
+- `doc/20261120-plan-phase17-21-modulation-and-portrait.md`: 計画書を追加（オーナー決定: 両方作る）
+- Phase 17 音に連動
+  - `js/modulation.js`（新規）: 連動元8種（キック・スネア・ハイハット・拍・小節の頭・音量・音の明るさ・音の広がり）、連動先9種、`applyModulation`・`normalizeModRoutes`
+  - `js/frame-pipeline.js`: 描画の先頭で結線を適用（保存値は変えない。ライブ・書き出し・自動演出で共通）
+  - `js/settings.js`・`js/settings-io.js`: 設定 `modRoutes`（最大4本、既定は空）。保存・読込で正規化
+  - `index.html`・`js/ui-controller.js`・`style.css`: セクション「音に連動」（4行、おすすめ、すべて解除）
+- Phase 21 縦型 9:16
+  - `index.html`・`js/ui-controller.js`: 「9:16」ボタン
+  - `js/visualizer-core.js`: 縦型の表示サイズ
+  - `js/offline-exporter.js`・`js/world/world-bridge.js`: 書き出し 1080×1920
+- テスト: `tests/unit/modulation.test.mjs`（P17-U01〜U05）、`tests/browser/p17.test.js`（P17-01・02）、`tests/browser/p21.test.js`（P21-01〜03）、ゴールデン縦型6ケース（既存40ケースは変更なし）
+
+### 検証
+- `node tests/run.mjs`（遅いテストを含む全件）: 311件中 297成功・0失敗・14スキップ（GPU なし環境の13件と、意図的な失敗確認の U15-00）。追加分はすべて成功、既存ゴールデン40ケースは基準値不変
+- 9:16 で書き出した動画が 1080×1920・61フレームであることを P21-03 で確認。実 GPU 環境での GPU タイプの縦型は未確認
+
+### spec.md 変更
+- v2.32: §11.2・§25（9:16 実装）、§1.1・§14.8 の書き出し解像度、§12.7「音に連動」を新設、§20 のフェーズ状態
+- 理由: Phase 17・21 の実装
+
 ## 2026-11-15 — [IMP-03] 不安定なテストの修正と中止後の再実行テスト
 
 ### 作業内容

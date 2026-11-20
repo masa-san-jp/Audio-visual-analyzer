@@ -13,6 +13,7 @@ function serializeSettings(settings) {
     settings: {
       ...settings,
       layers: settings.layers.map(l => ({ ...l })),
+      modRoutes: (settings.modRoutes || []).map(r => ({ ...r })),
     },
   };
 }
@@ -51,6 +52,8 @@ function deserializeSettings(json) {
     });
   }
   if (REMOVED_ANALYZER_TYPES.has(out.analyzerType)) out.analyzerType = 'bar';
+  // Phase 17: 音に連動の結線（不正な要素は除く。js/modulation.js が無い環境では空）
+  out.modRoutes = typeof normalizeModRoutes === 'function' ? normalizeModRoutes(src.modRoutes) : [];
   return out;
 }
 

@@ -53,6 +53,13 @@ class VisualizerCore {
       const fit = byWidth.h <= ah ? byWidth : byHeight;
       this.canvas.width = fit.w;
       this.canvas.height = fit.h;
+    } else if (this.settings.aspectRatio === '9:16') {
+      // 縦型（Phase 21）: 高さに合わせ、入らなければ幅に合わせる
+      const byHeight = { w: Math.round(ah * 9 / 16), h: ah };
+      const byWidth = { w: aw, h: Math.round(aw * 16 / 9) };
+      const fit = byHeight.w <= aw ? byHeight : byWidth;
+      this.canvas.width = fit.w;
+      this.canvas.height = fit.h;
     } else {
       const size = Math.min(aw, ah);
       this.canvas.width = size;
