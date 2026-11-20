@@ -32,6 +32,7 @@ const OFFLINE_ANALYSIS_BLOCK_SIZE = 2048;
 const OFFLINE_EXPORT_RESOLUTIONS = {
   '16:9': { width: 1920, height: 1080 },
   '1:1': { width: 1080, height: 1080 },
+  '9:16': { width: 1080, height: 1920 },   // Phase 21: 縦型（ショート動画向け）
 };
 // MP4（H.264/AAC）を優先し、非対応環境は WebM（VP9/VP8 + Opus）へフォールバックする
 const OFFLINE_EXPORT_CONTAINER_CANDIDATES = [
@@ -76,7 +77,7 @@ class OfflineExporter {
     this.blob = null;
     const fps = (opts && opts.fps) || 30;
     this._quality = (opts && OFFLINE_EXPORT_QUALITY_FACTORS[opts.quality]) ? opts.quality : 'standard';
-    const aspectRatio = settings.aspectRatio === '1:1' ? '1:1' : '16:9';
+    const aspectRatio = OFFLINE_EXPORT_RESOLUTIONS[settings.aspectRatio] ? settings.aspectRatio : '16:9';
     const res = OFFLINE_EXPORT_RESOLUTIONS[aspectRatio];
 
     try {

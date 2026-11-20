@@ -5,6 +5,9 @@ function normalizeLayerSplit(v) {
   return v === 'linear' || v === 'mel' ? v : 'log';
 }
 
+// 表示比率のボタンと値（Phase 21 で 9:16 を追加）
+const UI_ASPECT_BUTTONS = [['btn-16-9', '16:9'], ['btn-1-1', '1:1'], ['btn-9-16', '9:16']];
+
 // IMP-04: capabilities.inactive のキーと、隠す操作（その要素を含む label）の対応
 const UI_SETTING_CONTROLS = [
   ['barWidth', 'slider-bar-width'],
@@ -931,10 +934,10 @@ class UIController {
     document.getElementById('hue-speed-group').style.display = s.hueContinuousMode ? '' : 'none';
     this._setSlider('hue-speed', 'val-hue-speed', s.hueContinuousSpeed, 1);
 
-    const btn169 = document.getElementById('btn-16-9');
-    const btn11 = document.getElementById('btn-1-1');
-    btn169.classList.toggle('active', s.aspectRatio === '16:9');
-    btn11.classList.toggle('active', s.aspectRatio === '1:1');
+    for (const [id, ratio] of UI_ASPECT_BUTTONS) {
+      const btn = document.getElementById(id);
+      if (btn) btn.classList.toggle('active', s.aspectRatio === ratio);
+    }
     const btnBlack = document.getElementById('btn-bg-black');
     const btnWhite = document.getElementById('btn-bg-white');
     btnBlack.classList.toggle('active', s.bgColor !== '#fff');
@@ -1041,22 +1044,16 @@ class UIController {
   // ── 表示比率 ──
 
   _initAspectRatio() {
-    const btn169 = document.getElementById('btn-16-9');
-    const btn11 = document.getElementById('btn-1-1');
-
-    btn169.addEventListener('click', () => {
-      this.visualizer.settings.aspectRatio = '16:9';
-      this.visualizer.resize();
-      btn169.classList.add('active');
-      btn11.classList.remove('active');
-    });
-
-    btn11.addEventListener('click', () => {
-      this.visualizer.settings.aspectRatio = '1:1';
-      this.visualizer.resize();
-      btn169.classList.remove('active');
-      btn11.classList.add('active');
-    });
+    // 16:9 / 1:1 / 9:16（9:16 は Phase 21）
+    for (const [id, ratio] of UI_ASPECT_BUTTONS) {
+      document.getElementById(id).addEventListener('click', () => {
+        this.visualizer.settings.aspectRatio = ratio;
+        this.visualizer.resize();
+        for (const [otherId, otherRatio] of UI_ASPECT_BUTTONS) {
+          document.getElementById(otherId).classList.toggle('active', otherRatio === ratio);
+        }
+      });
+    }
 
     // 背景色
     const btnBlack = document.getElementById('btn-bg-black');
