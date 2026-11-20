@@ -81,6 +81,11 @@ class FramePipeline {
 
   // 1フレーム描画（処理順は計画書 §4.3。現行コードと同一の順序）
   render(input, settings) {
+    // Phase 17: 音に連動（結線が無い・特徴が無いときは settings のまま）。保存値は変えず、このフレームの描画だけに使う
+    if (typeof applyModulation === 'function') {
+      if (!this._modBuf) this._modBuf = {};
+      settings = applyModulation(settings, settings.modRoutes, input.features, this._modBuf);
+    }
     this._input = input;
     this._settings = settings;
 

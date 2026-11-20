@@ -66,6 +66,7 @@ class UIController {
     this._initAnalyzer();
     this._initColorControls();
     this._initShapeControls();
+    this._initModulation();
     this._initDirector();
     this._initKeyboardShortcuts();
     window.addEventListener('resize', () => this.visualizer.resize());
@@ -923,6 +924,7 @@ class UIController {
     if (layerSplitSelect) layerSplitSelect.value = normalizeLayerSplit(s.layerSplit);
     const freqAxisSelect = document.getElementById('freq-axis');
     if (freqAxisSelect) freqAxisSelect.value = s.freqAxis === 'linear' ? 'linear' : 'log';
+    this._syncModulationUI();
 
     const chk = document.getElementById('chk-hue-continuous');
     chk.checked = s.hueContinuousMode;
@@ -1444,6 +1446,77 @@ class UIController {
   }
 
   // ── 感度・形状 ──
+
+  // ── Phase 17: 音に連動（doc/20261120-plan-phase17-21-modulation-and-portrait.md §2） ──
+  // 4 行の固定 UI。連動元が「なし」の行は結線に含めない
+  _initModulation() {
+    const container = document.getElementById('mod-routes');
+    if (!container) return;
+    const opt = (value, label) => { const o = document.createElement('option'); o.value = value; o.textContent = label; return o; };
+    this._modRows = [];
+    for (let i = 0; i < MOD_MAX_ROUTES; i++) {
+      const row = document.createElement('div');
+      row.className = 'mod-row';
+      const source = document.createElement('select');
+      source.id = `mod-source-${i}`;
+      source.setAttribute('aria-label', `連動${i + 1}の連動元`);
+      source.appendChild(opt('', 'なし'));
+      for (const [key, s] of Object.entries(MOD_SOURCES)) source.appendChild(opt(key, s.label));
+      const target = document.createElement('select');
+      target.id = `mod-target-${i}`;
+      target.setAttribute('aria-label', `連動${i + 1}の連動先`);
+      for (const [key, t] of Object.entries(MOD_TARGETS)) target.appendChild(opt(key, t.label));
+      const amountLabel = document.createElement('label');
+      const valueEl = document.createElement('span');
+      valueEl.id = `mod-amount-val-${i}`;
+      const amount = document.createElement('input');
+      amount.type = 'range'; amount.min = '-100'; amount.max = '100'; amount.step = '5'; amount.value = '50';
+      amount.id = `mod-amount-${i}`;
+      amountLabel.append('強さ ', valueEl, amount);
+      row.append(source, target, amountLabel);
+      container.appendChild(row);
+      this._modRows.push({ source, target, amount, valueEl });
+      const onChange = () => this._readModulationUI();
+      source.addEventListener('change', onChange);
+      target.addEventListener('change', onChange);
+      amount.addEventListener('input', onChange);
+    }
+    document.getElementById('btn-mod-recommend').addEventListener('click', () => {
+      this.visualizer.settings.modRoutes = normalizeModRoutes(MOD_RECOMMENDED);
+      this._syncModulationUI();
+    });
+    document.getElementById('btn-mod-clear').addEventListener('click', () => {
+      this.visualizer.settings.modRoutes = [];
+      this._syncModulationUI();
+    });
+    this._syncModulationUI();
+  }
+
+  // UI の4行から結線を作って設定へ反映する
+  _readModulationUI() {
+    const routes = [];
+    for (const r of this._modRows) {
+      r.valueEl.textContent = r.amount.value;
+      const enabled = !!r.source.value;
+      r.target.disabled = !enabled; r.amount.disabled = !enabled;
+      if (enabled) routes.push({ source: r.source.value, target: r.target.value, amount: Number(r.amount.value) / 100 });
+    }
+    this.visualizer.settings.modRoutes = normalizeModRoutes(routes);
+  }
+
+  // 設定の結線を UI の4行へ表示する（プリセット・JSON 読込後にも呼ぶ）
+  _syncModulationUI() {
+    if (!this._modRows) return;
+    const routes = normalizeModRoutes(this.visualizer.settings.modRoutes);
+    this._modRows.forEach((r, i) => {
+      const route = routes[i];
+      r.source.value = route ? route.source : '';
+      r.target.value = route ? route.target : 'sensitivity';
+      r.amount.value = String(route ? Math.round(route.amount * 100) : 50);
+      r.valueEl.textContent = r.amount.value;
+      r.target.disabled = !route; r.amount.disabled = !route;
+    });
+  }
 
   _initShapeControls() {
     this._bindSlider('sensitivity', 'val-sensitivity', v => { this.visualizer.settings.sensitivity = v; }, 1);

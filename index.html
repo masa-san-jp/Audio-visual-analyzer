@@ -384,6 +384,16 @@
         </div>
       </section>
 
+      <section class="control-group" id="mod-controls" data-gpu-hide>
+        <h2>音に連動</h2>
+        <p class="label-text">曲のキックや拍に合わせて設定値を動かします（最大4つ）。保存した設定値は変わりません。</p>
+        <div id="mod-routes"></div>
+        <div class="btn-row" style="margin-top:6px;">
+          <button id="btn-mod-recommend">おすすめ</button>
+          <button id="btn-mod-clear">すべて解除</button>
+        </div>
+      </section>
+
       <details class="control-group">
         <summary>キーボードショートカット</summary>
         <ul class="shortcut-list">
@@ -428,6 +438,7 @@
   <script src="js/renderers/lissajous.js"></script>
   <!-- レジストリ（全レンダラー読み込み後・コアより前） -->
   <script src="js/renderer-registry.js"></script>
+  <script src="js/modulation.js"></script>
   <script src="js/frame-pipeline.js"></script>
   <script src="js/director-scenes.js"></script>
   <script src="js/director-timeline.js"></script>

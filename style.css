@@ -464,3 +464,7 @@ button, select, input[type="range"], input[type="checkbox"], input[type="color"]
     font-size: 12px;
   }
 }
+
+/* Phase 17: 音に連動（4行の結線） */
+.mod-row { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 6px; margin-bottom: 8px; }
+.mod-row label { grid-column: 1 / -1; }
